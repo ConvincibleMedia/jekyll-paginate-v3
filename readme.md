@@ -1,6 +1,8 @@
 # Jekyll Paginate V3
 
-Robust, highly configurable pagination for Jekyll 3.8.5+.
+![Alpha](https://img.shields.io/badge/status-alpha-red)
+
+Flexible and configurable pagination for Jekyll 3.8.5+.
 
 * Paginate any content source (pages, collections).
 * Filter on any frontmatter key (including nested keys).

@@ -10,9 +10,13 @@ end
 # adding dev-dependencies to Gemfile (instead of gemspec) allows calling
 # `bundle exec [executable] [options]` more easily.
 group :test do
-  gem "rubocop", "~> 0.51.0"
   gem "rspec", "~> 3.13"
-  gem "bigdecimal", "~> 3.1"
+  # Ruby 2.4 ships with BigDecimal 1.x, so pin a compatible series there.
+  if Gem::Version.new(RUBY_VERSION) < Gem::Version.new("2.5")
+    gem "bigdecimal", "~> 1.3"
+  else
+    gem "bigdecimal", "~> 3.1"
+  end
 
   # Prefer the documented local harness path, with a local workspace fallback.
   harness_path = File.expand_path("~/gems/jekyll-test-harness")

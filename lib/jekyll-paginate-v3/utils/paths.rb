@@ -11,7 +11,7 @@ module Jekyll
         # Removes one leading slash from a path-like string.
         def self.remove_leading_slash(path)
           string_path = path.to_s
-          string_path.start_with?('/') ? string_path[1..] : string_path
+          string_path.start_with?('/') ? string_path[1..-1] : string_path
         end
 
         # Ensures a path-like string has a leading slash.

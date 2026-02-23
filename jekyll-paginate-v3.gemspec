@@ -1,8 +1,3 @@
-# Gem packaging metadata for jekyll-paginate-v3.
-#
-# This file is used by RubyGems/Bundler when the gem is built, installed, or
-# resolved in a host Jekyll site. It declares versioning, dependencies, and the
-# files that make up the published package.
 lib = File.expand_path('lib', __dir__)
 $LOAD_PATH.unshift(lib) unless $LOAD_PATH.include?(lib)
 
@@ -26,7 +21,7 @@ Gem::Specification.new do |spec|
 
   spec.add_dependency 'jekyll', '>= 3.8.5', '< 5.0'
 
-  spec.add_development_dependency 'pry', '>= 0.13.1'
-  spec.add_development_dependency 'pry-byebug', '>= 3.9'
-  spec.add_development_dependency 'rspec', '>= 3.10'
+	spec.add_development_dependency 'pry', '~> 0.13', '>= 0.13.1'
+	spec.add_development_dependency 'pry-byebug', '~> 3.9', '>= 3.9.0'
+	spec.add_development_dependency 'rspec', '~> 3.10'
 end

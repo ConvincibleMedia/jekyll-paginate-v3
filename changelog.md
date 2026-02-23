@@ -2,7 +2,7 @@
 
 ## V3
 
-### 1.0.0
+### 0.1.0
 
 * Replaced v2’s `collection`-centric model with an `items` search model (pages, collections, all/everything, optional globs).
 * Replaced fixed v2 filters (`category`/`tag`/`locale`) with generic frontmatter filters (`match`, `include`/`exclude`, `min`/`max`, regex, join modes).
