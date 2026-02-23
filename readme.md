@@ -7,6 +7,7 @@ Robust, highly configurable pagination for Jekyll 3.8.5+.
 * Generate pagination templates automatically from frontmatter values.
 
 Like previous versions, pagination works by creating "templates":
+
 * A **template** is a page/document in which you have set `pagination: enabled: true`.
 * These pages/documents will be removed, but their settings/contents are used to generate an **index** page/document for each page in the pagination (e.g. page 1, page 2, page 3).
 * Each index gains a `paginator` variable which you can use to iterate over the **items** that have been paginated to that page (e.g. items 1–9 on page 1, 10–18 on page 2, etc.).

@@ -19,15 +19,14 @@ Gem::Specification.new do |spec|
   spec.homepage = 'https://github.com/ConvincibleMedia/jekyll-paginate-v3'
   spec.license = 'LGPL-3.0-or-later'
 
-  spec.files = Dir['lib/**/*.rb'] + %w[README.md]
+  spec.files = Dir['lib/**/*.rb'] + %w[readme.md]
   spec.require_paths = ['lib']
 
-  spec.required_ruby_version = '>= 2.4.0'
-  spec.required_rubygems_version = ">= 2.7.0"
+  spec.required_ruby_version = '>= 2.4.4'
 
   spec.add_dependency 'jekyll', '>= 3.8.5', '< 5.0'
 
-  spec.add_development_dependency 'pry', '~> 0.14'
-  spec.add_development_dependency 'pry-byebug', '~> 3.10'
-  spec.add_development_dependency 'rspec', '~> 3.13'
+  spec.add_development_dependency 'pry', '>= 0.13.1'
+  spec.add_development_dependency 'pry-byebug', '>= 3.9'
+  spec.add_development_dependency 'rspec', '>= 3.10'
 end
