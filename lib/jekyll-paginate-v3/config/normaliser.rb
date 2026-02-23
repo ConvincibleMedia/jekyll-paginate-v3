@@ -33,7 +33,7 @@ module Jekyll
             'collections' => {
               'layout' => 'autopage_collection.html',
               'title' => 'Posts in collection :coll',
-              'permalink' => '/collection/:coll',
+              'permalink' => '/collection/:coll/',
               'slugify' => {
                 'mode' => 'default',
                 'case' => false
@@ -63,7 +63,7 @@ module Jekyll
             config = Jekyll::Utils.deep_merge_hashes(config, raw_pagination)
             config['compatibility'] = compatibility_mode unless compatibility_mode.nil?
 
-            normalise_common!(config, compatibility_mode)
+            normalise_common!(config, compatibility_mode, raw_pagination)
             migrate_legacy_shortcuts!(config, compatibility_mode, raw_pagination)
             migrate_v2_autopages!(config, site_hash['autopages'], compatibility_mode)
 
@@ -82,7 +82,7 @@ module Jekyll
             compatibility_mode = normalise_compatibility(page_config['compatibility']) || normalise_compatibility(site_config['compatibility'])
             page_config['compatibility'] = compatibility_mode unless compatibility_mode.nil?
 
-            normalise_common!(page_config, compatibility_mode)
+            normalise_common!(page_config, compatibility_mode, raw_template_pagination)
             migrate_legacy_shortcuts!(page_config, compatibility_mode, raw_template_pagination)
 
             page_config
@@ -91,7 +91,10 @@ module Jekyll
           class << self
             private
 
-            def normalise_common!(config, compatibility_mode)
+            def normalise_common!(config, compatibility_mode, raw_overrides = nil)
+              override_hash = Utils.safe_hash(raw_overrides)
+              sort_explicitly_set = override_hash.key?('sort') && present_config_value?(override_hash['sort'])
+
               config['enabled'] = !!config['enabled']
               config['compatibility'] = compatibility_mode if compatibility_mode
               config['split'] = normalise_split(config['split'])
@@ -109,7 +112,13 @@ module Jekyll
               config['extension'] = config['extension'].to_s
               config['debug'] = !!config['debug']
               config['trail'] = normalise_trail(config['trail'])
-              config['sort'] = normalise_sort(config['sort'], config['sort_field'], config['sort_reverse'], config['split'])
+              config['sort'] = normalise_sort(
+                config['sort'],
+                config['sort_field'],
+                config['sort_reverse'],
+                config['split'],
+                sort_explicitly_set: sort_explicitly_set
+              )
               config['templates'] = normalise_templates(config['templates'])
 
               # Keep legacy keys out of downstream logic after migration.
@@ -187,14 +196,23 @@ module Jekyll
               }
             end
 
-            def normalise_sort(raw_sort, raw_sort_field, raw_sort_reverse, split_delimiter)
+            # Preserves legacy `sort_field` + `sort_reverse` behaviour when the
+            # caller did not provide an explicit `sort` override.
+            def normalise_sort(raw_sort, raw_sort_field, raw_sort_reverse, split_delimiter, sort_explicitly_set: false)
               sort_entries = Utils.arrayify(raw_sort, split_delimiter: split_delimiter).map(&:to_s).map(&:strip).reject(&:empty?)
+              sort_field = raw_sort_field.to_s.strip
+
+              if !sort_explicitly_set && !sort_field.empty?
+                direction = boolean_config_value(raw_sort_reverse) ? 'desc' : 'asc'
+                return ["#{sort_field} #{direction}"]
+              end
+
               return sort_entries unless sort_entries.empty?
 
-              return Utils.deep_copy(DEFAULTS['sort']) if raw_sort_field.nil? || raw_sort_field.to_s.strip.empty?
+              return Utils.deep_copy(DEFAULTS['sort']) if sort_field.empty?
 
-              direction = raw_sort_reverse ? 'desc' : 'asc'
-              ["#{raw_sort_field} #{direction}"]
+              direction = boolean_config_value(raw_sort_reverse) ? 'desc' : 'asc'
+              ["#{sort_field} #{direction}"]
             end
 
             def normalise_templates(raw_templates)
