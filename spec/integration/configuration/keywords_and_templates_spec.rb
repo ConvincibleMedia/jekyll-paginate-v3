@@ -35,7 +35,7 @@ RSpec.describe 'Pagination integration: configuration options' do
       },
       files: files
     ) do |site,|
-      payload = page_by_url(site, '/').data.fetch('paginator')
+      payload = paginator_payload(page_by_url(site, '/'))
 
       expect(payload).to include('items', 'entries', 'total_items', 'total_entries')
       expect(payload.fetch('entries').map { |item| item.data.fetch('title') }).to eq(['Post 01', 'Post 02'])

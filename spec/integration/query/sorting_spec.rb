@@ -107,7 +107,9 @@ RSpec.describe 'Pagination integration: sorting behaviour' do
       config: {
         'pagination' => {
           'enabled' => true,
-          'split' => '|'
+          'syntax' => {
+            'split' => '|'
+          }
         }
       },
       files: files

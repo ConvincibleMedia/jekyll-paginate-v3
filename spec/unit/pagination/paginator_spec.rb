@@ -5,55 +5,120 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Pagination::Paginator do
     expect do
       described_class.new(
         per_page: 10,
-        first_page_url: '/blog/',
-        paginated_page_url: '/blog/page/:num/',
         items: [1, 2, 3],
         current_page: 3,
         total_pages: 2,
-        index_name: 'index',
-        extension: 'html',
         item_keyword: 'items'
       )
     end.to raise_error(ArgumentError, /cannot be greater than total pages/)
   end
 
-  it 'builds consistent page paths and alias keys in liquid payloads' do
+  it 'exposes v3 neighbour objects and trail entries from bound page objects' do
+    page_one = Struct.new(:url, :data).new('/articles/', { 'title' => 'Articles' })
+    page_two = Struct.new(:url, :data).new('/articles/page/2/', { 'title' => 'Articles - page 2' })
+    page_three = Struct.new(:url, :data).new('/articles/page/3/', { 'title' => 'Articles - page 3' })
+
     paginator = described_class.new(
       per_page: 2,
-      first_page_url: '/articles/',
-      paginated_page_url: '/articles/page/:num/',
       items: [1, 2, 3, 4, 5],
       current_page: 2,
       total_pages: 3,
-      index_name: 'index',
-      extension: 'html',
-      item_keyword: 'posts'
+      item_keyword: 'posts',
+      compatibility: nil
     )
-    payload = paginator.to_liquid
+    paginator.bind_pages(
+      current_page_object: page_two,
+      previous_page_object: page_one,
+      next_page_object: page_three,
+      first_page_object: page_one,
+      last_page_object: page_three
+    )
+    paginator.trail = [
+      paginator.build_trail_reference(page_number: 1, page_object: page_one, current: false, distance: -1),
+      paginator.build_trail_reference(page_number: 2, page_object: nil, current: true, distance: 0),
+      paginator.build_trail_reference(page_number: 3, page_object: page_three, current: false, distance: 1)
+    ]
+    payload = paginator.to_h
 
     expect(paginator.items).to eq([3, 4])
-    expect(payload['page_path']).to eq('/articles/page/2/index.html')
-    expect(payload['previous_page_path']).to eq('/articles/index.html')
-    expect(payload['next_page_path']).to eq('/articles/page/3/index.html')
-    expect(payload['first_page_path']).to eq('/articles/index.html')
-    expect(payload['last_page_path']).to eq('/articles/page/3/index.html')
+    expect(payload['total_indexes']).to eq(3)
+    expect(payload['current'].num).to eq(2)
+    expect(payload['current'].page).to be_nil
+    expect(payload['current'].count).to eq(2)
+    expect(payload['current'].start).to eq(3)
+    expect(payload['current'].to_h['end']).to eq(4)
+    expect(payload['prev'].num).to eq(1)
+    expect(payload['prev'].page.url).to eq('/articles/')
+    expect(payload['prev'].count).to eq(2)
+    expect(payload['prev'].start).to eq(1)
+    expect(payload['prev'].to_h['end']).to eq(2)
+    expect(payload['next'].num).to eq(3)
+    expect(payload['next'].page.url).to eq('/articles/page/3/')
+    expect(payload['next'].count).to eq(1)
+    expect(payload['next'].start).to eq(5)
+    expect(payload['next'].to_h['end']).to eq(5)
+    expect(payload['first'].page.url).to eq('/articles/')
+    expect(payload['last'].page.url).to eq('/articles/page/3/')
+    expect(payload['trail'].map(&:num)).to eq([1, 2, 3])
+    expect(payload['trail'].map(&:distance)).to eq([-1, 0, 1])
     expect(payload['posts']).to eq([3, 4])
     expect(payload['total_posts']).to eq(5)
+    expect(payload).not_to have_key('next_page_path')
+  end
+
+  it 'adds legacy v1/v2 keys when compatibility mode is enabled' do
+    page_one = Struct.new(:url, :data).new('/articles/', { 'title' => 'Articles' })
+    page_two = Struct.new(:url, :data).new('/articles/page/2/', { 'title' => 'Articles - page 2' })
+    page_three = Struct.new(:url, :data).new('/articles/page/3/', { 'title' => 'Articles - page 3' })
+
+    paginator = described_class.new(
+      per_page: 2,
+      items: [1, 2, 3, 4, 5],
+      current_page: 2,
+      total_pages: 3,
+      item_keyword: 'posts',
+      compatibility: 'v2'
+    )
+    paginator.bind_pages(
+      current_page_object: page_two,
+      previous_page_object: page_one,
+      next_page_object: page_three,
+      first_page_object: page_one,
+      last_page_object: page_three
+    )
+    paginator.trail = [
+      paginator.build_trail_reference(page_number: 1, page_object: page_one, current: false, distance: -1),
+      paginator.build_trail_reference(page_number: 2, page_object: nil, current: true, distance: 0),
+      paginator.build_trail_reference(page_number: 3, page_object: page_three, current: false, distance: 1)
+    ]
+    payload = paginator.to_h
+
+    expect(payload['page']).to eq(2)
+    expect(payload['total_pages']).to eq(3)
+    expect(payload['page_path']).to eq('/articles/page/2/')
+    expect(payload['previous_page_path']).to eq('/articles/')
+    expect(payload['next_page_path']).to eq('/articles/page/3/')
+    expect(payload['first_page_path']).to eq('/articles/')
+    expect(payload['last_page_path']).to eq('/articles/page/3/')
+    expect(payload['page_trail']).to eq(
+      [
+        { 'num' => 1, 'path' => '/articles/', 'title' => 'Articles' },
+        { 'num' => 2, 'path' => '/articles/page/2/', 'title' => 'Articles - page 2' },
+        { 'num' => 3, 'path' => '/articles/page/3/', 'title' => 'Articles - page 3' }
+      ]
+    )
   end
 
   it 'falls back to items when the configured alias keyword is blank' do
     paginator = described_class.new(
       per_page: 5,
-      first_page_url: '/',
-      paginated_page_url: '/page/:num/',
       items: [1],
       current_page: 1,
       total_pages: 1,
-      index_name: 'index',
-      extension: 'html',
-      item_keyword: '   '
+      item_keyword: '   ',
+      compatibility: nil
     )
-    payload = paginator.to_liquid
+    payload = paginator.to_h
 
     expect(payload['items']).to eq([1])
     expect(payload['total_items']).to eq(1)

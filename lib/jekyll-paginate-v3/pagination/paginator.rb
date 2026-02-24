@@ -6,111 +6,413 @@ module Jekyll
       module Pagination
         # Exposes pagination metadata to Liquid as `paginator`.
         #
+        # Implemented as a Liquid Drop so paginator keys can be lazy methods
+        # while still supporting legacy key aliases.
+        #
         # Used by Pagination::Model for every generated page/document.
-        class Paginator
-          attr_reader :page, :per_page, :items, :total_items, :total_pages,
-                      :previous_page, :previous_page_path, :next_page, :next_page_path,
-                      :page_path, :page_trail, :first_page, :first_page_path,
-                      :last_page, :last_page_path
+        class Paginator < ::Liquid::Drop
+          attr_reader :per_page, :items, :total_items, :total_indexes,
+                      :current, :next, :prev, :first, :last, :trail
 
-          def initialize(per_page:, first_page_url:, paginated_page_url:, items:, current_page:, total_pages:, index_name:, extension:, item_keyword:)
-            @page = current_page
+          # Builds one paginator instance for one generated index page.
+          #
+          # `compatibility` controls whether legacy v1/v2 keys are also emitted
+          # in the Liquid payload.
+          def initialize(per_page:, items:, current_page:, total_pages:, item_keyword:, compatibility: nil)
             @per_page = [per_page.to_i, 1].max
-            @total_pages = [total_pages.to_i, 1].max
-            @item_keyword = item_keyword.to_s.strip
-            @item_keyword = 'items' if @item_keyword.empty?
+            @total_indexes = [total_pages.to_i, 1].max
+            @current_index_number = current_page.to_i
+            @item_keyword = normalise_item_keyword(item_keyword)
+            @compatibility_mode = normalise_compatibility_mode(compatibility)
 
-            if @page > @total_pages
-              raise ArgumentError, "page number cannot be greater than total pages (#{@page} > #{@total_pages})"
+            if @current_index_number > @total_indexes
+              raise ArgumentError, "page number cannot be greater than total pages (#{@current_index_number} > #{@total_indexes})"
             end
 
-            start_offset = (@page - 1) * @per_page
+            start_offset = (@current_index_number - 1) * @per_page
             end_offset = [start_offset + @per_page - 1, items.size - 1].min
-
-            first_page_full = Utils.ensure_full_path(first_page_url, index_name, extension)
-            paginated_full = Utils.ensure_full_path(paginated_page_url, index_name, extension)
 
             @total_items = items.size
             @items = items[start_offset..end_offset] || []
-            @page_path = Utils.format_page_number(page_template(@page, first_page_full, paginated_full), @page, @total_pages)
+            @trail = nil
 
-            @previous_page = @page > 1 ? @page - 1 : nil
-            @previous_page_path = if @previous_page.nil?
-                                    nil
-                                  elsif @previous_page == 1
-                                    Utils.format_page_number(first_page_full, 1, @total_pages)
-                                  else
-                                    Utils.format_page_number(paginated_full, @previous_page, @total_pages)
-                                  end
+            @current_page_object = nil
+            @index_windows = {}
 
-            @next_page = @page < @total_pages ? @page + 1 : nil
-            @next_page_path = @next_page.nil? ? nil : Utils.format_page_number(paginated_full, @next_page, @total_pages)
-
-            @first_page = 1
-            @first_page_path = Utils.format_page_number(first_page_full, 1, @total_pages)
-            @last_page = @total_pages
-            @last_page_path = Utils.format_page_number(paginated_full, @last_page, @total_pages)
-            @page_trail = nil
+            initialise_index_references!
           end
 
-          def page_trail=(trail)
-            @page_trail = trail
-          end
-
-          # Converts the paginator payload into a Liquid-safe hash.
+          # Attaches actual generated page/document objects to neighbour links.
           #
-          # v3 always exposes `items` and `total_items`; compatibility aliases can
-          # be provided by changing `pagination.keywords.items`.
-          def to_liquid
-            payload = {
-              'per_page' => per_page,
-              'items' => items,
-              'total_items' => total_items,
-              'total_pages' => total_pages,
-              'page' => page,
-              'page_path' => page_path,
-              'previous_page' => previous_page,
-              'previous_page_path' => previous_page_path,
-              'next_page' => next_page,
-              'next_page_path' => next_page_path,
-              'first_page' => first_page,
-              'first_page_path' => first_page_path,
-              'last_page' => last_page,
-              'last_page_path' => last_page_path,
-              'page_trail' => page_trail
-            }
+          # We intentionally keep `current.page` unset so templates can detect
+          # the current index without comparing object identities.
+          def bind_pages(current_page_object:, previous_page_object:, next_page_object:, first_page_object:, last_page_object:)
+            @current_page_object = current_page_object
+            @current = build_index_reference(@current_index_number, nil)
+            @prev = @current_index_number > 1 ? build_index_reference(@current_index_number - 1, previous_page_object) : nil
+            @next = @current_index_number < @total_indexes ? build_index_reference(@current_index_number + 1, next_page_object) : nil
+            @first = build_index_reference(1, first_page_object, allow_current_page_object: true)
+            @last = build_index_reference(@total_indexes, last_page_object, allow_current_page_object: true)
+          end
 
+          # Assigns trail entries generated by the pagination model.
+          def trail=(trail_entries)
+            @trail = trail_entries
+          end
+
+          # Builds one trail entry for a page number.
+          #
+          # Used by the model so trail windows can reuse canonical index maths.
+          def build_trail_reference(page_number:, page_object:, current:, distance:)
+            window = window_for_page_number(page_number)
+
+            TrailReference.new(
+              num: page_number,
+              page_object: page_object,
+              item_count: window['count'],
+              start_item_index: window['start'],
+              end_item_index: window['end'],
+              current: current,
+              distance: distance
+            )
+          end
+
+          # Legacy v1/v2 alias for current page number.
+          def page
+            return nil unless compatibility_mode?
+
+            current&.num
+          end
+
+          # Legacy v1/v2 alias for total page count.
+          def total_pages
+            return nil unless compatibility_mode?
+
+            total_indexes
+          end
+
+          # Legacy v1/v2 alias for current page URL.
+          def page_path
+            return nil unless compatibility_mode?
+
+            index_reference_path(current)
+          end
+
+          # Legacy v1/v2 alias for previous page number.
+          def previous_page
+            return nil unless compatibility_mode?
+
+            prev&.num
+          end
+
+          # Legacy v1/v2 alias for previous page URL.
+          def previous_page_path
+            return nil unless compatibility_mode?
+
+            index_reference_path(prev)
+          end
+
+          # Legacy v1/v2 alias for next page number.
+          def next_page
+            return nil unless compatibility_mode?
+
+            self.next&.num
+          end
+
+          # Legacy v1/v2 alias for next page URL.
+          def next_page_path
+            return nil unless compatibility_mode?
+
+            index_reference_path(self.next)
+          end
+
+          # Legacy v1/v2 alias for first page number.
+          def first_page
+            return nil unless compatibility_mode?
+
+            first&.num
+          end
+
+          # Legacy v1/v2 alias for first page URL.
+          def first_page_path
+            return nil unless compatibility_mode?
+
+            index_reference_path(first)
+          end
+
+          # Legacy v1/v2 alias for last page number.
+          def last_page
+            return nil unless compatibility_mode?
+
+            last&.num
+          end
+
+          # Legacy v1/v2 alias for last page URL.
+          def last_page_path
+            return nil unless compatibility_mode?
+
+            index_reference_path(last)
+          end
+
+          # Legacy v1/v2 alias for trail payload shape.
+          def page_trail
+            return nil unless compatibility_mode?
+
+            compatibility_page_trail
+          end
+
+          # Hash form used by specs and non-Liquid inspection.
+          #
+          # Liquid rendering uses this Drop instance directly.
+          def to_h
+            payload = canonical_payload_hash
             payload[@item_keyword] = items
             payload["total_#{@item_keyword}"] = total_items
+
+            if compatibility_mode?
+              payload.merge!(
+                'per_page' => per_page,
+                'page' => page,
+                'total_pages' => total_pages,
+                'page_path' => page_path,
+                'previous_page' => previous_page,
+                'previous_page_path' => previous_page_path,
+                'next_page' => next_page,
+                'next_page_path' => next_page_path,
+                'first_page' => first_page,
+                'first_page_path' => first_page_path,
+                'last_page' => last_page,
+                'last_page_path' => last_page_path,
+                'page_trail' => page_trail
+              )
+            end
 
             payload
           end
 
+          # Handles dynamic alias keys that are not explicit methods.
+          def liquid_method_missing(method_name)
+            method_key = method_name.to_s
+            return items if method_key == @item_keyword
+            return total_items if method_key == "total_#{@item_keyword}"
+
+            super
+          end
+
           private
 
-          def page_template(page_number, first_page_full, paginated_full)
-            page_number == 1 ? first_page_full : paginated_full
+          # Canonical v3 paginator payload hash.
+          def canonical_payload_hash
+            {
+              'items' => items,
+              'total_items' => total_items,
+              'total_indexes' => total_indexes,
+              'current' => current,
+              'next' => self.next,
+              'prev' => prev,
+              'first' => first,
+              'last' => last,
+              'trail' => trail || []
+            }
+          end
+
+          # Initialises numeric index references before page objects are bound.
+          def initialise_index_references!
+            @current = build_index_reference(@current_index_number, nil)
+            @prev = @current_index_number > 1 ? build_index_reference(@current_index_number - 1, nil) : nil
+            @next = @current_index_number < @total_indexes ? build_index_reference(@current_index_number + 1, nil) : nil
+            @first = build_index_reference(1, nil)
+            @last = build_index_reference(@total_indexes, nil)
+          end
+
+          # Builds one index reference, leaving `page` unset for current index.
+          def build_index_reference(page_number, page_object, allow_current_page_object: false)
+            is_current_page = page_number == @current_index_number
+            page_reference = if is_current_page && !allow_current_page_object
+                               nil
+                             else
+                               page_object
+                             end
+            window = window_for_page_number(page_number)
+
+            IndexReference.new(
+              num: page_number,
+              page_object: page_reference,
+              item_count: window['count'],
+              start_item_index: window['start'],
+              end_item_index: window['end']
+            )
+          end
+
+          # Returns window metadata for one index page.
+          #
+          # This keeps `count`/`start`/`end` consistent across current, next,
+          # trail, and compatibility projections.
+          def window_for_page_number(page_number)
+            return @index_windows[page_number] if @index_windows.key?(page_number)
+
+            start_item_index = ((page_number - 1) * per_page) + 1
+            if total_items.zero? || start_item_index > total_items
+              window = { 'count' => 0, 'start' => nil, 'end' => nil }
+            else
+              end_item_index = [start_item_index + per_page - 1, total_items].min
+              window = {
+                'count' => end_item_index - start_item_index + 1,
+                'start' => start_item_index,
+                'end' => end_item_index
+              }
+            end
+
+            @index_windows[page_number] = window
+          end
+
+          # Normalises item alias keyword; falls back to canonical `items`.
+          def normalise_item_keyword(raw_keyword)
+            keyword = raw_keyword.to_s.strip
+            keyword.empty? ? 'items' : keyword
+          end
+
+          # Normalises compatibility mode to one supported legacy profile.
+          def normalise_compatibility_mode(raw_mode)
+            mode = raw_mode.to_s.strip.downcase
+            return nil unless %w[v1 v2].include?(mode)
+
+            mode
+          end
+
+          # Indicates whether legacy payload projection is enabled.
+          def compatibility_mode?
+            !@compatibility_mode.nil?
+          end
+
+          # Maps v3 trail references to legacy `page_trail` entries.
+          def compatibility_page_trail
+            return nil if trail.nil?
+
+            trail.map do |entry|
+              page_object = page_object_for_trail_entry(entry)
+              {
+                'num' => entry.num,
+                'path' => page_object_url(page_object),
+                'title' => page_object_title(page_object)
+              }
+            end
+          end
+
+          # Resolves the concrete page object represented by an index reference.
+          def page_object_for_index_reference(index_reference)
+            return nil if index_reference.nil?
+            return @current_page_object if index_reference.num == current.num
+
+            index_reference.page
+          end
+
+          # Resolves the concrete page object represented by one trail entry.
+          def page_object_for_trail_entry(trail_entry)
+            return @current_page_object if trail_entry.current
+
+            page_object_for_index_reference(trail_entry)
+          end
+
+          # Returns one canonical URL for the supplied index reference.
+          def index_reference_path(index_reference)
+            page_object_url(page_object_for_index_reference(index_reference))
+          end
+
+          # Reads canonical route URL from a page/document object.
+          def page_object_url(page_object)
+            return nil if page_object.nil?
+            return nil unless page_object.respond_to?(:url)
+
+            url = page_object.url.to_s
+            return nil if url.strip.empty?
+
+            Utils.ensure_leading_slash(url)
+          end
+
+          # Reads page/document title for legacy trail entries.
+          def page_object_title(page_object)
+            return nil if page_object.nil?
+            return nil unless page_object.respond_to?(:data)
+
+            title = Utils.safe_hash(page_object.data)['title'].to_s
+            return nil if title.strip.empty?
+
+            title
           end
         end
 
-        # Small Liquid-facing object used in pager trails.
+        # Lightweight Liquid-facing object for paginator neighbour links.
         #
-        # Used by Paginator page trail output.
-        class PageTrail
-          attr_reader :num, :path, :title
+        # Exposed under `paginator.current`, `paginator.next`, `paginator.prev`,
+        # `paginator.first`, and `paginator.last`.
+        class IndexReference < ::Liquid::Drop
+          attr_reader :num, :page
 
-          def initialize(num, path, title)
-            @num = num
-            @path = path
-            @title = title
+          # Stores one page number plus optional page/document object and
+          # positional metadata within the full paginated set.
+          def initialize(num:, page_object:, item_count:, start_item_index:, end_item_index:)
+            @num = num.to_i
+            @page = page_object
+            @item_count = item_count.to_i
+            @start_item_index = start_item_index
+            @end_item_index = end_item_index
           end
 
-          def to_liquid
+          # Number of items paginated to this index.
+          def count
+            @item_count
+          end
+
+          # 1-based index of the first item on this index.
+          def start
+            @start_item_index
+          end
+
+          # Hash form used by specs and non-Liquid inspection.
+          def to_h
             {
               'num' => num,
-              'path' => path,
-              'title' => title
+              'page' => page,
+              'count' => count,
+              'start' => start,
+              'end' => @end_item_index
             }
+          end
+
+          # Handles `end` because it is a Ruby keyword and cannot be a method name.
+          def liquid_method_missing(method_name)
+            return @end_item_index if method_name.to_s == 'end'
+
+            super
+          end
+        end
+
+        # Liquid-facing trail object used by `paginator.trail`.
+        #
+        # Extends IndexReference with current-page markers and relative distance.
+        class TrailReference < IndexReference
+          attr_reader :current, :distance
+
+          # Stores trail metadata for one visible trail index entry.
+          def initialize(num:, page_object:, item_count:, start_item_index:, end_item_index:, current:, distance:)
+            super(
+              num: num,
+              page_object: page_object,
+              item_count: item_count,
+              start_item_index: start_item_index,
+              end_item_index: end_item_index
+            )
+            @current = !!current
+            @distance = distance.to_i
+          end
+
+          # Hash form used by specs and non-Liquid inspection.
+          def to_h
+            super.merge(
+              'current' => current,
+              'distance' => distance
+            )
           end
         end
       end

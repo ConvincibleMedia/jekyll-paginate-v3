@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 RSpec.describe 'Pagination integration: navigation, URLs, and trails' do
-  it 'supports custom permalink, index filename, extension, and title formatting' do
+  it 'supports custom page2 permalink and title formatting' do
     files = jekyll_merge(
       post_files(2),
       jekyll_files do
@@ -17,9 +17,7 @@ RSpec.describe 'Pagination integration: navigation, URLs, and trails' do
                     'items' => 'posts',
                     'sort' => 'title asc',
                     'per_page' => 1,
-                    'permalink' => '/slice/:num/',
-                    'indexpage' => 'feed',
-                    'extension' => 'json',
+                    'permalink' => '/slice/:num/feed.json',
                     'title' => ':title [page :num/:max]'
                   }
                 }
@@ -33,20 +31,20 @@ RSpec.describe 'Pagination integration: navigation, URLs, and trails' do
 
     jekyll_build(default_site, files: files) do |site, output_files|
       page_one = page_by_url(site, '/articles/')
-      page_two = page_by_url(site, '/articles/slice/2/')
+      page_two = page_by_url(site, '/articles/slice/2/feed.json')
 
       expect(page_one).not_to be_nil
       expect(page_two).not_to be_nil
 
-      expect(output_files.list).to include('articles/index.json', 'articles/slice/2/index.json')
+      expect(output_files.list).to include('articles/index.html', 'articles/slice/2/feed.json')
       expect(page_one.data.fetch('title')).to eq('News')
       expect(page_two.data.fetch('title')).to eq('News [page 2/2]')
-      expect(page_one.data.fetch('paginator').fetch('next_page_path')).to eq('/articles/slice/2/feed.json')
-      expect(page_two.data.fetch('paginator').fetch('previous_page_path')).to eq('/articles/feed.json')
+      expect(paginator_reference_url(page_one, 'next')).to eq('/articles/slice/2/feed.json')
+      expect(paginator_reference_url(page_two, 'prev')).to eq('/articles/')
     end
   end
 
-  it 'calculates previous/next/first/last paginator paths consistently' do
+  it 'calculates previous/next/first/last paginator references consistently' do
     files = jekyll_merge(
       post_files(3),
       jekyll_files do
@@ -73,13 +71,13 @@ RSpec.describe 'Pagination integration: navigation, URLs, and trails' do
       page_two = page_by_url(site, '/page/2/')
       page_three = page_by_url(site, '/page/3/')
 
-      expect(page_one.data.fetch('paginator').fetch('previous_page')).to be_nil
-      expect(page_one.data.fetch('paginator').fetch('next_page_path')).to eq('/page/2/index.html')
-      expect(page_two.data.fetch('paginator').fetch('previous_page_path')).to eq('/index.html')
-      expect(page_two.data.fetch('paginator').fetch('next_page_path')).to eq('/page/3/index.html')
-      expect(page_three.data.fetch('paginator').fetch('next_page')).to be_nil
-      expect(page_three.data.fetch('paginator').fetch('first_page_path')).to eq('/index.html')
-      expect(page_three.data.fetch('paginator').fetch('last_page_path')).to eq('/page/3/index.html')
+      expect(paginator_reference_number(page_one, 'prev')).to be_nil
+      expect(paginator_reference_url(page_one, 'next')).to eq('/page/2/')
+      expect(paginator_reference_url(page_two, 'prev')).to eq('/')
+      expect(paginator_reference_url(page_two, 'next')).to eq('/page/3/')
+      expect(paginator_reference_number(page_three, 'next')).to be_nil
+      expect(paginator_reference_url(page_three, 'first')).to eq('/')
+      expect(paginator_reference_url(page_three, 'last')).to eq('/page/3/')
     end
   end
 

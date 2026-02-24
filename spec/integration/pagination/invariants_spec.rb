@@ -88,14 +88,14 @@ RSpec.describe 'Pagination integration: invariants and edge behaviour' do
     )
 
     jekyll_build(default_site, files: files) do |site,|
-      generated_pages = generated_pagination_pages(site).sort_by { |page| page.data.fetch('paginator').fetch('page') }
-      first_page_payload = generated_pages.first.data.fetch('paginator')
+      generated_pages = generated_pagination_pages(site).sort_by { |page| paginator_index_number(page) }
+      first_page_payload = paginator_payload(generated_pages.first)
 
       expect(generated_pages.map(&:url)).to eq(['/'])
       expect(first_page_payload.fetch('total_items')).to eq(0)
-      expect(first_page_payload.fetch('total_pages')).to eq(1)
+      expect(first_page_payload.fetch('total_indexes')).to eq(1)
       expect(first_page_payload.fetch('items')).to eq([])
-      expect(first_page_payload.fetch('next_page')).to be_nil
+      expect(paginator_reference_number(generated_pages.first, 'next')).to be_nil
     end
   end
 end

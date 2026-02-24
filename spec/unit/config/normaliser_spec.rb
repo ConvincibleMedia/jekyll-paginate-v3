@@ -6,13 +6,17 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
       config = described_class.normalise_site_config(
         'pagination' => {
           'enabled' => 'yes',
-          'per_page' => 0,
-          'offset' => -5,
-          'limit' => -3,
-          'split' => nil,
-          'nested_key_separator' => '/',
+          'syntax' => {
+            'split' => nil,
+            'separator' => ''
+          },
           'templates' => {
             'location' => '',
+            'defaults' => {
+              'per_page' => 0,
+              'offset' => -5,
+              'limit' => -3
+            },
             'generate' => {
               'items' => 'posts',
               'index' => 'tag',
@@ -23,11 +27,11 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
       )
 
       expect(config['enabled']).to eq(true)
-      expect(config['per_page']).to eq(1)
-      expect(config['offset']).to eq(0)
-      expect(config['limit']).to eq(0)
-      expect(config['split']).to eq(',')
-      expect(config['nested_key_separator']).to eq('.')
+      expect(config.dig('templates', 'defaults', 'per_page')).to eq(1)
+      expect(config.dig('templates', 'defaults', 'offset')).to eq(0)
+      expect(config.dig('templates', 'defaults', 'limit')).to eq(0)
+      expect(config.dig('syntax', 'split')).to eq(',')
+      expect(config.dig('syntax', 'separator')).to eq('.')
       expect(config.dig('templates', 'location')).to eq('pages')
       expect(config.dig('templates', 'generate')).to be_an(Array)
       expect(config.dig('templates', 'generate').length).to eq(1)
@@ -37,20 +41,26 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
       config = described_class.normalise_site_config(
         'pagination' => {
           'enabled' => true,
-          'sort' => nil,
-          'sort_field' => 'title',
-          'sort_reverse' => true
+          'templates' => {
+            'defaults' => {
+              'sort' => nil,
+              'sort_field' => 'title',
+              'sort_reverse' => true
+            }
+          }
         }
       )
 
-      expect(config['sort']).to eq(['title desc'])
+      expect(config.dig('templates', 'defaults', 'sort')).to eq(['title desc'])
     end
 
     it 'normalises delimited equivalent groups with a custom split delimiter' do
       config = described_class.normalise_site_config(
         'pagination' => {
           'enabled' => true,
-          'split' => '|',
+          'syntax' => {
+            'split' => '|'
+          },
           'equivalents' => 'tag|tags'
         }
       )
@@ -71,14 +81,14 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
         }
       )
 
-      expect(config['items']).to eq('products')
-      expect(config['filters']).to include(
+      expect(config.dig('templates', 'defaults', 'items')).to eq('products')
+      expect(config.dig('templates', 'defaults', 'filters')).to include(
         'category' => 'explicit-category',
         'tag' => 'legacy-tag'
       )
-      expect(config).not_to have_key('collection')
-      expect(config).not_to have_key('category')
-      expect(config).not_to have_key('tag')
+      expect(config.dig('templates', 'defaults')).not_to have_key('collection')
+      expect(config.dig('templates', 'defaults')).not_to have_key('category')
+      expect(config.dig('templates', 'defaults')).not_to have_key('tag')
     end
 
     it 'ignores the v2 legacy category shortcut when category is posts' do
@@ -89,7 +99,7 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
         }
       )
 
-      expect(config['filters']).not_to have_key('category')
+      expect(config.dig('templates', 'defaults', 'filters')).not_to have_key('category')
     end
 
     it 'migrates v2 autopages groups into templates.generate definitions' do

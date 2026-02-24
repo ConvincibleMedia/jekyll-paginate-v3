@@ -74,7 +74,9 @@ RSpec.describe 'Pagination integration: item resolution and search syntax' do
       config: {
         'pagination' => {
           'enabled' => true,
-          'split' => '|',
+          'syntax' => {
+            'split' => '|'
+          },
           'templates' => {
             'location' => 'pages|products'
           }

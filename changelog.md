@@ -7,6 +7,10 @@
 * Replaced v2’s `collection`-centric model with an `items` search model (pages, collections, all/everything, optional globs).
 * Replaced fixed v2 filters (`category`/`tag`/`locale`) with generic frontmatter filters (`match`, `include`/`exclude`, `min`/`max`, regex, join modes).
 * Replaced `sort_field` + `sort_reverse` with a unified multi-level `sort` syntax and explicit empty-value handling.
+* Reorganised public v3 config around nested `pagination.syntax.*` and `pagination.templates.defaults.*`.
+* Renamed nested frontmatter-key config from `nested_key_separator` to `syntax.separator`.
+* Removed v3 `indexpage`/`extension` keys; filename/extension control now comes from `permalink` alone (with v2 compatibility translation retained for legacy keys).
+* Switched paginator `*_page_path` values to derive from generated page/document object URLs, not synthetic path concatenation.
 * Added configurable nested-key access (default `.`), equivalent keys (for example `tag`/`tags`), and delimiter-driven array parsing.
 * Folded AutoPages-style generation into `pagination.templates.generate` (driven by `items` + indexed keys) rather than separate v2 `autopages` config.
 * Broadened template discovery via `pagination.templates.location` (not just v2-style page templates).

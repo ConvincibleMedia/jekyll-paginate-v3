@@ -29,11 +29,6 @@ module Jekyll
               trigger_hooks(:post_init)
             end
 
-            # Sets an explicit output URL for the synthetic document.
-            def set_url(url_value)
-              @url = url_value
-            end
-
             private
 
             # Initialises minimal document internals required by Jekyll renderers.

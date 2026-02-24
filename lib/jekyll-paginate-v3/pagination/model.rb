@@ -21,7 +21,8 @@ module Jekyll
             @log_lambda = log_lambda
             @add_item_lambda = add_item_lambda
             @remove_item_lambda = remove_item_lambda
-            @nested_separator = site_config['nested_key_separator']
+            @nested_separator = site_config.dig('syntax', 'separator')
+            @split_delimiter = site_config.dig('syntax', 'split')
             @equivalents = site_config['equivalents']
             @item_keyword = site_config.dig('keywords', 'items') || 'items'
           end
@@ -136,7 +137,7 @@ module Jekyll
           # hierarchy is preferred.
           def legacy_v1_template_candidate(items)
             source_root = File.expand_path(@site.config['source'].to_s)
-            paginate_path = @site_config['permalink']
+            paginate_path = @site_config.dig('templates', 'defaults', 'permalink')
 
             items.select { |item| legacy_v1_pagination_candidate?(source_root, paginate_path, item) }.sort_by { |item| -item.path.to_s.size }.first
           end
@@ -172,7 +173,7 @@ module Jekyll
           # Resolves the shared search format into concrete site items and then
           # applies generic inclusion/exclusion flags.
           def resolve_items(raw_search, include_templates: false, include_generated_indexes: false, include_hidden: false)
-            entries = Query::Parser.parse(raw_search, @site_config['keywords'], split_delimiter: @site_config['split'])
+            entries = Query::Parser.parse(raw_search, @site_config['keywords'], split_delimiter: @split_delimiter)
             return [] if entries.empty?
 
             @log_lambda.call("Resolving items from search=#{raw_search.inspect} (entries=#{entries.length}, include_templates=#{include_templates}, include_generated_indexes=#{include_generated_indexes}, include_hidden=#{include_hidden}).", 'debug')
@@ -222,15 +223,17 @@ module Jekyll
           # Applies item resolution, filtering, sorting, offset and limit before
           # generating concrete pages.
           def paginate_template(template, config)
+            split_delimiter = config['split'] || @split_delimiter
+            nested_separator = config['separator'] || @nested_separator
             all_items = resolve_items(config['items'])
             @log_lambda.call("Template '#{Utils.relative_item_path(template)}': resolved #{all_items.length} candidate item(s).", 'debug')
             filtered_items = Query::Filter.filter_items(
               all_items,
               config['filters'],
-              nested_separator: @nested_separator,
+              nested_separator: nested_separator,
               equivalents: @equivalents,
-              split_delimiter: config['split'],
-              now_keyword: config.dig('keywords', 'now'),
+              split_delimiter: split_delimiter,
+              now_keyword: config.dig('keywords', 'now') || @site_config.dig('keywords', 'now'),
               log_lambda: @log_lambda
             )
             @log_lambda.call("Template '#{Utils.relative_item_path(template)}': #{filtered_items.length} item(s) after filters=#{config['filters']}.", 'debug')
@@ -238,9 +241,9 @@ module Jekyll
             sorted_items = Query::Sorter.apply(
               filtered_items,
               config['sort'],
-              nested_separator: @nested_separator,
+              nested_separator: nested_separator,
               equivalents: @equivalents,
-              split_delimiter: config['split']
+              split_delimiter: split_delimiter
             )
             @log_lambda.call("Template '#{Utils.relative_item_path(template)}': sorted #{sorted_items.length} item(s) by #{config['sort']} before offset.", 'debug')
 
@@ -264,16 +267,10 @@ module Jekyll
             @remove_item_lambda.call(template)
 
             new_pages = []
-            index_name = config['indexpage'].to_s
-            extension = Utils.ensure_leading_dot(config['extension'])
-            index_file = "#{index_name}#{extension}"
 
-            first_page_url = template_first_page_url(template)
-            paginated_page_url = if config['compatibility'] == 'v1' && legacy_v1_site_config_present? && !@site.config['paginate_path'].nil?
-                                   Utils.ensure_leading_slash(config['permalink'].to_s)
-                                 else
-                                   join_url(first_page_url, config['permalink'])
-                                 end
+            # Generated pages/documents should be processed as ordinary Jekyll
+            # items, so we only set frontmatter and never force synthetic URLs.
+            index_file = 'index.html'
 
             (1..total_pages).each do |current_page|
               generated = if template.respond_to?(:collection)
@@ -284,17 +281,13 @@ module Jekyll
 
               generated.pager = Paginator.new(
                 per_page: config['per_page'],
-                first_page_url: first_page_url,
-                paginated_page_url: paginated_page_url,
                 items: items,
                 current_page: current_page,
                 total_pages: total_pages,
-                index_name: index_name,
-                extension: extension,
-                item_keyword: @item_keyword
+                item_keyword: @item_keyword,
+                compatibility: config['compatibility']
               )
 
-              generated.set_url(synthetic_page_url(generated.pager.page_path, index_name, extension))
               generated.data['pagination'] = Utils.safe_hash(generated.data['pagination'])
               generated.data['pagination'].delete('template')
               generated.data['pagination']['index'] = true
@@ -306,26 +299,19 @@ module Jekyll
               else
                 generated.data['pagination'].delete('generated')
               end
-              generated.data['paginator'] = generated.pager.to_liquid
+              generated.data['paginator'] = generated.pager
               generated.data.delete('paginate_v3')
               generated.data['autogen'] = 'jekyll-paginate-v2' if config['compatibility'] == 'v2'
 
-              if template.data['permalink']
-                generated.data['permalink'] = generated.pager.page_path
-              end
-
-              base_title = template.data['title'] || @site.config['title']
-              if current_page > 1
-                generated.data['title'] = Utils.format_page_title(config['title'], base_title, current_page, total_pages)
-              else
-                generated.data['title'] = base_title
-              end
+              assign_generated_page_title!(generated, template, config, current_page, total_pages)
+              assign_generated_page_permalink!(generated, template, config, current_page, total_pages)
 
               @add_item_lambda.call(generated)
               @log_lambda.call("Emitted pagination page #{current_page}/#{total_pages} at '#{generated.url}' for template '#{Utils.relative_item_path(template)}'.", 'debug')
               new_pages << generated
             end
 
+            bind_paginator_references(new_pages)
             apply_page_trail(new_pages, config)
           end
 
@@ -343,18 +329,103 @@ module Jekyll
             @log_lambda.call("Applying page trail with before=#{before} after=#{after} size=#{trail_size} across #{generated_pages.length} generated page(s).", 'debug')
 
             generated_pages.each do |page|
-              range_start = [page.pager.page - before - 1, 0].max
+              current_page_number = page.pager.current.num
+              range_start = [current_page_number - before - 1, 0].max
               range_end = [range_start + trail_size, generated_pages.length].min
 
               if range_end - range_start < trail_size
                 range_start = [range_start - (trail_size - (range_end - range_start)), 0].max
               end
 
-              page.pager.page_trail = generated_pages[range_start...range_end].each_with_index.map do |trail_page, index|
-                PageTrail.new(range_start + index + 1, trail_page.url, trail_page.data['title'])
+              page.pager.trail = generated_pages[range_start...range_end].each_with_index.map do |trail_page, index|
+                trail_number = range_start + index + 1
+                is_current_page = trail_number == current_page_number
+
+                page.pager.build_trail_reference(
+                  page_number: trail_number,
+                  page_object: is_current_page ? nil : trail_page,
+                  current: is_current_page,
+                  distance: trail_number - current_page_number
+                )
               end
-              page.data['paginator'] = page.pager.to_liquid
-              @log_lambda.call("Assigned trail to page #{page.pager.page}: range_start=#{range_start + 1} range_end=#{range_end}.", 'debug')
+              @log_lambda.call("Assigned trail to page #{current_page_number}: range_start=#{range_start + 1} range_end=#{range_end}.", 'debug')
+            end
+          end
+
+          # Populates paginator neighbour references once all pages are created.
+          def bind_paginator_references(generated_pages)
+            return if generated_pages.empty?
+
+            generated_pages.each_with_index do |page, index|
+              page.pager.bind_pages(
+                current_page_object: page,
+                previous_page_object: index.positive? ? generated_pages[index - 1] : nil,
+                next_page_object: index < generated_pages.length - 1 ? generated_pages[index + 1] : nil,
+                first_page_object: generated_pages.first,
+                last_page_object: generated_pages.last
+              )
+            end
+          end
+
+          # Applies configured page title templates.
+          def assign_generated_page_title!(generated, template, config, current_page, total_pages)
+            page_template = page_template_config(config, current_page)
+            base_title = template.data['title'] || @site.config['title']
+            generated.data['title'] = Utils.format_page_title(page_template['title'], base_title, current_page, total_pages)
+          end
+
+          # Applies configured page permalink templates.
+          def assign_generated_page_permalink!(generated, template, config, current_page, total_pages)
+            resolved_permalink = resolved_page_permalink(template, config, current_page, total_pages)
+
+            if resolved_permalink.nil?
+              generated.data.delete('permalink') if current_page > 1
+              return
+            end
+
+            generated.data['permalink'] = resolved_permalink
+          end
+
+          # Resolves one page permalink from page1/page2 template settings.
+          def resolved_page_permalink(template, config, current_page, total_pages)
+            page_template = page_template_config(config, current_page)
+            template_permalink = Utils.format_page_number(page_template['permalink'], current_page, total_pages)
+            return nil if template_permalink.to_s.strip.empty? && current_page == 1
+            return Utils.ensure_leading_slash(template_permalink) if v1_absolute_paginate_path?(config, current_page)
+
+            first_page_url = template_first_page_url(template)
+            return first_page_url if template_permalink.to_s.strip.empty?
+
+            join_url(first_page_url, template_permalink)
+          end
+
+          # Determines whether this page should use v1-style absolute paginate_path.
+          def v1_absolute_paginate_path?(config, current_page)
+            return false if current_page == 1
+            return false unless config['compatibility'] == 'v1'
+            return false unless legacy_v1_site_config_present?
+            return false if @site.config['paginate_path'].nil?
+
+            true
+          end
+
+          # Returns page template settings for page1 or page2+.
+          def page_template_config(config, current_page)
+            page_templates = Utils.safe_hash(config['page_templates'])
+            key = current_page == 1 ? 'page1' : 'page2'
+            template = Utils.safe_hash(page_templates[key])
+            return template unless template.empty?
+
+            if current_page == 1
+              {
+                'title' => ':title',
+                'permalink' => ''
+              }
+            else
+              {
+                'title' => config['title'].to_s,
+                'permalink' => config['permalink'].to_s
+              }
             end
           end
 
@@ -380,22 +451,6 @@ module Jekyll
           def join_url(base_url, suffix)
             joined = "#{Utils.ensure_trailing_slash(base_url)}#{Utils.remove_leading_slash(suffix.to_s)}"
             Utils.ensure_leading_slash(joined)
-          end
-
-          # Converts full output file paths into clean route-style URLs used by
-          # Jekyll pages/documents.
-          def synthetic_page_url(page_path, index_name, extension)
-            full_index_name = "#{index_name}#{extension}"
-            if !index_name.to_s.empty? && page_path.end_with?(full_index_name)
-              trimmed = page_path[0...-full_index_name.length]
-              return Utils.ensure_trailing_slash(trimmed)
-            end
-
-            if !extension.to_s.empty? && page_path.end_with?(extension)
-              return page_path[0...-extension.length]
-            end
-
-            page_path
           end
         end
       end

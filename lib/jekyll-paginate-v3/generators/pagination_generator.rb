@@ -21,7 +21,7 @@ module Jekyll
             config = enable_implicit_v1_compatibility(config, site)
 
             logger = Utils::Logger.new(debug_enabled: config['debug'])
-            logger.debug("Normalised config summary: enabled=#{config['enabled']} compatibility=#{config['compatibility'] || 'none'} items=#{config['items']} templates.location=#{config.dig('templates', 'location')} generate.count=#{config.dig('templates', 'generate')&.length || 0}.")
+            logger.debug("Normalised config summary: enabled=#{config['enabled']} compatibility=#{config['compatibility'] || 'none'} items=#{config.dig('templates', 'defaults', 'items')} templates.location=#{config.dig('templates', 'location')} generate.count=#{config.dig('templates', 'generate')&.length || 0}.")
 
             unless config['enabled']
               logger.info('Disabled in site config.')

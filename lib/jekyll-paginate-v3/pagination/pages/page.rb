@@ -33,11 +33,6 @@ module Jekyll
               validate_data!(template_page.path)
               validate_permalink!(template_page.path)
             end
-
-            # Sets an explicit output URL for the synthetic page.
-            def set_url(url_value)
-              @url = url_value
-            end
           end
         end
       end

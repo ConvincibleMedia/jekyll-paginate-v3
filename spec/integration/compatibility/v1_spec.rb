@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-RSpec.describe 'Pagination integration: compatibility v1' do
-  it 'automatically enables v1 compatibility when legacy paginate config is present' do
+RSpec.describe 'Pagination integration: v1' do
+  it 'automatically enables v1 mode when legacy paginate config is present' do
     files = jekyll_merge(
       post_files(3),
       jekyll_files do
@@ -26,7 +26,7 @@ RSpec.describe 'Pagination integration: compatibility v1' do
       expect(first_page).not_to be_nil
       expect(second_page).not_to be_nil
       expect(paginator_item_titles(first_page)).to eq(['Post 03', 'Post 02'])
-      expect(first_page.data.fetch('paginator')).to include('posts', 'total_posts')
+      expect(paginator_payload(first_page)).to include('posts', 'total_posts')
     end
   end
 
@@ -127,5 +127,68 @@ RSpec.describe 'Pagination integration: compatibility v1' do
       expect(paginator_item_titles(archive_second_page)).to eq(['Post 01'])
     end
   end
-end
 
+  it 'supports a complex legacy v1 setup with only legacy keys plus compatibility mode' do
+    files = jekyll_merge(
+      post_files(7) do |index|
+        index == 6 ? { 'hidden' => true } : {}
+      end,
+      jekyll_files do
+        file 'index.html' do
+          frontmatter('layout' => 'listing', 'title' => 'Site Root')
+          contents('Root')
+        end
+
+        folder 'blog' do
+          file 'index.html' do
+            frontmatter('layout' => 'listing', 'title' => 'Blog Root')
+            contents('Blog root')
+          end
+
+          folder 'archive' do
+            file 'index.html' do
+              frontmatter('layout' => 'listing', 'title' => 'Archive Root')
+              contents('Archive root')
+            end
+          end
+        end
+      end
+    )
+
+    jekyll_build(
+      default_site,
+      config: {
+        'paginate' => 2,
+        'paginate_path' => '/blog/archive/page:num/',
+        'pagination' => {
+          'compatibility' => 'v1'
+        }
+      },
+      files: files
+    ) do |site,|
+      archive_page_one = page_by_url(site, '/blog/archive/')
+      archive_page_two = page_by_url(site, '/blog/archive/page2/')
+      archive_page_three = page_by_url(site, '/blog/archive/page3/')
+      root_page = page_by_url(site, '/')
+
+      expect(archive_page_one).not_to be_nil
+      expect(archive_page_two).not_to be_nil
+      expect(archive_page_three).not_to be_nil
+      expect(root_page.data['paginator']).to be_nil
+
+      expect(paginator_item_titles(archive_page_one)).to eq(['Post 07', 'Post 05'])
+      expect(paginator_item_titles(archive_page_two)).to eq(['Post 04', 'Post 03'])
+      expect(paginator_item_titles(archive_page_three)).to eq(['Post 02', 'Post 01'])
+
+      page_one_payload = paginator_payload(archive_page_one)
+      page_two_payload = paginator_payload(archive_page_two)
+      page_three_payload = paginator_payload(archive_page_three)
+
+      expect(page_one_payload).to include('posts', 'total_posts')
+      expect(page_one_payload.fetch('total_posts')).to eq(6)
+      expect(page_one_payload.fetch('next_page_path')).to eq('/blog/archive/page2/')
+      expect(page_two_payload.fetch('previous_page_path')).to eq('/blog/archive/')
+      expect(page_three_payload.fetch('next_page')).to be_nil
+    end
+  end
+end

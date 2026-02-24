@@ -77,7 +77,7 @@ RSpec.describe 'Pagination integration: generated templates in collections' do
       expect(notes_page).not_to be_nil
       expect(paginator_item_titles(products_page)).to eq(['Widget'])
       expect(paginator_item_titles(notes_page)).to eq([])
-      expect(notes_page.data.fetch('paginator').fetch('total_items')).to eq(0)
+      expect(paginator_payload(notes_page).fetch('total_items')).to eq(0)
     end
   end
 

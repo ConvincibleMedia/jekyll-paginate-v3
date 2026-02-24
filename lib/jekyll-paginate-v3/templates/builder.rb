@@ -20,9 +20,11 @@ module Jekyll
             @add_item_lambda = add_item_lambda
             @resolve_items_lambda = resolve_items_lambda
             @log_lambda = log_lambda
-            @nested_separator = site_config['nested_key_separator']
+            @nested_separator = site_config.dig('syntax', 'separator')
+            @split_delimiter = site_config.dig('syntax', 'split')
             @equivalents = site_config['equivalents']
             @compatibility_mode = site_config['compatibility']
+            @default_template_items = site_config.dig('templates', 'defaults', 'items')
           end
 
           # Builds all configured generated pagination templates.
@@ -47,7 +49,7 @@ module Jekyll
                 definition['filters'],
                 nested_separator: @nested_separator,
                 equivalents: @equivalents,
-                split_delimiter: @site_config['split'],
+                split_delimiter: @split_delimiter,
                 now_keyword: @site_config.dig('keywords', 'now'),
                 log_lambda: @log_lambda
               )
@@ -211,7 +213,7 @@ module Jekyll
             values = Utils.fetch_nested_values(data, key, @nested_separator, equivalent_lookup)
             values = values.flat_map do |value|
               if value.is_a?(String)
-                Utils.split_delimited_string(value, @site_config['split'])
+                Utils.split_delimited_string(value, @split_delimiter)
               else
                 Utils.scalar_values(value)
               end
@@ -227,7 +229,7 @@ module Jekyll
             return nil if definition.empty?
             silent = normalise_boolean(definition['silent'])
 
-            index_keys = Utils.delimited_array(definition['index'], delimiter: @site_config['split']).map { |key| key.to_s.strip }.reject(&:empty?)
+            index_keys = Utils.delimited_array(definition['index'], delimiter: @split_delimiter).map { |key| key.to_s.strip }.reject(&:empty?)
             if index_keys.empty?
               @log_lambda.call('Skipping generated index config with missing `index` key.', 'warn') unless silent
               return nil
@@ -238,7 +240,7 @@ module Jekyll
               raise ArgumentError, "Generated index config contains duplicate `index` key(s): #{duplicated_keys.join(', ')}."
             end
 
-            layouts = Utils.normalise_layouts(definition, split_delimiter: @site_config['split'])
+            layouts = Utils.normalise_layouts(definition, split_delimiter: @split_delimiter)
             if layouts.empty?
               @log_lambda.call('Skipping generated index config with no `layout`/`layouts` value.', 'warn') unless silent
               return nil
@@ -250,7 +252,7 @@ module Jekyll
             end
 
             {
-              'items' => definition['items'].nil? ? @site_config['items'] : definition['items'],
+              'items' => definition['items'].nil? ? @default_template_items : definition['items'],
               'index' => index_keys,
               'filters' => filters,
               'layouts' => layouts,
@@ -288,7 +290,7 @@ module Jekyll
           # Uses `templates.location` to infer whether generated templates should
           # default to `pages` or a collection.
           def default_generation_location
-            first_type = Query::Parser.first_type(@site_config.dig('templates', 'location'), @site_config['keywords'], split_delimiter: @site_config['split'])
+            first_type = Query::Parser.first_type(@site_config.dig('templates', 'location'), @site_config['keywords'], split_delimiter: @split_delimiter)
             return 'pages' if first_type.nil?
             return 'pages' if %w[pages all everything].include?(first_type)
 
@@ -409,7 +411,7 @@ module Jekyll
           # Determines which collections are targeted by an `items` search definition.
           def expected_collection_labels(raw_items)
             labels = []
-            Query::Parser.parse(raw_items, @site_config['keywords'], split_delimiter: @site_config['split']).each do |entry|
+            Query::Parser.parse(raw_items, @site_config['keywords'], split_delimiter: @split_delimiter).each do |entry|
               case entry['type']
               when 'all', 'everything'
                 labels.concat(@site.collections.keys)

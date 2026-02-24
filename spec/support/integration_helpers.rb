@@ -14,8 +14,8 @@ module IntegrationHelpers
             {{ content }}
           </main>
           {% if paginator %}
-            <p id="current-page">{{ paginator.page }}</p>
-            <p id="total-pages">{{ paginator.total_pages }}</p>
+            <p id="current-page">{{ paginator.current.num | default: paginator.page }}</p>
+            <p id="total-pages">{{ paginator.total_indexes | default: paginator.total_pages }}</p>
             <ul id="items">
               {% for item in paginator.items %}
                 <li>{{ item.title }}</li>
@@ -29,9 +29,13 @@ module IntegrationHelpers
               {% endif %}
             </ul>
             <ol id="trail">
-              {% if paginator.page_trail %}
+              {% if paginator.trail %}
+                {% for entry in paginator.trail %}
+                  <li>{{ entry.num }}|{% if entry.page %}{{ entry.page.url }}{% endif %}|{{ entry.current }}|{{ entry.distance }}</li>
+                {% endfor %}
+              {% elsif paginator.page_trail %}
                 {% for entry in paginator.page_trail %}
-                  <li>{{ entry.num }}|{{ entry.path }}|{{ entry.title }}</li>
+                  <li>{{ entry.num }}|{{ entry.path }}|{{ entry.title }}|</li>
                 {% endfor %}
               {% endif %}
             </ol>
@@ -166,17 +170,76 @@ module IntegrationHelpers
     site.collections.fetch(collection_label).docs.find { |document| document.url == url }
   end
 
+  # Returns paginator payload as a Liquid-style hash.
+  def paginator_payload(item)
+    payload = item.data.fetch('paginator')
+    return payload.to_h if payload.respond_to?(:to_h)
+    return payload.to_liquid if payload.respond_to?(:to_liquid)
+
+    payload
+  end
+
+  # Extracts one canonical paginator index number.
+  def paginator_index_number(item)
+    payload = paginator_payload(item)
+    current = payload['current']
+
+    if current.respond_to?(:num)
+      return current.num
+    end
+
+    if current.is_a?(Hash)
+      return current.fetch('num')
+    end
+
+    payload.fetch('page')
+  end
+
+  # Extracts a paginator neighbour/trail reference number.
+  def paginator_reference_number(item, key)
+    reference = paginator_payload(item)[key]
+    return nil if reference.nil?
+
+    if reference.respond_to?(:num)
+      return reference.num
+    end
+
+    if reference.is_a?(Hash)
+      return reference['num']
+    end
+
+    reference
+  end
+
+  # Extracts URL from one paginator reference object.
+  def paginator_reference_url(item, key)
+    reference = paginator_payload(item)[key]
+    return nil if reference.nil?
+
+    page_object = if reference.respond_to?(:page)
+                    reference.page
+                  elsif reference.is_a?(Hash)
+                    reference['page']
+                  end
+
+    return nil if page_object.nil?
+    return nil unless page_object.respond_to?(:url)
+
+    page_object.url
+  end
+
   # Extracts paginator item titles from a generated page/document.
   def paginator_item_titles(item, key: 'items')
-    payload = item.data.fetch('paginator')
+    payload = paginator_payload(item)
     items = payload.fetch(key)
     items.map { |entry| entry.data.fetch('title') }
   end
 
   # Extracts trail page numbers from paginator payload.
   def paginator_trail_numbers(item)
-    payload = item.data.fetch('paginator')
-    entries = payload.fetch('page_trail') || []
+    payload = paginator_payload(item)
+    entries = payload.key?('trail') ? payload.fetch('trail') : payload.fetch('page_trail')
+    entries ||= []
 
     entries.map do |entry|
       if entry.respond_to?(:num)

@@ -4,13 +4,21 @@ module Jekyll
   module Plugins
     module PaginateV3
       module Config
-        # Normalises site and page-level pagination configuration into one
-        # predictable v3 shape.
+        # Normalises site and template pagination config into predictable
+        # internal structures consumed by pagination runtime classes.
         #
-        # Used by the generator and pagination model so downstream logic can
-        # assume one consistent config contract.
+        # Site-level config is normalised to the nested public v3 structure:
+        # - pagination.syntax.*
+        # - pagination.templates.location
+        # - pagination.templates.generate
+        # - pagination.templates.defaults.*
+        #
+        # Template-level config is normalised to a flat hash used during
+        # pagination emission for one concrete template page/document.
         class Normaliser
           LEGACY_FILTER_KEYS = %w[category tag locale].freeze
+          LEGACY_TEMPLATE_DEFAULT_KEYS = %w[items filters sort per_page limit offset trail title permalink sort_field sort_reverse indexpage extension].freeze
+          LEGACY_SITE_KEY_ALIASES = %w[split separator nested_key_separator].freeze
           V2_AUTOPAGE_DEFAULTS = {
             'tags' => {
               'layout' => 'autopage_tags.html',
@@ -41,13 +49,13 @@ module Jekyll
             }
           }.freeze
 
-          # Produces the canonical site-level pagination config.
+          # Produces canonical site-level pagination config.
           #
-          # Order matters: defaults -> compatibility profile -> raw config ->
-          # migrations/coercions.
+          # Merge order:
+          # defaults -> compatibility profile -> legacy overlays -> user config.
           def self.normalise_site_config(site_config)
             site_hash = Utils.safe_hash(site_config)
-            raw_pagination = Utils.safe_hash(site_hash['pagination'])
+            raw_pagination = normalise_site_pagination_source(site_hash['pagination'])
 
             compatibility_mode = normalise_compatibility(raw_pagination['compatibility'])
 
@@ -63,27 +71,48 @@ module Jekyll
             config = Jekyll::Utils.deep_merge_hashes(config, raw_pagination)
             config['compatibility'] = compatibility_mode unless compatibility_mode.nil?
 
-            normalise_common!(config, compatibility_mode, raw_pagination)
-            migrate_legacy_shortcuts!(config, compatibility_mode, raw_pagination)
+            normalise_site_common!(config, compatibility_mode, raw_pagination)
+            migrate_legacy_shortcuts!(config.dig('templates', 'defaults'), compatibility_mode, raw_pagination)
+            apply_v2_legacy_page_templates!(config.dig('templates', 'defaults'), raw_pagination, compatibility_mode)
             migrate_v2_autopages!(config, site_hash['autopages'], compatibility_mode)
 
             config
           end
 
-          # Produces template-level config by merging page overrides on top of
-          # already-normalised site config.
+          # Produces template-level pagination config used while paginating one
+          # template page/document.
+          #
+          # The output is intentionally flat so downstream pipeline code can read
+          # values directly without re-resolving site defaults.
           def self.normalise_template_config(site_config, template_pagination_config)
             raw_template_pagination = Utils.safe_hash(template_pagination_config)
+            compatibility_mode = normalise_compatibility(raw_template_pagination['compatibility']) || normalise_compatibility(site_config['compatibility'])
+            site_template_defaults = Utils.safe_hash(site_config.dig('templates', 'defaults'))
+
             page_config = Jekyll::Utils.deep_merge_hashes(
-              Utils.deep_copy(site_config),
+              Utils.deep_copy(site_template_defaults),
               raw_template_pagination
             )
 
-            compatibility_mode = normalise_compatibility(page_config['compatibility']) || normalise_compatibility(site_config['compatibility'])
+            page_config['enabled'] = if raw_template_pagination.key?('enabled')
+                                       !!raw_template_pagination['enabled']
+                                     else
+                                       !!site_config['enabled']
+                                     end
             page_config['compatibility'] = compatibility_mode unless compatibility_mode.nil?
 
-            normalise_common!(page_config, compatibility_mode, raw_template_pagination)
+            syntax = resolve_template_syntax(raw_template_pagination, site_config['syntax'])
+            page_config['split'] = syntax['split']
+            page_config['separator'] = syntax['separator']
+
+            page_config = normalise_template_defaults(
+              page_config,
+              raw_overrides: raw_template_pagination,
+              split_delimiter: syntax['split']
+            )
+
             migrate_legacy_shortcuts!(page_config, compatibility_mode, raw_template_pagination)
+            apply_v2_legacy_page_templates!(page_config, raw_template_pagination, compatibility_mode)
 
             page_config
           end
@@ -91,39 +120,84 @@ module Jekyll
           class << self
             private
 
-            def normalise_common!(config, compatibility_mode, raw_overrides = nil)
-              override_hash = Utils.safe_hash(raw_overrides)
-              sort_explicitly_set = override_hash.key?('sort') && present_config_value?(override_hash['sort'])
+            # Maps old top-level v3 keys onto nested modern locations while
+            # preserving legacy v2 shortcut fields at the top level.
+            def normalise_site_pagination_source(raw_pagination)
+              source = Utils.deep_copy(Utils.safe_hash(raw_pagination))
 
+              syntax = Utils.safe_hash(source['syntax'])
+              syntax['split'] = source['split'] if source.key?('split') && !syntax.key?('split')
+              syntax['separator'] = source['separator'] if source.key?('separator') && !syntax.key?('separator')
+              if source.key?('nested_key_separator') && !syntax.key?('separator') && !syntax.key?('nested_key_separator')
+                syntax['separator'] = source['nested_key_separator']
+              end
+              source['syntax'] = syntax unless syntax.empty?
+
+              templates = Utils.safe_hash(source['templates'])
+              template_defaults = Utils.safe_hash(templates['defaults'])
+              LEGACY_TEMPLATE_DEFAULT_KEYS.each do |legacy_key|
+                next unless source.key?(legacy_key)
+                next if template_defaults.key?(legacy_key)
+
+                template_defaults[legacy_key] = source[legacy_key]
+              end
+              templates['defaults'] = template_defaults unless template_defaults.empty?
+              source['templates'] = templates unless templates.empty?
+
+              LEGACY_SITE_KEY_ALIASES.each { |legacy_key| source.delete(legacy_key) }
+              LEGACY_TEMPLATE_DEFAULT_KEYS.each { |legacy_key| source.delete(legacy_key) }
+
+              source
+            end
+
+            def normalise_site_common!(config, compatibility_mode, raw_overrides = nil)
               config['enabled'] = !!config['enabled']
-              config['compatibility'] = compatibility_mode if compatibility_mode
-              config['split'] = normalise_split(config['split'])
-              config['nested_key_separator'] = normalise_nested_separator(config['nested_key_separator'])
-              config['keywords'] = normalise_keywords(config['keywords'])
-              config['equivalents'] = normalise_equivalents(config['equivalents'], config['split'])
-              config['items'] = normalise_items_value(config['items'])
-              config['filters'] = Utils.safe_hash(config['filters'])
-              config['offset'] = [config['offset'].to_i, 0].max
-              config['per_page'] = [config['per_page'].to_i, 1].max
-              config['limit'] = [config['limit'].to_i, 0].max
-              config['permalink'] = config['permalink'].to_s
-              config['title'] = config['title'].to_s
-              config['indexpage'] = config['indexpage'].to_s
-              config['extension'] = config['extension'].to_s
               config['debug'] = !!config['debug']
-              config['trail'] = normalise_trail(config['trail'])
-              config['sort'] = normalise_sort(
-                config['sort'],
-                config['sort_field'],
-                config['sort_reverse'],
-                config['split'],
-                sort_explicitly_set: sort_explicitly_set
-              )
-              config['templates'] = normalise_templates(config['templates'])
+              config['compatibility'] = compatibility_mode if compatibility_mode
 
-              # Keep legacy keys out of downstream logic after migration.
-              config.delete('sort_field')
-              config.delete('sort_reverse')
+              config['syntax'] = normalise_syntax(config['syntax'])
+              split_delimiter = config.dig('syntax', 'split')
+
+              config['keywords'] = normalise_keywords(config['keywords'])
+              config['equivalents'] = normalise_equivalents(config['equivalents'], split_delimiter)
+              config['templates'] = normalise_templates(config['templates'], split_delimiter: split_delimiter, raw_overrides: raw_overrides)
+            end
+
+            # Resolves template syntax from local overrides, accepting both the
+            # modern nested syntax hash and legacy root aliases.
+            def resolve_template_syntax(raw_template_pagination, site_syntax)
+              syntax = normalise_syntax(raw_template_pagination['syntax'], fallback: site_syntax)
+
+              if raw_template_pagination.key?('split')
+                syntax['split'] = normalise_split(raw_template_pagination['split'], syntax['split'])
+              end
+
+              if raw_template_pagination.key?('separator')
+                separator = raw_template_pagination['separator'].to_s
+                syntax['separator'] = separator.strip.empty? ? syntax['separator'] : separator
+              elsif raw_template_pagination.key?('nested_key_separator')
+                separator = raw_template_pagination['nested_key_separator'].to_s
+                syntax['separator'] = separator.strip.empty? ? syntax['separator'] : separator
+              end
+
+              syntax
+            end
+
+            def normalise_syntax(raw_syntax, fallback: nil)
+              defaults = Utils.deep_copy(DEFAULTS['syntax'])
+              defaults = defaults.merge(Utils.safe_hash(fallback)) if fallback.is_a?(Hash)
+              syntax = defaults.merge(Utils.safe_hash(raw_syntax))
+
+              separator = syntax['separator']
+              if (separator.nil? || separator.to_s.strip.empty?) && syntax.key?('nested_key_separator')
+                separator = syntax['nested_key_separator']
+              end
+              separator = defaults['separator'] if separator.to_s.strip.empty?
+
+              {
+                'separator' => separator.to_s,
+                'split' => normalise_split(syntax['split'], defaults['split'])
+              }
             end
 
             def normalise_compatibility(raw_value)
@@ -134,19 +208,12 @@ module Jekyll
               nil
             end
 
-            def normalise_split(raw_split)
-              Utils.normalise_split_delimiter(raw_split, DEFAULTS['split'])
-            end
-
-            def normalise_nested_separator(raw_separator)
-              separator = raw_separator.to_s.strip
-              return ':' if separator == ':'
-
-              '.'
+            def normalise_split(raw_split, default_split = DEFAULTS.dig('syntax', 'split'))
+              Utils.normalise_split_delimiter(raw_split, default_split)
             end
 
             def normalise_keywords(raw_keywords)
-              defaults = Utils.deep_copy(DEFAULTS['keywords'])
+              defaults = Utils.deep_copy(KEYWORD_DEFAULTS)
               keywords = defaults.merge(Utils.safe_hash(raw_keywords))
 
               keywords.each do |key, value|
@@ -180,12 +247,103 @@ module Jekyll
               end.reject { |group| group.length < 2 }
             end
 
+            def normalise_templates(raw_templates, split_delimiter:, raw_overrides:)
+              defaults = Utils.deep_copy(DEFAULTS['templates'])
+              source = defaults.merge(Utils.safe_hash(raw_templates))
+
+              source['location'] = defaults['location'] if source['location'].nil? || source['location'].to_s.strip.empty?
+              source['generate'] = if source['generate'].is_a?(Array)
+                                     source['generate'].map { |entry| Utils.safe_hash(entry) }
+                                   elsif source['generate'].is_a?(Hash)
+                                     [Utils.safe_hash(source['generate'])]
+                                   else
+                                     []
+                                   end
+
+              merged_defaults = Jekyll::Utils.deep_merge_hashes(
+                Utils.safe_hash(defaults['defaults']),
+                Utils.safe_hash(source['defaults'])
+              )
+              source['defaults'] = normalise_template_defaults(
+                merged_defaults,
+                raw_overrides: extract_template_defaults_overrides(raw_overrides),
+                split_delimiter: split_delimiter
+              )
+
+              source
+            end
+
+            # Extracts template-default override keys from either modern nested
+            # config or legacy top-level aliases.
+            def extract_template_defaults_overrides(raw_overrides)
+              override_hash = Utils.safe_hash(raw_overrides)
+              template_overrides = Utils.safe_hash(Utils.safe_hash(override_hash['templates'])['defaults'])
+
+              LEGACY_TEMPLATE_DEFAULT_KEYS.each do |legacy_key|
+                next unless override_hash.key?(legacy_key)
+                next if template_overrides.key?(legacy_key)
+
+                template_overrides[legacy_key] = override_hash[legacy_key]
+              end
+
+              template_overrides
+            end
+
+            # Normalises one template-default hash (used by site defaults and
+            # by per-template runtime config).
+            def normalise_template_defaults(template_defaults, raw_overrides:, split_delimiter:)
+              config = Utils.safe_hash(template_defaults)
+              template_override_hash = extract_template_defaults_overrides(raw_overrides)
+              sort_explicitly_set = template_override_hash.key?('sort') && present_config_value?(template_override_hash['sort'])
+
+              config['items'] = normalise_items_value(config['items'])
+              config['filters'] = Utils.safe_hash(config['filters'])
+              config['offset'] = [config['offset'].to_i, 0].max
+              config['per_page'] = [config['per_page'].to_i, 1].max
+              config['limit'] = [config['limit'].to_i, 0].max
+              config['permalink'] = config['permalink'].to_s
+              config['title'] = config['title'].to_s
+              config['trail'] = normalise_trail(config['trail'])
+              config['sort'] = normalise_sort(
+                config['sort'],
+                config['sort_field'],
+                config['sort_reverse'],
+                split_delimiter,
+                sort_explicitly_set: sort_explicitly_set
+              )
+              config['page_templates'] = build_page_templates(config['title'], config['permalink'])
+
+              config.delete('sort_field')
+              config.delete('sort_reverse')
+              config.delete('indexpage')
+              config.delete('extension')
+
+              config
+            end
+
+            # Builds internal page template settings.
+            #
+            # Page 1 defaults to inheriting title/location from the source
+            # template, while page 2+ uses configured paginator patterns.
+            def build_page_templates(page2_title, page2_permalink)
+              {
+                'page1' => {
+                  'title' => ':title',
+                  'permalink' => ''
+                },
+                'page2' => {
+                  'title' => page2_title.to_s,
+                  'permalink' => page2_permalink.to_s
+                }
+              }
+            end
+
             def normalise_items_value(raw_items)
-              return DEFAULTS['items'] if raw_items.nil?
+              return DEFAULTS.dig('templates', 'defaults', 'items') if raw_items.nil?
               return raw_items if raw_items.is_a?(Hash) || raw_items.is_a?(Array)
 
               value = raw_items.to_s.strip
-              value.empty? ? DEFAULTS['items'] : value
+              value.empty? ? DEFAULTS.dig('templates', 'defaults', 'items') : value
             end
 
             def normalise_trail(raw_trail)
@@ -209,39 +367,26 @@ module Jekyll
 
               return sort_entries unless sort_entries.empty?
 
-              return Utils.deep_copy(DEFAULTS['sort']) if sort_field.empty?
+              if sort_field.empty?
+                fallback_sort = DEFAULTS.dig('templates', 'defaults', 'sort')
+                return Utils.arrayify(fallback_sort, split_delimiter: split_delimiter).map(&:to_s).map(&:strip).reject(&:empty?)
+              end
 
               direction = boolean_config_value(raw_sort_reverse) ? 'desc' : 'asc'
               ["#{sort_field} #{direction}"]
             end
 
-            def normalise_templates(raw_templates)
-              defaults = Utils.deep_copy(DEFAULTS['templates'])
-              source = defaults.merge(Utils.safe_hash(raw_templates))
-
-              source['location'] = defaults['location'] if source['location'].nil? || source['location'].to_s.strip.empty?
-
-              source['generate'] = if source['generate'].is_a?(Array)
-                                     source['generate'].map { |entry| Utils.safe_hash(entry) }
-                                   elsif source['generate'].is_a?(Hash)
-                                     [Utils.safe_hash(source['generate'])]
-                                   else
-                                     []
-                                   end
-
-              source
-            end
-
-            # Migrates old v2 shorthand config into canonical v3 fields.
+            # Migrates old v2 shorthand config into canonical template fields.
             # Modern keys retain precedence when both forms are supplied.
-            def migrate_legacy_shortcuts!(config, compatibility_mode, raw_overrides = nil)
+            def migrate_legacy_shortcuts!(template_config, compatibility_mode, raw_overrides = nil)
               return unless compatibility_mode == 'v2'
 
               override_hash = Utils.safe_hash(raw_overrides)
-              explicit_filters = Utils.safe_hash(override_hash['filters'])
+              template_overrides = extract_template_defaults_overrides(override_hash)
+              explicit_filters = Utils.safe_hash(template_overrides['filters'])
 
-              if override_hash.key?('collection') && present_config_value?(override_hash['collection']) && !override_hash.key?('items')
-                config['items'] = override_hash['collection']
+              if override_hash.key?('collection') && present_config_value?(override_hash['collection']) && !template_overrides.key?('items')
+                template_config['items'] = override_hash['collection']
               end
 
               LEGACY_FILTER_KEYS.each do |legacy_key|
@@ -250,30 +395,52 @@ module Jekyll
                 next if explicit_filters.key?(legacy_key)
                 next if legacy_key == 'category' && override_hash[legacy_key].to_s.strip == 'posts'
 
-                config['filters'][legacy_key] = override_hash[legacy_key]
+                template_config['filters'][legacy_key] = override_hash[legacy_key]
               end
 
-              config.delete('collection')
-              LEGACY_FILTER_KEYS.each { |legacy_key| config.delete(legacy_key) }
+              template_config.delete('collection')
+              LEGACY_FILTER_KEYS.each { |legacy_key| template_config.delete(legacy_key) }
+            end
+
+            # Applies v2 `indexpage`/`extension` legacy behaviour by translating
+            # those keys into internal page1/page2 permalink templates.
+            def apply_v2_legacy_page_templates!(template_config, raw_overrides, compatibility_mode)
+              return unless compatibility_mode == 'v2'
+
+              override_hash = extract_template_defaults_overrides(raw_overrides)
+              return unless override_hash.key?('indexpage') || override_hash.key?('extension')
+
+              index_name = override_hash.key?('indexpage') ? override_hash['indexpage'].to_s : 'index'
+              extension = override_hash.key?('extension') ? override_hash['extension'].to_s : 'html'
+
+              template_config['page_templates'] ||= build_page_templates(template_config['title'], template_config['permalink'])
+              template_config['page_templates']['page1']['permalink'] = Utils.ensure_full_path('/', index_name, extension)
+              template_config['page_templates']['page2']['permalink'] = Utils.ensure_full_path(template_config['permalink'], index_name, extension)
             end
 
             # Imports legacy top-level `paginate` settings used by
             # jekyll-paginate v1.
             def legacy_v1_overlay(site_hash)
               overlay = {}
-
               return overlay if site_hash['paginate'].nil?
 
               overlay['enabled'] = true
-              overlay['per_page'] = site_hash['paginate'].to_i
-              overlay['items'] = 'posts'
               overlay['keywords'] = { 'items' => 'posts' }
-              overlay['permalink'] = site_hash['paginate_path'].to_s unless site_hash['paginate_path'].nil?
+              overlay['templates'] = {
+                'defaults' => {
+                  'per_page' => site_hash['paginate'].to_i,
+                  'items' => 'posts'
+                }
+              }
+              unless site_hash['paginate_path'].nil?
+                overlay['templates']['defaults']['permalink'] = site_hash['paginate_path'].to_s
+              end
 
               overlay
             end
 
-            # Legacy migration path for v2 `autopages` into v3 `pagination.templates.generate`.
+            # Legacy migration path for v2 `autopages` into
+            # `pagination.templates.generate`.
             def migrate_v2_autopages!(config, raw_autopages, compatibility_mode)
               return unless compatibility_mode == 'v2'
 
@@ -287,21 +454,21 @@ module Jekyll
                                 index_key: 'tag',
                                 items: 'all',
                                 defaults: V2_AUTOPAGE_DEFAULTS['tags'],
-                                split_delimiter: config['split']
+                                split_delimiter: config.dig('syntax', 'split')
                               ))
               migrated.concat(migrate_v2_autopage_group(
                                 raw_group: autopages['categories'],
                                 index_key: 'category',
                                 items: 'all',
                                 defaults: V2_AUTOPAGE_DEFAULTS['categories'],
-                                split_delimiter: config['split']
+                                split_delimiter: config.dig('syntax', 'split')
                               ))
               migrated.concat(migrate_v2_autopage_group(
                                 raw_group: autopages['collections'],
                                 index_key: 'collection',
                                 items: 'all',
                                 defaults: V2_AUTOPAGE_DEFAULTS['collections'],
-                                split_delimiter: config['split']
+                                split_delimiter: config.dig('syntax', 'split')
                               ))
 
               return if migrated.empty?
@@ -310,7 +477,7 @@ module Jekyll
             end
 
             # Maps one v2 autopages group (tags/categories/collections) to one
-            # v3 generate definition.
+            # generate definition.
             def migrate_v2_autopage_group(raw_group:, index_key:, items:, defaults:, split_delimiter:)
               group = Utils.safe_hash(raw_group)
               return [] if group.empty? || group['enabled'] == false

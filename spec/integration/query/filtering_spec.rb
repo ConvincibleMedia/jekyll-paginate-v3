@@ -290,7 +290,9 @@ RSpec.describe 'Pagination integration: filter semantics' do
       config: {
         'pagination' => {
           'enabled' => true,
-          'nested_key_separator' => ':'
+          'syntax' => {
+            'separator' => ':'
+          }
         }
       },
       files: jekyll_merge(

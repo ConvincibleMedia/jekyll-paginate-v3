@@ -8,40 +8,44 @@ module Jekyll
         #
         # These defaults intentionally describe the new v3 behaviour. Legacy
         # v1/v2 behaviour is layered on top through compatibility profiles.
+        KEYWORD_DEFAULTS = {
+          'pages' => 'pages',
+          'all' => 'all',
+          'everything' => 'everything',
+          'now' => 'now',
+          'items' => 'items'
+        }.freeze
+
         DEFAULTS = {
-          'enabled' => false,
+          'enabled' => true,
           'compatibility' => nil,
-          'split' => ',',
-          'nested_key_separator' => '.',
-          'keywords' => {
-            'pages' => 'pages',
-            'all' => 'all',
-            'everything' => 'everything',
-            'now' => 'now',
-            'items' => 'items'
+          'debug' => false,
+          'syntax' => {
+            'separator' => '.',
+            'split' => ','
           },
+          'keywords' => {},
           'equivalents' => [
             ['tag', 'tags'],
             ['category', 'categories']
           ],
-          'items' => 'posts',
-          'filters' => {},
-          'offset' => 0,
-          'per_page' => 10,
-          'permalink' => '/page/:num/',
-          'title' => ':title - page :num',
-          'sort' => ['date desc'],
-          'limit' => 0,
-          'trail' => {
-            'before' => 2,
-            'after' => 2
-          },
-          'indexpage' => 'index',
-          'extension' => 'html',
-          'debug' => false,
           'templates' => {
             'location' => 'pages',
-            'generate' => []
+            'generate' => [],
+            'defaults' => {
+              'items' => 'posts',
+              'filters' => [],
+              'sort' => 'date desc',
+              'per_page' => 10,
+              'limit' => 0,
+              'offset' => 0,
+              'trail' => {
+                'before' => 2,
+                'after' => 2
+              },
+              'title' => ':title - page :num',
+              'permalink' => '/page/:num'
+            }
           }
         }.freeze
 
@@ -55,14 +59,21 @@ module Jekyll
         COMPATIBILITY_PROFILES = {
           'v2' => {
             'enabled' => true,
-            'nested_key_separator' => ':',
+            'syntax' => {
+              'separator' => ':'
+            },
             'keywords' => {
               'all' => 'collections',
               'items' => 'posts'
             },
-            'trail' => {
-              'before' => 2,
-              'after' => 2
+            'templates' => {
+              'defaults' => {
+                'permalink' => '/page/:num/',
+                'trail' => {
+                  'before' => 2,
+                  'after' => 2
+                }
+              }
             }
           },
           'v1' => {
@@ -70,10 +81,12 @@ module Jekyll
             'keywords' => {
               'items' => 'posts'
             },
-            'items' => 'posts',
             'templates' => {
               'location' => 'pages',
-              'generate' => []
+              'generate' => [],
+              'defaults' => {
+                'items' => 'posts'
+              }
             }
           }
         }.freeze
