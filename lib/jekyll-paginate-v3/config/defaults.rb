@@ -13,6 +13,7 @@ module Jekyll
           'all' => 'all',
           'everything' => 'everything',
           'now' => 'now',
+          'today' => 'today',
           'items' => 'items'
         }.freeze
 

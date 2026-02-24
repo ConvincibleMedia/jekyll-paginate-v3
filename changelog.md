@@ -12,10 +12,13 @@
 * Removed v3 `indexpage`/`extension` keys; filename/extension control now comes from `permalink` alone (with v2 compatibility translation retained for legacy keys).
 * Switched paginator `*_page_path` values to derive from generated page/document object URLs, not synthetic path concatenation.
 * Added configurable nested-key access (default `.`), equivalent keys (for example `tag`/`tags`), and delimiter-driven array parsing.
+* Split range-filter keywords into configurable `now` (current time with whole-second offsets) and `today` (day bounds with whole-day offsets).
 * Folded AutoPages-style generation into `pagination.templates.generate` (driven by `items` + indexed keys) rather than separate v2 `autopages` config.
 * Broadened template discovery via `pagination.templates.location` (not just v2-style page templates).
 * Standardised paginator payload around `items`/`total_items`.
 * Kept explicit compatibility modes (`compatibility: v1` / `v2`) to interpret legacy configuration paths during migration.
+* Made generated-template placeholder substitution deterministic for overlapping names by always matching the longest placeholder first.
+* Documented generated-template permalink placeholder processing and slugify options.
 
 ## V2
 

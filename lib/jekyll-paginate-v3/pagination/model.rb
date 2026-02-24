@@ -234,6 +234,7 @@ module Jekyll
               equivalents: @equivalents,
               split_delimiter: split_delimiter,
               now_keyword: config.dig('keywords', 'now') || @site_config.dig('keywords', 'now'),
+              today_keyword: config.dig('keywords', 'today') || @site_config.dig('keywords', 'today'),
               log_lambda: @log_lambda
             )
             @log_lambda.call("Template '#{Utils.relative_item_path(template)}': #{filtered_items.length} item(s) after filters=#{config['filters']}.", 'debug')

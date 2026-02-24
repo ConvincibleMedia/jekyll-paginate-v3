@@ -24,7 +24,6 @@ module Jekyll
             @split_delimiter = site_config.dig('syntax', 'split')
             @equivalents = site_config['equivalents']
             @compatibility_mode = site_config['compatibility']
-            @default_template_items = site_config.dig('templates', 'defaults', 'items')
           end
 
           # Builds all configured generated pagination templates.
@@ -41,7 +40,7 @@ module Jekyll
               definition = normalise_definition(raw_definition, default_location)
               next if definition.nil?
 
-              @log_lambda.call("Processing generate definition #{definition_index + 1}: index=#{definition['index'].join(', ')} items=#{definition['items']} layouts=#{definition['layouts'].join(', ')} location=#{definition['location']} allow_empty=#{definition['allow_empty']}", 'debug')
+              @log_lambda.call("Processing generate definition #{definition_index + 1}: index=#{describe_index_keys(definition['index'])} items=#{definition['items']} layouts=#{definition['layouts'].join(', ')} location=#{definition['location']} allow_empty=#{definition['allow_empty']}", 'debug')
               source_items = @resolve_items_lambda.call(definition['items'])
               @log_lambda.call("Definition #{definition_index + 1} resolved #{source_items.length} source item(s) before filters.", 'debug')
               source_items = Query::Filter.filter_items(
@@ -51,6 +50,7 @@ module Jekyll
                 equivalents: @equivalents,
                 split_delimiter: @split_delimiter,
                 now_keyword: @site_config.dig('keywords', 'now'),
+                today_keyword: @site_config.dig('keywords', 'today'),
                 log_lambda: @log_lambda
               )
               @log_lambda.call("Definition #{definition_index + 1} retained #{source_items.length} source item(s) after filters.", 'debug')
@@ -68,11 +68,11 @@ module Jekyll
           def build_for_definition(definition, source_items)
             entries = build_index_entries(source_items, definition)
             if entries.empty?
-              @log_lambda.call("No index entries were generated for index=#{definition['index'].join(', ')}.", 'debug')
+              @log_lambda.call("No index entries were generated for index=#{describe_index_keys(definition['index'])}.", 'debug')
               return 0
             end
 
-            @log_lambda.call("Expanded to #{entries.length} index key combination(s) for index=#{definition['index'].join(', ')}.", 'debug')
+            @log_lambda.call("Expanded to #{entries.length} index key combination(s) for index=#{describe_index_keys(definition['index'])}.", 'debug')
 
             created = 0
             entries.each do |entry|
@@ -229,15 +229,17 @@ module Jekyll
             return nil if definition.empty?
             silent = normalise_boolean(definition['silent'])
 
-            index_keys = Utils.delimited_array(definition['index'], delimiter: @split_delimiter).map { |key| key.to_s.strip }.reject(&:empty?)
-            if index_keys.empty?
-              @log_lambda.call('Skipping generated index config with missing `index` key.', 'warn') unless silent
+            unless present_config_value?(definition['items'])
+              @log_lambda.call('Skipping generated index config with missing `items` key.', 'warn') unless silent
               return nil
             end
 
-            duplicated_keys = index_keys.group_by { |key| key }.select { |_, values| values.length > 1 }.keys
-            unless duplicated_keys.empty?
-              raise ArgumentError, "Generated index config contains duplicate `index` key(s): #{duplicated_keys.join(', ')}."
+            index_keys = Utils.delimited_array(definition['index'], delimiter: @split_delimiter).map { |key| key.to_s.strip }.reject(&:empty?)
+            unless index_keys.empty?
+              duplicated_keys = index_keys.group_by { |key| key }.select { |_, values| values.length > 1 }.keys
+              unless duplicated_keys.empty?
+                raise ArgumentError, "Generated index config contains duplicate `index` key(s): #{duplicated_keys.join(', ')}."
+              end
             end
 
             layouts = Utils.normalise_layouts(definition, split_delimiter: @split_delimiter)
@@ -252,7 +254,7 @@ module Jekyll
             end
 
             {
-              'items' => definition['items'].nil? ? @default_template_items : definition['items'],
+              'items' => definition['items'],
               'index' => index_keys,
               'filters' => filters,
               'layouts' => layouts,
@@ -287,6 +289,16 @@ module Jekyll
             location
           end
 
+          # Returns true when a config value should be treated as explicitly set.
+          def present_config_value?(value)
+            return false if value.nil?
+            return false if value.is_a?(String) && value.strip.empty?
+            return false if value.is_a?(Array) && value.empty?
+            return false if value.is_a?(Hash) && value.empty?
+
+            true
+          end
+
           # Uses `templates.location` to infer whether generated templates should
           # default to `pages` or a collection.
           def default_generation_location
@@ -295,6 +307,14 @@ module Jekyll
             return 'pages' if %w[pages all everything].include?(first_type)
 
             first_type
+          end
+
+          # Builds one concise debug label for configured index keys.
+          def describe_index_keys(index_keys)
+            keys = Utils.arrayify(index_keys).map { |key| key.to_s.strip }.reject(&:empty?)
+            return '(none)' if keys.empty?
+
+            keys.join(', ')
           end
 
           # Builds placeholder values used by generated `permalink` and `title`
@@ -384,7 +404,7 @@ module Jekyll
           def add_empty_collection_entries(entries, definition)
             return entries unless definition['allow_empty']
             unless definition['index'] == ['collection']
-              @log_lambda.call("`allow_empty` is only applicable for `index: collection`; skipping for index=#{definition['index'].join(', ')}.", 'warn') unless definition['silent']
+              @log_lambda.call("`allow_empty` is only applicable for `index: collection`; skipping for index=#{describe_index_keys(definition['index'])}.", 'warn') unless definition['silent']
               return entries
             end
 

@@ -122,9 +122,9 @@ RSpec.describe 'Pagination integration: filter semantics' do
 
     files = post_files(3) do |index|
       published_at = case index
-                     when 1 then (current_time - 2).iso8601
+                     when 1 then (current_time - Rational(7_200, 86_400)).iso8601
                      when 2 then current_time.iso8601
-                     else (current_time + 2).iso8601
+                     else (current_time + Rational(7_200, 86_400)).iso8601
                      end
 
       { 'published_at' => published_at }
@@ -143,8 +143,8 @@ RSpec.describe 'Pagination integration: filter semantics' do
                   'per_page' => 50,
                   'filters' => {
                     'published_at' => {
-                      'min' => 'now - 1',
-                      'max' => 'now + 1'
+                      'min' => 'second-now - 3600',
+                      'max' => 'second-now + 3600'
                     }
                   }
                 }
@@ -156,8 +156,76 @@ RSpec.describe 'Pagination integration: filter semantics' do
       end
     )
 
-    jekyll_build(default_site, files: files) do |site,|
+    jekyll_build(
+      default_site,
+      config: {
+        'pagination' => {
+          'enabled' => true,
+          'keywords' => {
+            'now' => 'second-now'
+          }
+        }
+      },
+      files: files
+    ) do |site,|
       expect(paginator_item_titles(page_by_url(site, '/'))).to eq(['Post 02'])
+    end
+  end
+
+  it 'supports today keyword day ranges with implicit min and max times' do
+    current_time = DateTime.now
+    start_of_today = DateTime.new(current_time.year, current_time.month, current_time.day, 0, 0, 0, current_time.offset)
+
+    files = post_files(4) do |index|
+      published_at = case index
+                     when 1 then (start_of_today - 2 + Rational(43_200, 86_400)).iso8601
+                     when 2 then (start_of_today - 1 + Rational(43_200, 86_400)).iso8601
+                     when 3 then (start_of_today + Rational(86_399, 86_400)).iso8601
+                     else (start_of_today + 1 + Rational(43_200, 86_400)).iso8601
+                     end
+
+      { 'published_at' => published_at }
+    end
+    files = jekyll_merge(
+      files,
+      jekyll_files do
+        file 'index.md' do
+          frontmatter(
+            pagination_template_frontmatter(
+              {
+                'pagination' => {
+                  'enabled' => true,
+                  'items' => 'posts',
+                  'sort' => 'title asc',
+                  'per_page' => 50,
+                  'filters' => {
+                    'published_at' => {
+                      'min' => 'day-keyword - 1',
+                      'max' => 'day-keyword'
+                    }
+                  }
+                }
+              }
+            )
+          )
+          contents('Template content')
+        end
+      end
+    )
+
+    jekyll_build(
+      default_site,
+      config: {
+        'pagination' => {
+          'enabled' => true,
+          'keywords' => {
+            'today' => 'day-keyword'
+          }
+        }
+      },
+      files: files
+    ) do |site,|
+      expect(paginator_item_titles(page_by_url(site, '/'))).to eq(['Post 02', 'Post 03'])
     end
   end
 

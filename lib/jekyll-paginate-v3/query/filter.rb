@@ -17,24 +17,26 @@ module Jekyll
         # consistent code path.
         class Filter
           # Class helper that instantiates a configured engine per call.
-          def self.filter_items(items, filters, nested_separator:, equivalents:, split_delimiter: ',', now_keyword: 'now', log_lambda: nil)
+          def self.filter_items(items, filters, nested_separator:, equivalents:, split_delimiter: ',', now_keyword: 'now', today_keyword: 'today', log_lambda: nil)
             engine = new(
               nested_separator: nested_separator,
               equivalents: equivalents,
               split_delimiter: split_delimiter,
               now_keyword: now_keyword,
+              today_keyword: today_keyword,
               log_lambda: log_lambda
             )
             engine.filter_items(items, filters)
           end
 
           # Human-readable formatter used in logs/debug output.
-          def self.filter_to_s(filter, split_delimiter: ',', now_keyword: 'now')
+          def self.filter_to_s(filter, split_delimiter: ',', now_keyword: 'now', today_keyword: 'today')
             formatter = new(
               nested_separator: '.',
               equivalents: [],
               split_delimiter: split_delimiter,
-              now_keyword: now_keyword
+              now_keyword: now_keyword,
+              today_keyword: today_keyword
             )
 
             normalised = formatter.send(:normalise_filter, filter)
@@ -44,11 +46,13 @@ module Jekyll
           end
 
           # Builds an engine configured for nested key and equivalent-key rules.
-          def initialize(nested_separator:, equivalents:, split_delimiter:, now_keyword:, log_lambda: nil)
+          def initialize(nested_separator:, equivalents:, split_delimiter:, now_keyword:, today_keyword:, log_lambda: nil)
             @nested_separator = nested_separator
             @split_delimiter = Utils.normalise_split_delimiter(split_delimiter, ',')
             @now_keyword = now_keyword.to_s.strip
             @now_keyword = 'now' if @now_keyword.empty?
+            @today_keyword = today_keyword.to_s.strip
+            @today_keyword = 'today' if @today_keyword.empty?
             @equivalent_lookup = Utils.build_equivalent_lookup(equivalents)
             @log_lambda = log_lambda
           end
@@ -316,7 +320,7 @@ module Jekyll
             %w[min max].each do |range_key|
               next unless range_hash.key?(range_key)
 
-              parsed_value = interpret_numeric_or_date_keyword(range_hash[range_key])
+              parsed_value = interpret_numeric_or_date_keyword(range_hash[range_key], range_key: range_key)
               return false if parsed_value == false
 
               range_hash[range_key] = parsed_value
@@ -395,32 +399,61 @@ module Jekyll
           end
 
           # Parses numeric/date range endpoints and supports configurable
-          # `keywords.now` with optional +/- day offsets.
+          # `keywords.now` and `keywords.today`.
           #
-          # Examples (assuming `keywords.now == "now"`):
+          # Examples (assuming default keywords):
           # - now
-          # - now+1
-          # - now - 0.5
-          def interpret_numeric_or_date_keyword(value)
+          # - now+90
+          # - today
+          # - today-1
+          def interpret_numeric_or_date_keyword(value, range_key: nil)
             if value.is_a?(String)
               now_expression = interpret_now_expression(value)
               return now_expression unless now_expression.nil?
+
+              today_expression = interpret_today_expression(value, range_key: range_key)
+              return today_expression unless today_expression.nil?
             end
 
             interpret_numeric(value, must_cast: true)
           end
 
           # Parses configured now-keyword expressions into DateTime values.
+          # Offsets are in whole seconds.
           def interpret_now_expression(value)
             keyword_pattern = Regexp.escape(@now_keyword)
             expression = value.to_s.strip
-            match = expression.match(/\A#{keyword_pattern}(?:\s*([+-])\s*(\d+(?:\.\d+)?))?\z/i)
+            match = expression.match(/\A#{keyword_pattern}(?:\s*([+-])\s*(\d+))?\z/i)
             return nil if match.nil?
 
-            offset_days = match[2].nil? ? 0.0 : match[2].to_f
+            offset_seconds = match[2].nil? ? 0 : match[2].to_i
+            offset_seconds = -offset_seconds if match[1] == '-'
+
+            DateTime.now + Rational(offset_seconds, 86_400)
+          end
+
+          # Parses configured today-keyword expressions into DateTime values.
+          #
+          # Offsets are in whole days and the parsed value is normalised to the
+          # start or end of the day depending on whether the value is used as a
+          # `min` or `max` range endpoint.
+          def interpret_today_expression(value, range_key:)
+            keyword_pattern = Regexp.escape(@today_keyword)
+            expression = value.to_s.strip
+            match = expression.match(/\A#{keyword_pattern}(?:\s*([+-])\s*(\d+))?\z/i)
+            return nil if match.nil?
+
+            offset_days = match[2].nil? ? 0 : match[2].to_i
             offset_days = -offset_days if match[1] == '-'
 
-            DateTime.now + offset_days
+            current_time = DateTime.now
+            target_date = current_time.to_date + offset_days
+
+            if range_key == 'max'
+              DateTime.new(target_date.year, target_date.month, target_date.day, 23, 59, 59, current_time.offset)
+            else
+              DateTime.new(target_date.year, target_date.month, target_date.day, 0, 0, 0, current_time.offset)
+            end
           end
 
           # Casts string values to Integer, Float, or DateTime when possible.

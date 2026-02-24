@@ -11,14 +11,15 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Query::Filter do
   end
 
   # Runs the filter engine with stable defaults used across examples.
-  def apply_filters(items, filters, now_keyword: 'now', split_delimiter: ',')
+  def apply_filters(items, filters, now_keyword: 'now', today_keyword: 'today', split_delimiter: ',')
     described_class.filter_items(
       items,
       filters,
       nested_separator: '.',
       equivalents: [%w[tag tags]],
       split_delimiter: split_delimiter,
-      now_keyword: now_keyword
+      now_keyword: now_keyword,
+      today_keyword: today_keyword
     )
   end
 
@@ -104,26 +105,80 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Query::Filter do
     expect(filtered).to eq([items.first])
   end
 
-  it 'supports configurable now keywords for range filters' do
+  it 'supports configurable today keywords for range filters' do
     current_time = DateTime.now
+    start_of_today = DateTime.new(current_time.year, current_time.month, current_time.day, 0, 0, 0, current_time.offset)
     items = [
-      build_item({ 'title' => 'Past', 'published_at' => (current_time - 2).iso8601 }),
-      build_item({ 'title' => 'Current', 'published_at' => current_time.iso8601 }),
-      build_item({ 'title' => 'Future', 'published_at' => (current_time + 2).iso8601 })
+      build_item({ 'title' => 'Two Days Ago', 'published_at' => (start_of_today - 2 + Rational(43_200, 86_400)).iso8601 }),
+      build_item({ 'title' => 'Yesterday', 'published_at' => (start_of_today - 1 + Rational(43_200, 86_400)).iso8601 }),
+      build_item({ 'title' => 'Today End', 'published_at' => (start_of_today + Rational(86_399, 86_400)).iso8601 }),
+      build_item({ 'title' => 'Tomorrow', 'published_at' => (start_of_today + 1 + Rational(43_200, 86_400)).iso8601 })
     ]
 
     filtered = apply_filters(
       items,
       {
         'published_at' => {
-          'min' => 'today - 0.5',
-          'max' => 'today + 0.5'
+          'min' => 'day-start-1',
+          'max' => 'day-start'
         }
       },
-      now_keyword: 'today'
+      today_keyword: 'day-start'
+    )
+
+    expect(filtered).to eq([items[1], items[2]])
+  end
+
+  it 'supports now keyword offsets in whole seconds' do
+    current_time = DateTime.now
+    items = [
+      build_item({ 'title' => 'Past', 'published_at' => (current_time - Rational(7_200, 86_400)).iso8601 }),
+      build_item({ 'title' => 'Current', 'published_at' => current_time.iso8601 }),
+      build_item({ 'title' => 'Future', 'published_at' => (current_time + Rational(7_200, 86_400)).iso8601 })
+    ]
+
+    filtered = apply_filters(
+      items,
+      {
+        'published_at' => {
+          'min' => 'now - 3600',
+          'max' => 'now + 3600'
+        }
+      }
     )
 
     expect(filtered).to eq([items[1]])
+  end
+
+  it 'treats non-integer keyword offsets as invalid range filters' do
+    current_time = DateTime.now
+    items = [
+      build_item({ 'title' => 'Current', 'published_at' => current_time.iso8601 }),
+      build_item({ 'title' => 'Future', 'published_at' => (current_time + 1).iso8601 })
+    ]
+
+    filtered_today = apply_filters(
+      items,
+      {
+        'published_at' => {
+          'min' => 'today - 0.5',
+          'max' => 'today + 0.5'
+        }
+      }
+    )
+
+    filtered_now = apply_filters(
+      items,
+      {
+        'published_at' => {
+          'min' => 'now - 0.5',
+          'max' => 'now + 0.5'
+        }
+      }
+    )
+
+    expect(filtered_today).to eq(items)
+    expect(filtered_now).to eq(items)
   end
 
   it 'ignores invalid mixed-type range definitions gracefully' do

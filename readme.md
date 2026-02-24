@@ -101,7 +101,7 @@ pagination:
   syntax:
     separator: '.' # see Nested Keys below
     split: "," # see Split/Delimiter below
-  keywords: {} # allows special words like "all" for all collections to be changed
+  keywords: {} # allows special words like "all", "now" and "today" to be changed
   equivalents: # see Equivalents below
 ```
 
@@ -161,15 +161,32 @@ filters:
     exclude: internal # 'key' cannot be 'internal'
 ```
 
-- Match mode can be:
-  - `strict` frontmatter key must match exactly
-  - `auto` (default): frontmatter either matches exactly, or is an array, and contains the match
-  - `only`: like `auto` but if array, must be the only array item
-  - `first`/`firstN` (e.g. `first3`): like `auto` but if array, only the first (N) array elements are considered
-- The `split` option overrides `split` from global config, for this filter only. Set this to `false` to disable splitting of the frontmatter value.
-- Range matches are inclusive; `min`/`max` can be numeric, datetime, or now-relative string (`now`, `now+1`, `now-1`, etc.). The `now` keyword is configurable at `pagination.keywords.now`.
-- A synthetic `collection` frontmatter key is available to match on the document's collection label.
-- Arrays can be specified as delimited strings.
+That is:
+
+* String: simple match
+* Regex: specified by a string starting/ending with `/` followed by optional regex flag
+* Hash with:
+  * `match`: string/regex to match on
+  * `mode`: optional, can be:
+    * `auto` (default): frontmatter value either matches exactly, or is an array, and contains the match
+    * `strict` frontmatter value must match exactly
+    * `only`: like `auto` but if array, must be the only array item
+    * `first`/`firstN` (e.g. `first3`): like `auto` but if array, only the first (N) array elements are considered
+  * `split`: overrides `split` from global config, for this filter only. Set this to `false` to disable splitting of the frontmatter value. Defaults to true: frontmatter values will be treated as arrays if they can be split.
+* Range with `min` and/or `max` for numeric values.
+  * `min`/`max` are inclusive, and can be numeric, datetime, or keyword-relative strings.
+  * `now` means current time, and supports optional whole-second offsets (e.g. `now`, `now+60`, `now-120`). The `now` keyword is configurable at `pagination.keywords.now`.
+  * `today` means the current day, and supports optional whole-day offsets (e.g. `today`, `today+1`, `today-2`). For day-based ranges, `min` uses `00:00:00` and `max` uses `23:59:59`. The `today` keyword is configurable at `pagination.keywords.today`.
+* Array (or delimited string): combine several filters with an OR operation
+* Hash with:
+
+  * `include`: whitelist filters
+  * `exclude`: blacklist filters
+  * `join`: override the default OR operation to an AND (`and`) within `include`/`exclude`.
+  
+  This format can be used to build up arbitrarily complex, nested filters.
+
+A synthetic `collection` frontmatter key is available to match on the document's collection label.
 
 ### Sorting
 
@@ -178,9 +195,9 @@ filters:
 ```yaml
 pagination:
   sort:
-    - featured desc
-    - author.name asc empty:last
-    - date desc
+  - featured desc
+  - author.name asc empty:last
+  - date desc
 ```
 
 The syntax is `field [options]`. `sort` doesn't have to be an array, a single sort field can just be a string directly.
@@ -213,8 +230,8 @@ This feature automatically generates templates by indexing frontmatter values. T
 pagination:
   templates:
     generate:
-    - items: posts # Search Format: what items to consider
-      index: tag # what frontmatter keys to index
+    - items: posts # required. Search Format: what items to consider
+      index: tag # optional. frontmatter key(s) to index
       #filters: # optionally filter those items (same format as pagination filters)
       layout: tags.html
       permalink: /tag/:tag/
@@ -228,9 +245,23 @@ pagination:
       #location: # override whether this generated template will be in 'pages' or a collection name
 ```
 
-The generator will look in all the items you've identified and index them by the values in the frontmatter key(s) you specify on `index`.
+Each `generate` entry must specify `items`; entries without `items` are invalid and are skipped.
+
+If `index` is set, the generator will look in all the items you've identified and index them by the values in the frontmatter key(s) you specify on `index`.
 
 For instance if you look in `posts` and index on `tags`, it might find posts with the tags "cat" and "dog". It will create a pagination template for "cat" and "dog", each of which will paginate posts with the tags "cat" and "dog" respectively.
+
+Generated template `permalink` and `title` strings can use placeholders for every key named in `index`. If `index` is omitted, one template is generated from the entry settings and there are no index-key placeholders available for substitution.
+
+Placeholder values in the permalink are slugified. You can configure this with:
+
+```yaml
+index: category
+permalink: /topic/:category/
+slugify:
+  mode: default # passed to Jekyll::Utils.slugify
+  case: false   # true preserves case
+```
 
 You could generate pagination templates very specifically with a filter, for instance:
 

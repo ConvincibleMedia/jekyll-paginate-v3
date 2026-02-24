@@ -32,6 +32,8 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
       expect(config.dig('templates', 'defaults', 'limit')).to eq(0)
       expect(config.dig('syntax', 'split')).to eq(',')
       expect(config.dig('syntax', 'separator')).to eq('.')
+      expect(config.dig('keywords', 'now')).to eq('now')
+      expect(config.dig('keywords', 'today')).to eq('today')
       expect(config.dig('templates', 'location')).to eq('pages')
       expect(config.dig('templates', 'generate')).to be_an(Array)
       expect(config.dig('templates', 'generate').length).to eq(1)
