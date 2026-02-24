@@ -24,12 +24,8 @@ require 'jekyll-paginate-v3/pagination/model'
 require 'jekyll-paginate-v3/generators/pagination_generator'
 
 module Jekyll
-  module Plugins
-    # Namespace anchor for all paginate-v3 runtime components.
-    #
-    # Used by Jekyll plugin loading as the root module for config normalisation,
-    # query/filtering, generated template building, and paginated index emission.
-    module PaginateV3
-    end
-  end
+module Plugins
+	module PaginateV3
+	end
+end
 end

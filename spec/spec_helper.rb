@@ -10,9 +10,9 @@ require_relative 'support/integration_helpers'
 JekyllTestHarness.install!(framework: :rspec)
 
 RSpec.configure do |config|
-  config.disable_monkey_patching!
-  config.order = :random
-  config.include IntegrationHelpers
+	config.disable_monkey_patching!
+	config.order = :random
+	config.include IntegrationHelpers
 
-  Kernel.srand config.seed
+	Kernel.srand config.seed
 end

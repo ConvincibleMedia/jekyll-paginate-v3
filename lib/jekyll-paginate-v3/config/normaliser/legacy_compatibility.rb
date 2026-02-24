@@ -1,165 +1,169 @@
 # frozen_string_literal: true
 
 module Jekyll
-  module Plugins
-    module PaginateV3
-      module Config
-        class Normaliser
-          class << self
-            private
-            def migrate_legacy_shortcuts!(template_config, compatibility_mode, raw_overrides = nil)
-              return unless compatibility_mode == 'v2'
+module Plugins
+module PaginateV3
+module Config
+class Normaliser
+	class << self
+		# Legacy compatibility migration helpers for v1/v2 style configuration.
+		# Structure: each helper converts a specific legacy shape into the shared
+		# v3 config model consumed by the runtime pipeline.
 
-              override_hash = Utils.safe_hash(raw_overrides)
-              template_overrides = extract_template_defaults_overrides(override_hash)
-              explicit_filters = Utils.safe_hash(template_overrides['filters'])
+		private
+		def migrate_legacy_shortcuts!(template_config, compatibility_mode, raw_overrides = nil)
+			return unless compatibility_mode == 'v2'
 
-              if override_hash.key?('collection') && present_config_value?(override_hash['collection']) && !template_overrides.key?('items')
-                template_config['items'] = override_hash['collection']
-              end
+			override_hash = Utils.safe_hash(raw_overrides)
+			template_overrides = extract_template_defaults_overrides(override_hash)
+			explicit_filters = Utils.safe_hash(template_overrides['filters'])
 
-              LEGACY_FILTER_KEYS.each do |legacy_key|
-                next unless override_hash.key?(legacy_key)
-                next unless present_config_value?(override_hash[legacy_key])
-                next if explicit_filters.key?(legacy_key)
-                next if legacy_key == 'category' && override_hash[legacy_key].to_s.strip == 'posts'
+			if override_hash.key?('collection') && present_config_value?(override_hash['collection']) && !template_overrides.key?('items')
+				template_config['items'] = override_hash['collection']
+			end
 
-                template_config['filters'][legacy_key] = override_hash[legacy_key]
-              end
+			LEGACY_FILTER_KEYS.each do |legacy_key|
+				next unless override_hash.key?(legacy_key)
+				next unless present_config_value?(override_hash[legacy_key])
+				next if explicit_filters.key?(legacy_key)
+				next if legacy_key == 'category' && override_hash[legacy_key].to_s.strip == 'posts'
 
-              template_config.delete('collection')
-              LEGACY_FILTER_KEYS.each { |legacy_key| template_config.delete(legacy_key) }
-            end
+				template_config['filters'][legacy_key] = override_hash[legacy_key]
+			end
 
-            # Applies v2 `indexpage`/`extension` legacy behaviour by translating
-            # those keys into internal page1/page2 permalink templates.
-            def apply_v2_legacy_page_templates!(template_config, raw_overrides, compatibility_mode)
-              return unless compatibility_mode == 'v2'
+			template_config.delete('collection')
+			LEGACY_FILTER_KEYS.each { |legacy_key| template_config.delete(legacy_key) }
+		end
 
-              override_hash = extract_template_defaults_overrides(raw_overrides)
-              return unless override_hash.key?('indexpage') || override_hash.key?('extension')
+		# Applies v2 `indexpage`/`extension` legacy behaviour by translating
+		# those keys into internal page1/page2 permalink templates.
+		def apply_v2_legacy_page_templates!(template_config, raw_overrides, compatibility_mode)
+			return unless compatibility_mode == 'v2'
 
-              index_name = override_hash.key?('indexpage') ? override_hash['indexpage'].to_s : 'index'
-              extension = override_hash.key?('extension') ? override_hash['extension'].to_s : 'html'
+			override_hash = extract_template_defaults_overrides(raw_overrides)
+			return unless override_hash.key?('indexpage') || override_hash.key?('extension')
 
-              template_config['page_templates'] ||= build_page_templates(template_config['title'], template_config['permalink'])
-              template_config['page_templates']['page1']['permalink'] = Utils.ensure_full_path('/', index_name, extension)
-              template_config['page_templates']['page2']['permalink'] = Utils.ensure_full_path(template_config['permalink'], index_name, extension)
-            end
+			index_name = override_hash.key?('indexpage') ? override_hash['indexpage'].to_s : 'index'
+			extension = override_hash.key?('extension') ? override_hash['extension'].to_s : 'html'
 
-            # Imports legacy top-level `paginate` settings used by
-            # jekyll-paginate v1.
-            def legacy_v1_overlay(site_hash)
-              overlay = {}
-              return overlay if site_hash['paginate'].nil?
+			template_config['page_templates'] ||= build_page_templates(template_config['title'], template_config['permalink'])
+			template_config['page_templates']['page1']['permalink'] = Utils.ensure_full_path('/', index_name, extension)
+			template_config['page_templates']['page2']['permalink'] = Utils.ensure_full_path(template_config['permalink'], index_name, extension)
+		end
 
-              overlay['enabled'] = true
-              overlay['keywords'] = { 'items' => 'posts' }
-              overlay['templates'] = {
-                'defaults' => {
-                  'per_page' => site_hash['paginate'].to_i,
-                  'items' => 'posts'
-                }
-              }
-              unless site_hash['paginate_path'].nil?
-                overlay['templates']['defaults']['permalink'] = site_hash['paginate_path'].to_s
-              end
+		# Imports legacy top-level `paginate` settings used by
+		# jekyll-paginate v1.
+		def legacy_v1_overlay(site_hash)
+			overlay = {}
+			return overlay if site_hash['paginate'].nil?
 
-              overlay
-            end
+			overlay['enabled'] = true
+			overlay['keywords'] = { 'items' => 'posts' }
+			overlay['templates'] = {
+				'defaults' => {
+					'per_page' => site_hash['paginate'].to_i,
+					'items' => 'posts'
+				}
+			}
+			unless site_hash['paginate_path'].nil?
+				overlay['templates']['defaults']['permalink'] = site_hash['paginate_path'].to_s
+			end
 
-            # Legacy migration path for v2 `autopages` into
-            # `pagination.templates.generate`.
-            def migrate_v2_autopages!(config, raw_autopages, compatibility_mode)
-              return unless compatibility_mode == 'v2'
+			overlay
+		end
 
-              autopages = Utils.safe_hash(raw_autopages)
-              return if autopages.empty? || autopages['enabled'] == false
+		# Legacy migration path for v2 `autopages` into
+		# `pagination.templates.generate`.
+		def migrate_v2_autopages!(config, raw_autopages, compatibility_mode)
+			return unless compatibility_mode == 'v2'
 
-              migrated = []
+			autopages = Utils.safe_hash(raw_autopages)
+			return if autopages.empty? || autopages['enabled'] == false
 
-              migrated.concat(migrate_v2_autopage_group(
-                                raw_group: autopages['tags'],
-                                index_key: 'tag',
-                                items: 'all',
-                                defaults: V2_AUTOPAGE_DEFAULTS['tags'],
-                                split_delimiter: config.dig('syntax', 'split')
-                              ))
-              migrated.concat(migrate_v2_autopage_group(
-                                raw_group: autopages['categories'],
-                                index_key: 'category',
-                                items: 'all',
-                                defaults: V2_AUTOPAGE_DEFAULTS['categories'],
-                                split_delimiter: config.dig('syntax', 'split')
-                              ))
-              migrated.concat(migrate_v2_autopage_group(
-                                raw_group: autopages['collections'],
-                                index_key: 'collection',
-                                items: 'all',
-                                defaults: V2_AUTOPAGE_DEFAULTS['collections'],
-                                split_delimiter: config.dig('syntax', 'split')
-                              ))
+			migrated = []
 
-              return if migrated.empty?
+			migrated.concat(migrate_v2_autopage_group(
+												raw_group: autopages['tags'],
+												index_key: 'tag',
+												items: 'all',
+												defaults: V2_AUTOPAGE_DEFAULTS['tags'],
+												split_delimiter: config.dig('syntax', 'split')
+											))
+			migrated.concat(migrate_v2_autopage_group(
+												raw_group: autopages['categories'],
+												index_key: 'category',
+												items: 'all',
+												defaults: V2_AUTOPAGE_DEFAULTS['categories'],
+												split_delimiter: config.dig('syntax', 'split')
+											))
+			migrated.concat(migrate_v2_autopage_group(
+												raw_group: autopages['collections'],
+												index_key: 'collection',
+												items: 'all',
+												defaults: V2_AUTOPAGE_DEFAULTS['collections'],
+												split_delimiter: config.dig('syntax', 'split')
+											))
 
-              config['templates']['generate'].concat(migrated)
-            end
+			return if migrated.empty?
 
-            # Maps one v2 autopages group (tags/categories/collections) to one
-            # generate definition.
-            def migrate_v2_autopage_group(raw_group:, index_key:, items:, defaults:, split_delimiter:)
-              group = Utils.safe_hash(raw_group)
-              return [] if group.empty? || group['enabled'] == false
+			config['templates']['generate'].concat(migrated)
+		end
 
-              layouts = Utils.normalise_layouts(group, split_delimiter: split_delimiter)
-              layouts = [defaults['layout']] if layouts.empty?
+		# Maps one v2 autopages group (tags/categories/collections) to one
+		# generate definition.
+		def migrate_v2_autopage_group(raw_group:, index_key:, items:, defaults:, split_delimiter:)
+			group = Utils.safe_hash(raw_group)
+			return [] if group.empty? || group['enabled'] == false
 
-              title = group['title']
-              title = defaults['title'] unless present_config_value?(title)
+			layouts = Utils.normalise_layouts(group, split_delimiter: split_delimiter)
+			layouts = [defaults['layout']] if layouts.empty?
 
-              permalink = group['permalink']
-              permalink = defaults['permalink'] unless present_config_value?(permalink)
+			title = group['title']
+			title = defaults['title'] unless present_config_value?(title)
 
-              slugify = if group.key?('slugify')
-                          Utils.safe_hash(group['slugify'])
-                        else
-                          Utils.deep_copy(defaults['slugify'])
-                        end
+			permalink = group['permalink']
+			permalink = defaults['permalink'] unless present_config_value?(permalink)
 
-              silent = boolean_config_value(group['silent'])
+			slugify = if group.key?('slugify')
+									Utils.safe_hash(group['slugify'])
+								else
+									Utils.deep_copy(defaults['slugify'])
+								end
 
-              [
-                {
-                  'items' => items,
-                  'index' => index_key,
-                  'layouts' => layouts,
-                  'title' => title,
-                  'permalink' => permalink,
-                  'slugify' => slugify,
-                  'silent' => silent
-                }
-              ]
-            end
+			silent = boolean_config_value(group['silent'])
 
-            # Indicates whether a config value should be treated as explicitly set.
-            def present_config_value?(value)
-              return false if value.nil?
-              return false if value.is_a?(String) && value.strip.empty?
-              return false if value.is_a?(Array) && value.empty?
-              return false if value.is_a?(Hash) && value.empty?
+			[
+				{
+					'items' => items,
+					'index' => index_key,
+					'layouts' => layouts,
+					'title' => title,
+					'permalink' => permalink,
+					'slugify' => slugify,
+					'silent' => silent
+				}
+			]
+		end
 
-              true
-            end
+		# Indicates whether a config value should be treated as explicitly set.
+		def present_config_value?(value)
+			return false if value.nil?
+			return false if value.is_a?(String) && value.strip.empty?
+			return false if value.is_a?(Array) && value.empty?
+			return false if value.is_a?(Hash) && value.empty?
 
-            # Coerces loose truthy/falsey config values to a strict boolean.
-            def boolean_config_value(value)
-              return value if value == true || value == false
+			true
+		end
 
-              value.to_s.strip.casecmp('true').zero?
-            end
-          end
-        end
-      end
-    end
-  end
+		# Coerces loose truthy/falsey config values to a strict boolean.
+		def boolean_config_value(value)
+			return value if value == true || value == false
+
+			value.to_s.strip.casecmp('true').zero?
+		end
+	end
+end
+end
+end
+end
 end
