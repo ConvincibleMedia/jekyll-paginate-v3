@@ -14,6 +14,12 @@ module Jekyll
           'everything' => 'everything',
           'now' => 'now',
           'today' => 'today',
+          'day' => 'day',
+          'month' => 'month',
+          'year' => 'year',
+          'hour' => 'hour',
+          'minute' => 'minute',
+          'second' => 'second',
           'items' => 'items'
         }.freeze
 

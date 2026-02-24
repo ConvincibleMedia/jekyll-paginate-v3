@@ -39,7 +39,7 @@ RSpec.describe 'Pagination integration: filter semantics' do
     end
   end
 
-  it 'supports scalar hash modes including only and firstN' do
+  it 'supports scalar hash modes including only and first(N)' do
     files = post_files(3) do |index|
       case index
       when 1 then { 'tags' => ['ruby'], 'contributors' => ['alice', 'bob'] }
@@ -66,7 +66,7 @@ RSpec.describe 'Pagination integration: filter semantics' do
                     },
                     'contributors' => {
                       'match' => 'alice',
-                      'mode' => 'first2',
+                      'mode' => 'first(2)',
                       'split' => false
                     }
                   }
@@ -143,8 +143,8 @@ RSpec.describe 'Pagination integration: filter semantics' do
                   'per_page' => 50,
                   'filters' => {
                     'published_at' => {
-                      'min' => 'second-now - 3600',
-                      'max' => 'second-now + 3600'
+                      'min' => 'secondnow - 3600',
+                      'max' => 'secondnow + 3600'
                     }
                   }
                 }
@@ -162,13 +162,49 @@ RSpec.describe 'Pagination integration: filter semantics' do
         'pagination' => {
           'enabled' => true,
           'keywords' => {
-            'now' => 'second-now'
+            'now' => 'secondnow'
           }
         }
       },
       files: files
     ) do |site,|
       expect(paginator_item_titles(page_by_url(site, '/'))).to eq(['Post 02'])
+    end
+  end
+
+  it 'supports inclusive/exclusive range mode controls' do
+    files = jekyll_merge(
+      post_files(4) do |index|
+        { 'rating' => index }
+      end,
+      jekyll_files do
+        file 'index.md' do
+          frontmatter(
+            pagination_template_frontmatter(
+              {
+                'pagination' => {
+                  'enabled' => true,
+                  'items' => 'posts',
+                  'sort' => 'title asc',
+                  'per_page' => 50,
+                  'filters' => {
+                    'rating' => {
+                      'min' => 2,
+                      'max' => 4,
+                      'mode' => 'min-exclusive max-inclusive'
+                    }
+                  }
+                }
+              }
+            )
+          )
+          contents('Template content')
+        end
+      end
+    )
+
+    jekyll_build(default_site, files: files) do |site,|
+      expect(paginator_item_titles(page_by_url(site, '/'))).to eq(['Post 03', 'Post 04'])
     end
   end
 
@@ -200,8 +236,8 @@ RSpec.describe 'Pagination integration: filter semantics' do
                   'per_page' => 50,
                   'filters' => {
                     'published_at' => {
-                      'min' => 'day-keyword - 1',
-                      'max' => 'day-keyword'
+                      'min' => 'daykeyword - 1',
+                      'max' => 'daykeyword'
                     }
                   }
                 }
@@ -219,7 +255,7 @@ RSpec.describe 'Pagination integration: filter semantics' do
         'pagination' => {
           'enabled' => true,
           'keywords' => {
-            'today' => 'day-keyword'
+            'today' => 'daykeyword'
           }
         }
       },

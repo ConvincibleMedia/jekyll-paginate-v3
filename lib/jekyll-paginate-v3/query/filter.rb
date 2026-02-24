@@ -245,7 +245,7 @@ module Jekyll
           end
 
           # Normalises scalar hash match mode (`strict`, `auto`, `only`,
-          # `first`, `firstN`).
+          # `first`, `first(N)`).
           #
           # Returns:
           # - `[mode, embedded_first_count]`
@@ -255,15 +255,15 @@ module Jekyll
             mode_value = 'auto' if mode_value.empty?
 
             return [mode_value, nil] if %w[strict auto only].include?(mode_value)
-            return ['first', nil] if %w[first firstn].include?(mode_value)
+            return ['first', nil] if mode_value == 'first'
 
-            first_count_match = mode_value.match(/\Afirst(\d+)\z/)
-            return ['first', first_count_match[1].to_i] unless first_count_match.nil?
+            bracket_first_match = mode_value.match(/\Afirst\(\s*(\d+)\s*\)\z/)
+            return ['first', bracket_first_match[1].to_i] unless bracket_first_match.nil?
 
             false
           end
 
-          # Normalises the `first` count used by `mode: first|firstN`.
+          # Normalises the `first` count used by `mode: first`.
           # Defaults to 1 when not supplied.
           def normalise_scalar_first_count(raw_first, embedded_default = nil)
             return embedded_default if !embedded_default.nil? && embedded_default.positive?
@@ -314,8 +314,8 @@ module Jekyll
 
           # Normalises range hash filters (`min`, `max`).
           def normalise_range_hash(hash_definition)
-            range_hash = hash_definition.select { |key, _| %w[min max].include?(key) }
-            return false if range_hash.empty?
+            range_hash = hash_definition.select { |key, _| %w[min max mode].include?(key) }
+            return false unless range_hash.key?('min') || range_hash.key?('max')
 
             %w[min max].each do |range_key|
               next unless range_hash.key?(range_key)
@@ -351,7 +351,78 @@ module Jekyll
               range_hash['max'] = max_value
             end
 
+            normalised_mode = normalise_range_mode(
+              range_hash['mode'],
+              has_min: !range_hash['min'].nil?,
+              has_max: !range_hash['max'].nil?
+            )
+            return false if normalised_mode == :invalid
+
+            range_hash['mode'] = normalised_mode
+
             range_hash
+          end
+
+          # Normalises range match mode while preserving inclusive defaults.
+          #
+          # Supported mode fragments:
+          # - `min-inclusive` / `min-exclusive`
+          # - `max-inclusive` / `max-exclusive`
+          # - `inclusive` (both inclusive)
+          # - `exclusive` (both exclusive)
+          #
+          # Modes can be combined as whitespace-separated fragments.
+          def normalise_range_mode(raw_mode, has_min:, has_max:)
+            if raw_mode.nil? || raw_mode.to_s.strip.empty?
+              return default_range_mode(has_min: has_min, has_max: has_max)
+            end
+
+            min_inclusive = true
+            max_inclusive = true
+            mode_tokens = raw_mode.to_s.strip.downcase.split(/\s+/)
+            return :invalid if mode_tokens.empty?
+
+            mode_tokens.each do |token|
+              case token
+              when 'inclusive'
+                min_inclusive = true
+                max_inclusive = true
+              when 'exclusive'
+                min_inclusive = false
+                max_inclusive = false
+              when 'min-inclusive'
+                return :invalid unless has_min
+
+                min_inclusive = true
+              when 'min-exclusive'
+                return :invalid unless has_min
+
+                min_inclusive = false
+              when 'max-inclusive'
+                return :invalid unless has_max
+
+                max_inclusive = true
+              when 'max-exclusive'
+                return :invalid unless has_max
+
+                max_inclusive = false
+              else
+                return :invalid
+              end
+            end
+
+            range_mode_fragments = []
+            range_mode_fragments << (min_inclusive ? 'min-inclusive' : 'min-exclusive') if has_min
+            range_mode_fragments << (max_inclusive ? 'max-inclusive' : 'max-exclusive') if has_max
+            range_mode_fragments.join(' ')
+          end
+
+          # Builds the canonical default mode for present range endpoints.
+          def default_range_mode(has_min:, has_max:)
+            mode_fragments = []
+            mode_fragments << 'min-inclusive' if has_min
+            mode_fragments << 'max-inclusive' if has_max
+            mode_fragments.join(' ')
           end
 
           # Converts grouped entry inputs into an array without blank items.
@@ -526,11 +597,11 @@ module Jekyll
               "match #{definition['match']} (#{mode_text}, #{split_text})"
             elsif range_definition?(definition)
               if definition.key?('min') && definition.key?('max')
-                "#{definition['min']} to #{definition['max']}"
+                "#{definition['min']} to #{definition['max']} (#{definition['mode']})"
               elsif definition.key?('min')
-                "#{definition['min']} or more"
+                "#{definition['min']} or more (#{definition['mode']})"
               else
-                "#{definition['max']} or less"
+                "#{definition['max']} or less (#{definition['mode']})"
               end
             else
               '[invalid]'
@@ -571,7 +642,7 @@ module Jekyll
             elsif scalar_definition?(definition)
               check_scalar_filter(definition, item_values)
             elsif range_definition?(definition)
-              scalar_candidates_from_item_values(item_values).any? { |value| range_match?(value, definition['min'], definition['max']) }
+              scalar_candidates_from_item_values(item_values).any? { |value| range_match?(value, definition['min'], definition['max'], definition['mode']) }
             else
               false
             end
@@ -708,23 +779,41 @@ module Jekyll
           end
 
           # Checks one item value against an optional min/max range.
-          def range_match?(value, min_value, max_value)
+          def range_match?(value, min_value, max_value, range_mode)
             comparable_value = normalise_comparable_scalar(value)
             return false if comparable_value.nil?
 
+            min_inclusive, max_inclusive = parse_range_mode_flags(range_mode)
+
             if !min_value.nil?
               return false unless values_comparable?(comparable_value, min_value)
-              return false if comparable_value < min_value
+              if min_inclusive
+                return false if comparable_value < min_value
+              else
+                return false if comparable_value <= min_value
+              end
             end
 
             if !max_value.nil?
               return false unless values_comparable?(comparable_value, max_value)
-              return false if comparable_value > max_value
+              if max_inclusive
+                return false if comparable_value > max_value
+              else
+                return false if comparable_value >= max_value
+              end
             end
 
             true
           rescue ArgumentError, NoMethodError
             false
+          end
+
+          # Parses one canonical range mode string into inclusion flags.
+          def parse_range_mode_flags(range_mode)
+            mode_text = range_mode.to_s
+            min_inclusive = !mode_text.include?('min-exclusive')
+            max_inclusive = !mode_text.include?('max-exclusive')
+            [min_inclusive, max_inclusive]
           end
 
           # Safe comparability check for mixed scalar types.

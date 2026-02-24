@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'digest'
+
 module Jekyll
   module Plugins
     module PaginateV3
@@ -12,7 +14,7 @@ module Jekyll
         #
         # Used by Pagination::Model before normal page pagination starts.
         class Builder
-          SPECIAL_KEYS = %w[items index filter filters layout layouts location frontmatter permalink title slugify silent allow_empty].freeze
+          SPECIAL_KEYS = %w[items index filter filters group layout layouts location frontmatter permalink title slugify silent allow_empty].freeze
 
           def initialize(site:, site_config:, add_item_lambda:, resolve_items_lambda:, log_lambda:)
             @site = site
@@ -55,7 +57,7 @@ module Jekyll
               )
               @log_lambda.call("Definition #{definition_index + 1} retained #{source_items.length} source item(s) after filters.", 'debug')
 
-              generated_count += build_for_definition(definition, source_items)
+              generated_count += build_for_definition(definition, source_items, definition_index + 1)
             end
 
             @log_lambda.call("Generated #{generated_count} template object(s) in total.", 'debug')
@@ -65,7 +67,7 @@ module Jekyll
           private
 
           # Expands one generate definition into concrete template pages/documents.
-          def build_for_definition(definition, source_items)
+          def build_for_definition(definition, source_items, definition_number)
             entries = build_index_entries(source_items, definition)
             if entries.empty?
               @log_lambda.call("No index entries were generated for index=#{describe_index_keys(definition['index'])}.", 'debug')
@@ -75,9 +77,15 @@ module Jekyll
             @log_lambda.call("Expanded to #{entries.length} index key combination(s) for index=#{describe_index_keys(definition['index'])}.", 'debug')
 
             created = 0
+
             entries.each do |entry|
               definition['layouts'].each do |layout_name|
-                page = build_template(definition, entry, layout_name)
+                page = build_template(
+                  definition,
+                  entry,
+                  layout_name,
+                  definition_number: definition_number
+                )
                 next if page.nil?
 
                 @add_item_lambda.call(page)
@@ -90,11 +98,16 @@ module Jekyll
           end
 
           # Builds a single template object for one index value tuple and layout.
-          def build_template(definition, entry, layout_name)
-            token_map = build_token_map(definition['index'], entry['values'], slugify_config: definition['slugify'])
-            generated_permalink = Utils.replace_tokens(definition['permalink'], token_map)
-            generated_title = Utils.replace_tokens(definition['title'], token_map)
-            generated_metadata = build_generated_metadata(definition['index'], entry['values'], token_map)
+          def build_template(definition, entry, layout_name, definition_number:)
+            token_maps = build_token_maps(definition['index'], entry, slugify_config: definition['slugify'])
+            generated_permalink = Utils.replace_tokens(definition['permalink'], token_maps['permalink'])
+            generated_title = Utils.replace_tokens(definition['title'], token_maps['title'])
+            generated_metadata = build_generated_metadata(
+              definition['index'],
+              entry['values'],
+              token_maps['compatibility'],
+              group_levels: build_group_level_metadata(entry, definition_number, layout_name)
+            )
 
             generated_frontmatter = Utils.deep_copy(definition['frontmatter'])
             generated_frontmatter['title'] = generated_title unless generated_title.nil? || generated_title.empty?
@@ -134,36 +147,130 @@ module Jekyll
             nil
           end
 
-          # Recursively groups items by index keys to produce one entry per
-          # unique key/value combination.
+          # Expands index entries using depth-first recursion across index keys.
+          #
+          # Each index level can independently use grouped-range semantics (when
+          # configured under `group`) or ordinary unique-value grouping.
           def build_index_entries(items, definition)
             entries = []
-            recurse_build_entries(items, definition, 0, {}, {}, entries)
+            recurse_build_entries(items, definition, 0, {}, {}, {}, [], entries)
             add_empty_collection_entries(entries, definition)
           end
 
           # Depth-first grouping for multi-level indexes such as
           # `index: category, subcategory`.
-          def recurse_build_entries(items, definition, depth, active_filters, active_values, entries)
+          def recurse_build_entries(items, definition, depth, active_filters, active_values, active_token_values, active_levels, entries)
             index_keys = definition['index']
             if depth >= index_keys.length
               entries << {
-                'filters' => active_filters,
-                'values' => active_values
+                'filters' => Utils.deep_copy(active_filters),
+                'values' => Utils.deep_copy(active_values),
+                'token_values' => Utils.deep_copy(active_token_values),
+                'levels' => Utils.deep_copy(active_levels)
               }
               return
             end
 
             key = index_keys[depth]
-            grouped_items = group_items_by_key(items, key, slugify_config: definition['slugify'])
+            grouped_items = groups_for_key(items, key, definition, slugify_config: definition['slugify'])
 
-            grouped_items.each do |group|
+            grouped_items.each_with_index do |group, group_index|
               next if group['token'].nil? || group['token'].empty?
 
               next_filters = active_filters.merge(key => group['filter_value'])
               next_values = active_values.merge(key => group['display_name'])
-              recurse_build_entries(group['items'], definition, depth + 1, next_filters, next_values, entries)
+              next_token_values = Utils.deep_copy(active_token_values)
+              if group['token_values'].is_a?(Hash) && !group['token_values'].empty?
+                next_token_values[key] = Utils.deep_copy(group['token_values'])
+              end
+
+              level_info = {
+                'key' => key,
+                'order' => group['order'].to_i.positive? ? group['order'].to_i : (group_index + 1),
+                'start' => group.key?('start') ? group['start'] : group['display_name'],
+                'end' => group['end'],
+                'other' => !!group['other'],
+                'range' => !!group['range']
+              }
+              next_levels = active_levels + [level_info]
+
+              recurse_build_entries(
+                group['items'],
+                definition,
+                depth + 1,
+                next_filters,
+                next_values,
+                next_token_values,
+                next_levels,
+                entries
+              )
             end
+          end
+
+          # Resolves grouping for one index key from either grouped-range config
+          # or ordinary unique-value grouping.
+          def groups_for_key(items, key, definition, slugify_config:)
+            if definition['group_by_key'].key?(key)
+              grouped_entries_for_key(items, key, definition)
+            else
+              group_items_by_key(items, key, slugify_config: slugify_config).each_with_index.map do |group, index|
+                group.merge(
+                  'token_values' => {},
+                  'start' => group['display_name'],
+                  'end' => nil,
+                  'other' => false,
+                  'range' => false,
+                  'order' => index + 1
+                )
+              end
+            end
+          end
+
+          # Expands grouped-range entries for one key.
+          def grouped_entries_for_key(items, key, definition)
+            raw_group = definition['group_by_key'][key]
+            fallback_group = definition['group_fallback_by_key'][key]
+
+            grouped_entries = begin
+              build_grouped_entries_for_raw(key, raw_group, items)
+            rescue ArgumentError
+              raise if fallback_group.nil?
+
+              build_grouped_entries_for_raw(key, fallback_group, items)
+            end
+
+            grouped_entries.map do |entry|
+              group_metadata = Utils.safe_hash(entry['group'])
+              {
+                'token' => entry.dig('values', key).to_s,
+                'display_name' => entry.dig('values', key),
+                'filter_value' => entry.dig('filters', key),
+                'items' => Utils.arrayify(entry['items']).uniq,
+                'token_values' => Utils.safe_hash(entry.dig('token_values', key)),
+                'start' => group_metadata.key?('start') ? group_metadata['start'] : entry.dig('values', key),
+                'end' => group_metadata['end'],
+                'other' => !!group_metadata['other'],
+                'range' => !!group_metadata['range'],
+                'order' => group_metadata['order']
+              }
+            end
+          end
+
+          # Builds grouped-range entries for one key from one raw config block.
+          def build_grouped_entries_for_raw(key, raw_group, items)
+            grouped = GroupedIndex.new(
+              key: key,
+              raw_group: raw_group,
+              items: items,
+              nested_separator: @nested_separator,
+              split_delimiter: @split_delimiter,
+              equivalents: @equivalents,
+              now_keyword: @site_config.dig('keywords', 'now'),
+              today_keyword: @site_config.dig('keywords', 'today'),
+              keywords: @site_config['keywords'],
+              log_lambda: @log_lambda
+            )
+            grouped.build_entries
           end
 
           # Groups items by one frontmatter key (supports nested/equivalent keys).
@@ -253,10 +360,14 @@ module Jekyll
               index_keys.each { |key| filters[key] = definition['filter'] unless filters.key?(key) }
             end
 
+            group_configuration = normalise_group_configuration(definition['group'], index_keys)
+
             {
               'items' => definition['items'],
               'index' => index_keys,
               'filters' => filters,
+              'group_by_key' => group_configuration['group_by_key'],
+              'group_fallback_by_key' => group_configuration['group_fallback_by_key'],
               'layouts' => layouts,
               'location' => normalise_location(definition['location'], default_location),
               'frontmatter' => Utils.safe_hash(definition['frontmatter']),
@@ -299,6 +410,68 @@ module Jekyll
             true
           end
 
+          # Normalises generate-level grouped-index configuration.
+          #
+          # Rules:
+          # - no `group` => no grouped levels
+          # - single-key `index`: try unkeyed config first, with keyed fallback
+          #   only for `{ <index_key>: ... }` hashes
+          # - multi-key `index`: `group` must be a hash keyed by index keys
+          def normalise_group_configuration(raw_group, index_keys)
+            return { 'group_by_key' => {}, 'group_fallback_by_key' => {} } if raw_group == false
+            return { 'group_by_key' => {}, 'group_fallback_by_key' => {} } unless present_config_value?(raw_group)
+
+            if index_keys.empty?
+              raise ArgumentError, '`group` cannot be used when `index` is not configured.'
+            end
+
+            if index_keys.length == 1
+              key = index_keys.first
+              group_by_key = { key => raw_group }
+              fallback_by_key = {}
+
+              if raw_group.is_a?(Hash)
+                hash_group = Utils.safe_hash(raw_group)
+                if hash_group.keys == [key] && hash_group[key] != false && present_config_value?(hash_group[key])
+                  fallback_by_key[key] = hash_group[key]
+                end
+              end
+
+              return {
+                'group_by_key' => group_by_key,
+                'group_fallback_by_key' => fallback_by_key
+              }
+            end
+
+            unless raw_group.is_a?(Hash)
+              raise ArgumentError, 'Multi-level `index` requires `group` to be keyed by index frontmatter key.'
+            end
+
+            hash_group = Utils.safe_hash(raw_group)
+            invalid_keys = hash_group.keys - index_keys
+            unless invalid_keys.empty?
+              raise ArgumentError, "Grouped config key(s) are not present in `index`: #{invalid_keys.join(', ')}."
+            end
+
+            group_by_key = {}
+            index_keys.each do |key|
+              next unless hash_group.key?(key)
+              next if hash_group[key] == false
+              next unless present_config_value?(hash_group[key])
+
+              group_by_key[key] = hash_group[key]
+            end
+
+            if group_by_key.empty?
+              raise ArgumentError, 'Multi-level `group` must define at least one indexed frontmatter key.'
+            end
+
+            {
+              'group_by_key' => group_by_key,
+              'group_fallback_by_key' => {}
+            }
+          end
+
           # Uses `templates.location` to infer whether generated templates should
           # default to `pages` or a collection.
           def default_generation_location
@@ -317,18 +490,47 @@ module Jekyll
             keys.join(', ')
           end
 
-          # Builds placeholder values used by generated `permalink` and `title`
+          # Builds placeholder maps used by generated `permalink` and `title`
           # strings.
-          def build_token_map(index_keys, values, slugify_config:)
-            token_map = {}
+          #
+          # By default both title/permalink placeholders are slugified values
+          # (legacy behaviour). Grouped indexing can override title/permalink
+          # token values independently through `entry['token_values']`.
+          def build_token_maps(index_keys, entry, slugify_config:)
+            values = Utils.safe_hash(entry['values'])
+            token_values = Utils.safe_hash(entry['token_values'])
+
+            title_tokens = {}
+            permalink_tokens = {}
+            compatibility_tokens = {}
 
             index_keys.each do |key|
               value = values[key]
-              token_map[key] = slugify_value(value, slugify_config)
+              configured_token_values = Utils.safe_hash(token_values[key])
+              slugified_value = slugify_value(value, slugify_config)
+
+              title_tokens[key] = if configured_token_values.key?('title')
+                                    configured_token_values['title'].to_s
+                                  else
+                                    slugified_value
+                                  end
+              permalink_tokens[key] = if configured_token_values.key?('permalink')
+                                        configured_token_values['permalink'].to_s
+                                      else
+                                        slugified_value
+                                      end
+              compatibility_tokens[key] = slugified_value
             end
 
-            apply_legacy_token_aliases!(token_map, index_keys)
-            token_map
+            apply_legacy_token_aliases!(title_tokens, index_keys)
+            apply_legacy_token_aliases!(permalink_tokens, index_keys)
+            apply_legacy_token_aliases!(compatibility_tokens, index_keys)
+
+            {
+              'title' => title_tokens,
+              'permalink' => permalink_tokens,
+              'compatibility' => compatibility_tokens
+            }
           end
 
           # Applies v2 legacy token aliases (`:coll`, `:cat`, `:tag`) for
@@ -379,7 +581,7 @@ module Jekyll
           end
 
           # Captures generated-template metadata for compatibility and template use.
-          def build_generated_metadata(index_keys, raw_values, token_map)
+          def build_generated_metadata(index_keys, raw_values, token_map, group_levels: [])
             metadata = {
               'generated_template' => true,
               'index_keys' => index_keys,
@@ -396,7 +598,41 @@ module Jekyll
               }
             end
 
+            unless group_levels.empty?
+              metadata['groups'] = Utils.deep_copy(group_levels)
+            end
+
             metadata
+          end
+
+          # Builds metadata for group-link sets at each indexed key depth.
+          def build_group_level_metadata(entry, definition_number, layout_name)
+            levels = Utils.arrayify(entry['levels'])
+            return [] if levels.empty?
+
+            levels.each_with_index.map do |level, depth|
+              key = level['key'].to_s
+              prefix_levels = levels.first(depth)
+              prefix_signature = prefix_levels.map do |prefix_level|
+                prefix_key = prefix_level['key'].to_s
+                prefix_value = entry.dig('values', prefix_key).to_s
+                "#{prefix_key}=#{prefix_value}"
+              end.join('|')
+
+              set_signature = [definition_number, layout_name, depth, key, prefix_signature].join('|')
+              set_id = "generated-index-set-#{Digest::MD5.hexdigest(set_signature)}"
+
+              {
+                'set_id' => set_id,
+                'depth' => depth + 1,
+                'key' => key,
+                'order' => level['order'].to_i,
+                'start' => level['start'],
+                'end' => level['end'],
+                'other' => !!level['other'],
+                'range' => !!level['range']
+              }
+            end
           end
 
           # Adds synthetic entries for empty collections when `allow_empty` is enabled
@@ -419,7 +655,18 @@ module Jekyll
 
               entries << {
                 'filters' => { 'collection' => collection_label },
-                'values' => { 'collection' => collection_label }
+                'values' => { 'collection' => collection_label },
+                'token_values' => {},
+                'levels' => [
+                  {
+                    'key' => 'collection',
+                    'order' => entries.length + 1,
+                    'start' => collection_label,
+                    'end' => nil,
+                    'other' => false,
+                    'range' => false
+                  }
+                ]
               }
               added += 1
             end

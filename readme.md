@@ -101,11 +101,12 @@ pagination:
   syntax:
     separator: '.' # see Nested Keys below
     split: "," # see Split/Delimiter below
-  keywords: {} # allows special words like "all", "now" and "today" to be changed
+  keywords: {} # overrides keyword tokens (pages/all/everything/now/today/day/month/year/hour/minute/second/items)
   equivalents: # see Equivalents below
 ```
 
 The values shown above are the defaults that will apply if you don't even specify these config keys.
+Keyword values must be unique, and must match `[a-z]+`.
 
 
 ## Pagination Templates
@@ -154,6 +155,7 @@ filters:
   rating:
     min: 3 # minimum numeric value (optional)
     max: 5 # maximum numeric value (optional)
+    mode: min-exclusive max-inclusive # optional range-bound inclusivity
   tags: [news, blog] # 'tags' must be or include 'news' or 'blog'. Array elements can be any definition form.
   key:
     include: [news, /^s/] 'key' should match filters in array
@@ -171,10 +173,15 @@ That is:
     * `auto` (default): frontmatter value either matches exactly, or is an array, and contains the match
     * `strict` frontmatter value must match exactly
     * `only`: like `auto` but if array, must be the only array item
-    * `first`/`firstN` (e.g. `first3`): like `auto` but if array, only the first (N) array elements are considered
+    * `first`/`first(N)` (e.g. `first(3)`): like `auto` but if array, only the first (N) array elements are considered.
   * `split`: overrides `split` from global config, for this filter only. Set this to `false` to disable splitting of the frontmatter value. Defaults to true: frontmatter values will be treated as arrays if they can be split.
 * Range with `min` and/or `max` for numeric values.
-  * `min`/`max` are inclusive, and can be numeric, datetime, or keyword-relative strings.
+  * `min`/`max` are inclusive by default, and can be numeric, datetime, or keyword-relative strings.
+  * Optional `mode` controls inclusivity:
+    * `min-inclusive` / `min-exclusive`
+    * `max-inclusive` / `max-exclusive`
+    * combinations such as `min-exclusive max-inclusive`
+  * If omitted, mode defaults to `min-inclusive max-inclusive` for bounds that are present.
   * `now` means current time, and supports optional whole-second offsets (e.g. `now`, `now+60`, `now-120`). The `now` keyword is configurable at `pagination.keywords.now`.
   * `today` means the current day, and supports optional whole-day offsets (e.g. `today`, `today+1`, `today-2`). For day-based ranges, `min` uses `00:00:00` and `max` uses `23:59:59`. The `today` keyword is configurable at `pagination.keywords.today`.
 * Array (or delimited string): combine several filters with an OR operation
@@ -276,6 +283,163 @@ generate:
   # generates 2 templates: one for the "tools" collection and one for the "regions" collection
 ```
 
+### Grouped Indexing (`generate[].group`)
+
+Generated templates can index frontmatter keys by ranges/bins instead of one-template-per-unique-value.
+
+```yaml
+generate:
+- items: posts
+  index: size
+  group: 100
+  permalink: /size/:size/
+  title: 'Size up to :size'
+```
+
+This produces grouped templates such as `0 <= size <= 100`, `100 < size <= 200`, etc.
+
+You can also group selected keys in multi-level indexing:
+
+```yaml
+generate:
+- items: posts
+  index: category, size, published_on
+  group:
+    size: 100
+    published_on: year
+```
+
+For grouped numeric/datetime keys, placeholder values use the group upper bound. For alphabetic grouping, placeholders use the range start.
+
+#### Group config shape
+
+* Single indexed key:
+  * `group` can be supplied directly (`group: 100`, `group: year`, `group: aa`, or hash long form).
+  * Or explicitly keyed by the indexed key:
+
+  ```yaml
+  index: category
+  group:
+    category: 100
+  ```
+* Multi-level indexed keys:
+  * `group` must be a hash keyed by indexed frontmatter keys.
+  * Grouping can be configured for any subset of indexed keys.
+  * Scalar/unkeyed `group` values are invalid in multi-level mode.
+* For every grouped key, `step` is required (except scalar shorthand forms like `group: 100`).
+* For every grouped key, if `start` is omitted it defaults by mode:
+  * numeric: `0`
+  * datetime: earliest parseable datetime value in the candidate set
+  * alphabetic: `a`
+
+#### Numeric grouping
+
+`group: <number>` is shorthand for:
+
+```yaml
+group:
+  start: 0
+  step: <number>
+  grow: 1
+```
+
+Long form:
+
+```yaml
+group:
+  start: 0        # inclusive start for group 1
+  step: 100       # or [100, 200, 400]
+  grow: 1.1       # only with scalar step; 1 = linear
+  min: 10         # minimum step size after growth
+  max: 1000       # maximum step size after growth
+  empty: true     # emit empty groups too
+  total: 8        # max group count; final group is open-ended
+```
+
+Rules:
+
+* Group 1 is `start <= x <= end`; groups 2+ are `start < x <= end`.
+* If `total` is set, the final group's upper bound is ignored (open-ended lower bound).
+* `step` cannot be negative/zero.
+* `step` arrays cannot be used with `grow`.
+* Safety limits:
+  * `grow` must be between `0.01` and `10000`.
+  * step size is clamped to internal hard bounds (`0.001` to `100000000`).
+  * automatic grouping without `total` stops with an error if it would exceed 100 groups.
+  * `total` can be 1..10000.
+
+#### Datetime grouping
+
+Datetime grouping supports day counts and duration tokens:
+
+```yaml
+group: year # equivalent to year(1)
+# or
+group:
+  start: 2026-12-12
+  step: month(2)      # calendar-aware month increments
+  min: 1              # 1 day
+  max: year(5)
+```
+
+Supported duration forms:
+
+* Numeric values are whole/fractional days.
+* `day(x)`, `month(x)`, `year(x)`, `hour(x)`, `minute(x)`, `second(x)`.
+* Bare unit keywords are allowed and imply `(1)`, e.g. `year`.
+* Unit keywords are configurable at `pagination.keywords.day/month/year/hour/minute/second`.
+
+`start` also supports `now`/`today` (with optional offsets), plus anchored expressions such as `year(today)`, `month(now)`, `hour(now)`, `minute(now)`.
+Anchored expressions use the configured keywords too.
+
+For month/year durations, datetime stepping is calendar-aware (`+2 months` is not approximated as `+60 days`).
+
+Permalink placeholder formatting for grouped datetime indexes:
+
+* `YYYY-MM-DD` by default
+* `YYYY-MM-DD-HH-MM-SS` when grouping uses hour/minute/second units or fractional days
+
+Title placeholders use the calculated upper-bound datetime value.
+
+#### Alphabetic grouping
+
+Alphabetic mode groups by normalised string prefixes:
+
+```yaml
+group: aa
+# or
+group:
+  start: aa
+  step: 2
+  other: '0-9'
+```
+
+Rules:
+
+* `start` is truncated to max length 3.
+* Values are stringified, downcased, transliterated, and grouped by letter prefix.
+* `step` increments the alphabetic token range (`aa-ab`, `ac-ad`, ...).
+* Placeholder values use the range start (not end).
+* Non-letter-leading values are discarded unless `other` is configured.
+* `other` (when configured) is always ordered last.
+* In hash form, `step` is required.
+
+#### Grouping mode detection
+
+Grouping mode is chosen heuristically from `group` config and observed frontmatter values:
+
+* explicit config hints are preferred (`year(...)`, alphabetic `start`, etc.)
+* otherwise values are sampled to infer numeric/datetime/alphabetic mode
+* values that cannot be interpreted for the selected mode are excluded
+
+Internally, grouped templates are emitted using standard filters (including range-filter `mode`) so behaviour is consistent with ordinary pagination filtering.
+
+When grouped-set ordering is calculated, the generate template sort is inspected per grouped key:
+
+* if the grouped index key has explicit sort direction, that direction is used
+* otherwise grouped sets default to ascending order
+* alphabetic `other` groups stay last
+
 
 ## Search Format
 
@@ -292,7 +456,7 @@ A number of config keys require that you specify "where in the site to look". Th
 | `all` | Look in the documents of all collections |
 | `everything` | `pages` + `all` |
 
-The special keywords `pages`, `all` and `everything` can be changed with the `pagination.keywords` config (in case you have a collection called "all", for instance).
+The special keywords `pages`, `all` and `everything` can be changed with the `pagination.keywords` config (in case you have a collection called "all", for instance). `pagination.keywords` is also used for datetime/grouping keywords (`now`, `today`, `day`, `month`, `year`, `hour`, `minute`, `second`) and `items`.
 
 In the hash form, the hash key is one of the strings above, and the value is a glob pattern. Only file paths that match the glob pattern will be looked at. For instance:
 
@@ -365,6 +529,15 @@ Set `pagination: compatibility: v1` or `v2` in your site config to enable compat
   * `page`: The actual page/doc object (not set for current page) on which you can access `url` as normal, to get a link to that page.
   * `current`: `true` if this trail item is the current page.
   * `distance`: Relative page number. 0 for current page, positive for pages after, negative for pages before.
+* `groups`: grouped-set navigation payload for generated indexed templates (`templates.generate` + `index`), highest index level first. In non-multi-level indexes this has one element. Each element has:
+  * `key`: frontmatter key represented by this grouped set.
+  * `current`, `next`, `prev`, `first`, `last`: group-set references, where each has:
+    * `num`: 1-based group-set number in the ordered set.
+    * `page`: page/document object for page 1 of that group set (not set for `current`).
+    * `count`: number of items in that group set.
+    * `start`: grouped start label/value.
+    * `end`: grouped end label/value (omitted for open-ended sets and alphabetic `other` sets).
+* `group`: shortcut to the deepest entry of `groups` (`groups[-1]`).
 
 `page.pagination` also remains available, being a copy of the pagination settings from the template that generated this index (minus `enabled`). This allows you to read back settings like `per_page`, `limit`, etc., if needed.
 

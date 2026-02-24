@@ -103,6 +103,33 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
       expect(config['equivalents']).to eq([%w[tag tags]])
     end
 
+    it 'rejects keyword values that are not lowercase latin tokens' do
+      expect do
+        described_class.normalise_site_config(
+          'pagination' => {
+            'enabled' => true,
+            'keywords' => {
+              'now' => 'second-now'
+            }
+          }
+        )
+      end.to raise_error(ArgumentError, /must match \[a-z\]\+/)
+    end
+
+    it 'rejects duplicate keyword values' do
+      expect do
+        described_class.normalise_site_config(
+          'pagination' => {
+            'enabled' => true,
+            'keywords' => {
+              'day' => 'window',
+              'month' => 'window'
+            }
+          }
+        )
+      end.to raise_error(ArgumentError, /must be unique/)
+    end
+
     it 'migrates v2 legacy shortcuts without overriding explicit filters' do
       config = described_class.normalise_site_config(
         'pagination' => {

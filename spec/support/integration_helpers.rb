@@ -263,4 +263,37 @@ module IntegrationHelpers
       end
     end
   end
+
+  # Extracts grouped-set payload from paginator data.
+  def paginator_group_payload(item)
+    payload = paginator_payload(item)
+    group = payload['group']
+    return nil if group.nil?
+    return group.to_h if group.respond_to?(:to_h)
+
+    group
+  end
+
+  # Extracts grouped-set payload array from paginator data.
+  def paginator_groups_payload(item)
+    payload = paginator_payload(item)
+    groups = payload['groups']
+    return [] if groups.nil?
+
+    groups.map do |group|
+      group.respond_to?(:to_h) ? group.to_h : group
+    end
+  end
+
+  # Extracts one grouped-set reference hash by key.
+  def paginator_group_reference(item, key)
+    group_payload = paginator_group_payload(item)
+    return nil if group_payload.nil?
+
+    reference = group_payload[key]
+    return nil if reference.nil?
+    return reference.to_h if reference.respond_to?(:to_h)
+
+    reference
+  end
 end

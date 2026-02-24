@@ -6,6 +6,7 @@
 
 * Replaced v2’s `collection`-centric model with an `items` search model (pages, collections, all/everything, optional globs).
 * Replaced fixed v2 filters (`category`/`tag`/`locale`) with generic frontmatter filters (`match`, `include`/`exclude`, `min`/`max`, regex, join modes).
+* Added range-filter boundary modes (`min-inclusive`/`min-exclusive`, `max-inclusive`/`max-exclusive`) to control min/max inclusivity explicitly.
 * Replaced `sort_field` + `sort_reverse` with a unified multi-level `sort` syntax and explicit empty-value handling.
 * Reorganised public v3 config around nested `pagination.syntax.*` and `pagination.templates.defaults.*`.
 * Renamed nested frontmatter-key config from `nested_key_separator` to `syntax.separator`.
@@ -14,11 +15,15 @@
 * Added configurable nested-key access (default `.`), equivalent keys (for example `tag`/`tags`), and delimiter-driven array parsing.
 * Split range-filter keywords into configurable `now` (current time with whole-second offsets) and `today` (day bounds with whole-day offsets).
 * Folded AutoPages-style generation into `pagination.templates.generate` (driven by `items` + indexed keys) rather than separate v2 `autopages` config.
+* Added grouped template generation (`generate[].group`) with numeric/datetime/alphabetic binning, per-index-key grouping in multi-level indexes, range-filter emission, and safety caps for automatic group counts.
 * Broadened template discovery via `pagination.templates.location` (not just v2-style page templates).
 * Standardised paginator payload around `items`/`total_items`.
+* Added grouped-set paginator navigation at canonical `paginator.groups` (highest-level-first) with `paginator.group` as a deepest-level shortcut.
 * Kept explicit compatibility modes (`compatibility: v1` / `v2`) to interpret legacy configuration paths during migration.
 * Made generated-template placeholder substitution deterministic for overlapping names by always matching the longest placeholder first.
 * Documented generated-template permalink placeholder processing and slugify options.
+* Added configurable datetime duration unit keywords (`day`, `month`, `year`, `hour`, `minute`, `second`) with uniqueness + `[a-z]+` validation across all `pagination.keywords`.
+* Added scalar filter mode `first(N)` (with `first` => `first(1)`).
 
 ## V2
 

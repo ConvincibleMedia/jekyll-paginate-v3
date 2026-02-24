@@ -59,6 +59,35 @@ RSpec.describe 'Pagination integration: generated template edge cases' do
     end.to raise_error(JekyllTestHarness::SiteBuildError, /duplicate `index` key/)
   end
 
+  it 'raises an explicit error when multi-level group is not keyed by index key' do
+    files = post_files(1) { { 'category' => 'news', 'size' => 10 } }
+
+    expect do
+      jekyll_build(
+        default_site,
+        config: {
+          'pagination' => {
+            'enabled' => true,
+            'templates' => {
+              'generate' => [
+                {
+                  'items' => 'posts',
+                  'index' => 'category,size',
+                  'group' => 100,
+                  'layout' => 'autopage_category.html',
+                  'permalink' => '/topics/:category/:size/',
+                  'title' => 'Topic :category :size'
+                }
+              ]
+            }
+          }
+        },
+        files: files
+      ) do
+      end
+    end.to raise_error(JekyllTestHarness::SiteBuildError, /Multi-level `index` requires `group` to be keyed/)
+  end
+
   it 'treats generate definitions without items as invalid' do
     files = post_files(1) { { 'category' => 'news' } }
 

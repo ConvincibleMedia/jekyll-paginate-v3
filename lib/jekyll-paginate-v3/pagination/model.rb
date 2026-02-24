@@ -25,6 +25,7 @@ module Jekyll
             @split_delimiter = site_config.dig('syntax', 'split')
             @equivalents = site_config['equivalents']
             @item_keyword = site_config.dig('keywords', 'items') || 'items'
+            @generated_index_sets = {}
           end
 
           # Runs the full pagination pipeline for the current site build.
@@ -52,6 +53,8 @@ module Jekyll
               paginate_template(template, template_config)
               processed += 1
             end
+
+            apply_grouped_set_navigation!
 
             @log_lambda.call("Pagination pipeline complete: processed #{processed} template(s).", 'debug')
             processed
@@ -259,7 +262,8 @@ module Jekyll
             total_pages = page_windows.length
 
             @log_lambda.call("Template '#{Utils.relative_item_path(template)}': generating #{total_pages} page(s) with per_page=#{config['per_page']} limit=#{config['limit']}.", 'debug')
-            emit_paginated_pages(template, config, sorted_items, page_windows)
+            generated_pages = emit_paginated_pages(template, config, sorted_items, page_windows)
+            register_grouped_set_if_applicable(template, config, generated_pages)
           end
 
           # Replaces a template with one synthetic page/document per page number.
@@ -316,6 +320,7 @@ module Jekyll
 
             bind_paginator_references(new_pages)
             apply_page_trail(new_pages, config)
+            new_pages
           end
 
           # Attaches a compact neighbourhood of page links around each generated
@@ -368,6 +373,118 @@ module Jekyll
                 last_page_object: generated_pages.last
               )
             end
+          end
+
+          # Registers generated index sets so cross-set navigation can be
+          # attached after all templates are emitted.
+          def register_grouped_set_if_applicable(template, config, generated_pages)
+            return if generated_pages.nil? || generated_pages.empty?
+
+            group_metadata_entries = Utils.arrayify(template.data.dig('paginate_v3', 'groups')).map { |entry| Utils.safe_hash(entry) }.reject(&:empty?)
+            return if group_metadata_entries.empty?
+
+            group_metadata_entries.each do |metadata|
+              set_id = metadata['set_id'].to_s
+              next if set_id.empty?
+
+              @generated_index_sets[set_id] ||= []
+              @generated_index_sets[set_id] << {
+                'pages' => generated_pages,
+                'count' => generated_pages.first.pager.total_items,
+                'start' => metadata['start'],
+                'end' => metadata['end'],
+                'order' => metadata['order'].to_i,
+                'other' => !!metadata['other'],
+                'depth' => metadata['depth'].to_i,
+                'index_key' => metadata['key'].to_s,
+                'sort_direction' => grouped_set_sort_direction(config, metadata['key'].to_s)
+              }
+            end
+          end
+
+          # Applies `paginator.groups` references across each generated index set.
+          def apply_grouped_set_navigation!
+            page_group_payloads = {}
+            page_objects = {}
+
+            @generated_index_sets.each_value do |set_entries|
+              next if set_entries.empty?
+
+              ordered_entries = ordered_grouped_set_entries(set_entries)
+              next if ordered_entries.empty?
+
+              ordered_entries.each_with_index do |entry, index|
+                current_number = index + 1
+                previous_entry = index.positive? ? ordered_entries[index - 1] : nil
+                next_entry = index < ordered_entries.length - 1 ? ordered_entries[index + 1] : nil
+                first_entry = ordered_entries.first
+                last_entry = ordered_entries.last
+
+                group_payload = Paginator::GroupPayload.new(
+                  key: entry['index_key'],
+                  current: build_group_reference(entry, current_number, include_page: false),
+                  next_reference: next_entry.nil? ? nil : build_group_reference(next_entry, current_number + 1, include_page: true),
+                  prev_reference: previous_entry.nil? ? nil : build_group_reference(previous_entry, current_number - 1, include_page: true),
+                  first_reference: build_group_reference(first_entry, 1, include_page: true),
+                  last_reference: build_group_reference(last_entry, ordered_entries.length, include_page: true)
+                )
+
+                entry['pages'].each do |page|
+                  page_identifier = page.object_id
+                  page_objects[page_identifier] = page
+                  page_group_payloads[page_identifier] ||= {}
+                  page_group_payloads[page_identifier][entry['depth']] = group_payload
+                end
+              end
+            end
+
+            page_group_payloads.each do |page_identifier, payloads_by_depth|
+              page = page_objects[page_identifier]
+              next if page.nil?
+
+              ordered_payloads = payloads_by_depth.sort_by { |depth, _| depth }.map { |_, payload| payload }
+              page.pager.groups = ordered_payloads
+            end
+          end
+
+          # Orders grouped-set entries according to configured sort direction.
+          #
+          # When index key sort is not explicit, grouped sets default to
+          # ascending order. Alphabetic `other` groups are always placed last.
+          def ordered_grouped_set_entries(set_entries)
+            return set_entries if set_entries.length <= 1
+
+            direction = set_entries.first['sort_direction']
+            main_entries = set_entries.reject { |entry| entry['other'] }
+            other_entries = set_entries.select { |entry| entry['other'] }
+
+            sorted_main = main_entries.sort_by { |entry| entry['order'] }
+            sorted_main.reverse! if direction == 'desc'
+
+            sorted_main + other_entries
+          end
+
+          # Detects grouped-set direction from template sort config.
+          def grouped_set_sort_direction(config, index_key)
+            return 'asc' if index_key.to_s.strip.empty?
+
+            split_delimiter = config['split'] || @split_delimiter
+            sort_instructions = Query::Sorter.parse(config['sort'], split_delimiter: split_delimiter)
+            sort_entry = sort_instructions.find { |entry| entry['field'] == index_key }
+            return 'asc' if sort_entry.nil?
+
+            sort_entry['direction']
+          end
+
+          # Builds one grouped-set reference object used by `paginator.group`.
+          def build_group_reference(entry, number, include_page:)
+            Paginator::GroupReference.new(
+              num: number,
+              page_object: include_page ? entry['pages'].first : nil,
+              item_count: entry['count'],
+              range_start: entry['start'],
+              range_end: entry['end']
+            )
           end
 
           # Applies configured page title templates.

@@ -167,4 +167,66 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Pagination::Paginator do
     expect(payload['page']).to eq(4)
     expect(payload['next_page_path']).to eq('/articles/page/5/')
   end
+
+  it 'exposes grouped-set navigation payload through canonical groups and group shortcut' do
+    current_group_page = Struct.new(:url, :data).new('/topics/100/', { 'title' => '100' })
+    next_group_page = Struct.new(:url, :data).new('/topics/80/', { 'title' => '80' })
+
+    paginator = described_class.new(
+      per_page: 10,
+      items: [1, 2, 3],
+      current_page: 1,
+      total_pages: 1,
+      item_keyword: 'items'
+    )
+
+    current_reference = described_class::GroupReference.new(
+      num: 1,
+      page_object: nil,
+      item_count: 1,
+      range_start: '80',
+      range_end: '100'
+    )
+    next_reference = described_class::GroupReference.new(
+      num: 2,
+      page_object: next_group_page,
+      item_count: 1,
+      range_start: '60',
+      range_end: '80'
+    )
+    first_reference = described_class::GroupReference.new(
+      num: 1,
+      page_object: current_group_page,
+      item_count: 1,
+      range_start: '80',
+      range_end: '100'
+    )
+
+    top_level_payload = described_class::GroupPayload.new(
+      key: 'category',
+      current: current_reference,
+      next_reference: nil,
+      prev_reference: nil,
+      first_reference: first_reference,
+      last_reference: first_reference
+    )
+    deepest_level_payload = described_class::GroupPayload.new(
+      key: 'size',
+      current: current_reference,
+      next_reference: next_reference,
+      prev_reference: nil,
+      first_reference: first_reference,
+      last_reference: next_reference
+    )
+    paginator.groups = [top_level_payload, deepest_level_payload]
+
+    payload = paginator.to_h
+    expect(payload['groups'].length).to eq(2)
+    expect(payload['groups'].last.key).to eq('size')
+    expect(payload['group']).not_to be_nil
+    expect(payload['group'].key).to eq('size')
+    expect(payload['group'].current.num).to eq(1)
+    expect(payload['group'].current.to_h).to include('start' => '80', 'end' => '100')
+    expect(payload['group'].next.page.url).to eq('/topics/80/')
+  end
 end

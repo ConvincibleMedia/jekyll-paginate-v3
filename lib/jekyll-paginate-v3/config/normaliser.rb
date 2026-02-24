@@ -221,6 +221,16 @@ module Jekyll
                 keywords[key] = defaults[key] if keywords[key].empty?
               end
 
+               invalid_keywords = keywords.select { |_, value| !value.match?(/\A[a-z]+\z/) }
+               unless invalid_keywords.empty?
+                 raise ArgumentError, "pagination.keywords values must match [a-z]+. Invalid entries: #{invalid_keywords.map { |key, value| "#{key}=#{value}" }.join(', ')}."
+               end
+
+               duplicate_values = keywords.values.group_by { |value| value }.select { |_, values| values.length > 1 }.keys
+               unless duplicate_values.empty?
+                 raise ArgumentError, "pagination.keywords values must be unique. Duplicates: #{duplicate_values.join(', ')}."
+               end
+
               keywords
             end
 

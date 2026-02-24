@@ -86,6 +86,57 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Query::Filter do
     expect(filtered).to eq([items.first])
   end
 
+  it 'supports first(N) mode shorthand and defaults first to first(1)' do
+    items = [
+      build_item({ 'title' => 'One', 'contributors' => %w[alice bob] }),
+      build_item({ 'title' => 'Two', 'contributors' => %w[bob alice] })
+    ]
+
+    first_two = apply_filters(
+      items,
+      {
+        'contributors' => {
+          'match' => 'alice',
+          'mode' => 'first(2)',
+          'split' => false
+        }
+      }
+    )
+    first_one = apply_filters(
+      items,
+      {
+        'contributors' => {
+          'match' => 'alice',
+          'mode' => 'first',
+          'split' => false
+        }
+      }
+    )
+
+    expect(first_two).to eq(items)
+    expect(first_one).to eq([items.first])
+  end
+
+  it 'treats legacy firstN mode shorthand as invalid' do
+    items = [
+      build_item({ 'title' => 'One', 'contributors' => %w[alice bob] }),
+      build_item({ 'title' => 'Two', 'contributors' => %w[bob alice] })
+    ]
+
+    filtered = apply_filters(
+      items,
+      {
+        'contributors' => {
+          'match' => 'alice',
+          'mode' => 'first2',
+          'split' => false
+        }
+      }
+    )
+
+    expect(filtered).to eq(items)
+  end
+
   it 'supports per-filter split delimiters independent of global split' do
     items = [
       build_item({ 'title' => 'One', 'audience' => 'news|alerts' }),
@@ -119,11 +170,11 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Query::Filter do
       items,
       {
         'published_at' => {
-          'min' => 'day-start-1',
-          'max' => 'day-start'
+          'min' => 'daystart-1',
+          'max' => 'daystart'
         }
       },
-      today_keyword: 'day-start'
+      today_keyword: 'daystart'
     )
 
     expect(filtered).to eq([items[1], items[2]])
@@ -193,6 +244,58 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Query::Filter do
         'rating' => {
           'min' => 1,
           'max' => '2026-01-01T00:00:00+00:00'
+        }
+      }
+    )
+
+    expect(filtered).to eq(items)
+  end
+
+  it 'supports inclusive and exclusive range mode boundaries' do
+    items = [
+      build_item({ 'title' => 'One', 'rating' => 1 }),
+      build_item({ 'title' => 'Two', 'rating' => 2 }),
+      build_item({ 'title' => 'Three', 'rating' => 3 })
+    ]
+
+    min_exclusive = apply_filters(
+      items,
+      {
+        'rating' => {
+          'min' => 2,
+          'max' => 3,
+          'mode' => 'min-exclusive max-inclusive'
+        }
+      }
+    )
+    max_exclusive = apply_filters(
+      items,
+      {
+        'rating' => {
+          'min' => 1,
+          'max' => 3,
+          'mode' => 'min-inclusive max-exclusive'
+        }
+      }
+    )
+
+    expect(min_exclusive).to eq([items[2]])
+    expect(max_exclusive).to eq([items[0], items[1]])
+  end
+
+  it 'treats invalid range mode definitions as invalid filters' do
+    items = [
+      build_item({ 'title' => 'One', 'rating' => 1 }),
+      build_item({ 'title' => 'Two', 'rating' => 2 })
+    ]
+
+    filtered = apply_filters(
+      items,
+      {
+        'rating' => {
+          'min' => 1,
+          'max' => 2,
+          'mode' => 'bad-mode'
         }
       }
     )
