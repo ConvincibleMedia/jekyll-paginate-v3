@@ -19,6 +19,7 @@ class GroupedIndex
 	#
 	# - `token_values`: title/permalink token values by index key
 	# - `group`: metadata used to build `paginator.group` payloads
+	
 	MINIMUM_GROW = 0.01
 	MAXIMUM_GROW = 10_000.0
 	MINIMUM_STEP = 0.001
