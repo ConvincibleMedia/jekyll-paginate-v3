@@ -84,7 +84,7 @@ pagination:
     filters: [] # see Filters below
     sort: date desc # see Sorting below
     # How items are divided per page
-    per_page: 10 # how many items per page
+    per_page: 10 # int, or array of ints for variable page sizes
     limit: 0 # paginate no more than x items
     offset: 0 # skip first x items
     # How the pagination trail works
@@ -127,7 +127,7 @@ The number of items that appear per page are controlled with:
 
 | Key | Default | Effect |
 | --- | ------- | ------ |
-| `per_page` | 10 | Number of items per index page |
+| `per_page` | 10 | Number of items per index page, or an array where the nth value is used for page n (and the last value repeats thereafter). Example: `per_page: [5, 2, 10]` gives page sizes 5, 2, 10, 10, 10... |
 | `limit`    | 0  | Include only the first X items (0 = disabled) |
 | `offset`   | 0  | Skip first X items |
 

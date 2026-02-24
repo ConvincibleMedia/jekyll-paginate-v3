@@ -123,4 +123,48 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Pagination::Paginator do
     expect(payload['items']).to eq([1])
     expect(payload['total_items']).to eq(1)
   end
+
+  it 'supports variable per-page windows and compatibility per_page projection' do
+    page_one = Struct.new(:url, :data).new('/articles/', { 'title' => 'Articles' })
+    page_two = Struct.new(:url, :data).new('/articles/page/2/', { 'title' => 'Articles - page 2' })
+    page_three = Struct.new(:url, :data).new('/articles/page/3/', { 'title' => 'Articles - page 3' })
+    page_four = Struct.new(:url, :data).new('/articles/page/4/', { 'title' => 'Articles - page 4' })
+    page_five = Struct.new(:url, :data).new('/articles/page/5/', { 'title' => 'Articles - page 5' })
+
+    page_windows = Jekyll::Plugins::PaginateV3::Utils.build_pagination_windows(10, [3, 1, 2])
+    paginator = described_class.new(
+      per_page: [3, 1, 2],
+      items: (1..10).to_a,
+      current_page: 4,
+      total_pages: 5,
+      item_keyword: 'items',
+      compatibility: 'v2',
+      page_windows: page_windows
+    )
+    paginator.bind_pages(
+      current_page_object: page_four,
+      previous_page_object: page_three,
+      next_page_object: page_five,
+      first_page_object: page_one,
+      last_page_object: page_five
+    )
+    payload = paginator.to_h
+
+    expect(payload['items']).to eq([7, 8])
+    expect(payload['current'].count).to eq(2)
+    expect(payload['current'].start).to eq(7)
+    expect(payload['current'].to_h['end']).to eq(8)
+    expect(payload['prev'].count).to eq(2)
+    expect(payload['prev'].start).to eq(5)
+    expect(payload['prev'].to_h['end']).to eq(6)
+    expect(payload['next'].count).to eq(2)
+    expect(payload['next'].start).to eq(9)
+    expect(payload['next'].to_h['end']).to eq(10)
+    expect(payload['first'].count).to eq(3)
+    expect(payload['first'].start).to eq(1)
+    expect(payload['first'].to_h['end']).to eq(3)
+    expect(payload['per_page']).to eq(2)
+    expect(payload['page']).to eq(4)
+    expect(payload['next_page_path']).to eq('/articles/page/5/')
+  end
 end

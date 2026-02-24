@@ -251,28 +251,29 @@ module Jekyll
             sorted_items = sorted_items.drop(offset)
             @log_lambda.call("Template '#{Utils.relative_item_path(template)}': #{sorted_items.length} item(s) after offset=#{offset}.", 'debug')
 
-            total_pages = Utils.calculate_number_of_pages(sorted_items, config['per_page'])
-            total_pages = 1 if total_pages.zero?
-
+            page_windows = Utils.build_pagination_windows(sorted_items.length, config['per_page'])
             if config['limit'].to_i > 0
-              total_pages = [total_pages, config['limit'].to_i].min
+              page_windows = page_windows.first(config['limit'].to_i)
             end
+            total_pages = page_windows.length
 
             @log_lambda.call("Template '#{Utils.relative_item_path(template)}': generating #{total_pages} page(s) with per_page=#{config['per_page']} limit=#{config['limit']}.", 'debug')
-            emit_paginated_pages(template, config, sorted_items, total_pages)
+            emit_paginated_pages(template, config, sorted_items, page_windows)
           end
 
           # Replaces a template with one synthetic page/document per page number.
-          def emit_paginated_pages(template, config, items, total_pages)
+          def emit_paginated_pages(template, config, items, page_windows)
             @remove_item_lambda.call(template)
 
             new_pages = []
+            total_pages = page_windows.length
 
             # Generated pages/documents should be processed as ordinary Jekyll
             # items, so we only set frontmatter and never force synthetic URLs.
             index_file = 'index.html'
 
-            (1..total_pages).each do |current_page|
+            page_windows.each do |page_window|
+              current_page = page_window['num']
               generated = if template.respond_to?(:collection)
                             Pages::Document.new(template, current_page, total_pages, index_file)
                           else
@@ -285,7 +286,8 @@ module Jekyll
                 current_page: current_page,
                 total_pages: total_pages,
                 item_keyword: @item_keyword,
-                compatibility: config['compatibility']
+                compatibility: config['compatibility'],
+                page_windows: page_windows
               )
 
               generated.data['pagination'] = Utils.safe_hash(generated.data['pagination'])

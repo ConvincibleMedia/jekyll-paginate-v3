@@ -299,7 +299,7 @@ module Jekyll
               config['items'] = normalise_items_value(config['items'])
               config['filters'] = Utils.safe_hash(config['filters'])
               config['offset'] = [config['offset'].to_i, 0].max
-              config['per_page'] = [config['per_page'].to_i, 1].max
+              config['per_page'] = normalise_per_page(config['per_page'], split_delimiter: split_delimiter)
               config['limit'] = [config['limit'].to_i, 0].max
               config['permalink'] = config['permalink'].to_s
               config['title'] = config['title'].to_s
@@ -352,6 +352,31 @@ module Jekyll
                 'before' => [trail['before'].to_i, 0].max,
                 'after' => [trail['after'].to_i, 0].max
               }
+            end
+
+            # Normalises per-page configuration.
+            #
+            # Accepts:
+            # - Integer-like values
+            # - Array values
+            # - Delimited strings (using configured split delimiter)
+            #
+            # Returns either:
+            # - Integer, for single-size pagination
+            # - Array<Integer>, for variable per-page pagination patterns
+            def normalise_per_page(raw_per_page, split_delimiter:)
+              if raw_per_page.is_a?(Array)
+                return Utils.normalise_per_page_pattern(raw_per_page)
+              end
+
+              if raw_per_page.is_a?(String)
+                split_values = Utils.delimited_array(raw_per_page, delimiter: split_delimiter)
+                if split_values.length > 1
+                  return Utils.normalise_per_page_pattern(split_values)
+                end
+              end
+
+              Utils.normalise_per_page_pattern(raw_per_page).first
             end
 
             # Preserves legacy `sort_field` + `sort_reverse` behaviour when the

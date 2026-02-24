@@ -54,6 +54,39 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
       expect(config.dig('templates', 'defaults', 'sort')).to eq(['title desc'])
     end
 
+    it 'supports variable per-page definitions as arrays' do
+      config = described_class.normalise_site_config(
+        'pagination' => {
+          'enabled' => true,
+          'templates' => {
+            'defaults' => {
+              'per_page' => [3, 1, 0, -4]
+            }
+          }
+        }
+      )
+
+      expect(config.dig('templates', 'defaults', 'per_page')).to eq([3, 1, 1, 1])
+    end
+
+    it 'supports variable per-page definitions as delimited strings' do
+      config = described_class.normalise_site_config(
+        'pagination' => {
+          'enabled' => true,
+          'syntax' => {
+            'split' => '|'
+          },
+          'templates' => {
+            'defaults' => {
+              'per_page' => '4|2|1'
+            }
+          }
+        }
+      )
+
+      expect(config.dig('templates', 'defaults', 'per_page')).to eq([4, 2, 1])
+    end
+
     it 'normalises delimited equivalent groups with a custom split delimiter' do
       config = described_class.normalise_site_config(
         'pagination' => {

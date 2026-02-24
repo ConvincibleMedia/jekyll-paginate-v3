@@ -26,14 +26,14 @@ RSpec.describe 'Pagination integration: core behaviour' do
 
     jekyll_build(default_site, files: files) do |site,|
       generated_pages = generated_pagination_pages(site).sort_by { |page| paginator_index_number(page) }
-      expect(generated_pages.map(&:url)).to eq(['/', '/page/2/', '/page/3/'])
+      expect(generated_pages.map { |page| normalise_url_for_match(page.url) }).to eq(['/', '/page/2', '/page/3'])
 
       expect(paginator_item_titles(generated_pages[0])).to eq(['Post 01', 'Post 02'])
       expect(paginator_item_titles(generated_pages[1])).to eq(['Post 03', 'Post 04'])
       expect(paginator_item_titles(generated_pages[2])).to eq(['Post 05'])
 
       expect(paginator_reference_number(generated_pages[0], 'next')).to eq(2)
-      expect(paginator_reference_url(generated_pages[0], 'next')).to eq('/page/2/')
+      expect(normalise_url_for_match(paginator_reference_url(generated_pages[0], 'next'))).to eq('/page/2')
       expect(paginator_reference_number(generated_pages[2], 'next')).to be_nil
       expect(generated_pages[0].data.dig('pagination', 'template')).to be_nil
       expect(generated_pages[0].data.dig('pagination', 'index')).to eq(true)
@@ -114,11 +114,64 @@ RSpec.describe 'Pagination integration: core behaviour' do
 
     jekyll_build(default_site, files: files) do |site,|
       generated_pages = generated_pagination_pages(site).sort_by { |page| paginator_index_number(page) }
-      expect(generated_pages.map(&:url)).to eq(['/', '/page/2/'])
+      expect(generated_pages.map { |page| normalise_url_for_match(page.url) }).to eq(['/', '/page/2'])
 
       expect(paginator_item_titles(generated_pages[0])).to eq(['Post 04', 'Post 05'])
       expect(paginator_item_titles(generated_pages[1])).to eq(['Post 06', 'Post 07'])
       expect(page_by_url(site, '/page/3/')).to be_nil
+    end
+  end
+
+  it 'supports per_page as a variable page-size array' do
+    files = jekyll_merge(
+      post_files(10),
+      jekyll_files do
+        file 'index.md' do
+          frontmatter(
+            pagination_template_frontmatter(
+              {
+                'pagination' => {
+                  'enabled' => true,
+                  'items' => 'posts',
+                  'sort' => 'title asc',
+                  'per_page' => [3, 1, 2]
+                }
+              }
+            )
+          )
+          contents('Template content')
+        end
+      end
+    )
+
+    jekyll_build(default_site, files: files) do |site,|
+      page_one = page_by_url(site, '/')
+      page_two = page_by_url(site, '/page/2/')
+      page_three = page_by_url(site, '/page/3/')
+      page_four = page_by_url(site, '/page/4/')
+      page_five = page_by_url(site, '/page/5/')
+
+      expect(page_one).not_to be_nil
+      expect(page_two).not_to be_nil
+      expect(page_three).not_to be_nil
+      expect(page_four).not_to be_nil
+      expect(page_five).not_to be_nil
+      expect(page_by_url(site, '/page/6/')).to be_nil
+
+      expect(paginator_item_titles(page_one)).to eq(['Post 01', 'Post 02', 'Post 03'])
+      expect(paginator_item_titles(page_two)).to eq(['Post 04'])
+      expect(paginator_item_titles(page_three)).to eq(['Post 05', 'Post 06'])
+      expect(paginator_item_titles(page_four)).to eq(['Post 07', 'Post 08'])
+      expect(paginator_item_titles(page_five)).to eq(['Post 09', 'Post 10'])
+
+      page_four_payload = paginator_payload(page_four)
+      expect(page_four_payload.fetch('current').count).to eq(2)
+      expect(page_four_payload.fetch('current').start).to eq(7)
+      expect(page_four_payload.fetch('current').to_h['end']).to eq(8)
+
+      expect(paginator_reference_number(page_three, 'next')).to eq(4)
+      expect(normalise_url_for_match(paginator_reference_url(page_three, 'next'))).to eq('/page/4')
+      expect(paginator_reference_number(page_five, 'next')).to be_nil
     end
   end
 end

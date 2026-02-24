@@ -72,12 +72,12 @@ RSpec.describe 'Pagination integration: navigation, URLs, and trails' do
       page_three = page_by_url(site, '/page/3/')
 
       expect(paginator_reference_number(page_one, 'prev')).to be_nil
-      expect(paginator_reference_url(page_one, 'next')).to eq('/page/2/')
-      expect(paginator_reference_url(page_two, 'prev')).to eq('/')
-      expect(paginator_reference_url(page_two, 'next')).to eq('/page/3/')
+      expect(normalise_url_for_match(paginator_reference_url(page_one, 'next'))).to eq('/page/2')
+      expect(normalise_url_for_match(paginator_reference_url(page_two, 'prev'))).to eq('/')
+      expect(normalise_url_for_match(paginator_reference_url(page_two, 'next'))).to eq('/page/3')
       expect(paginator_reference_number(page_three, 'next')).to be_nil
-      expect(paginator_reference_url(page_three, 'first')).to eq('/')
-      expect(paginator_reference_url(page_three, 'last')).to eq('/page/3/')
+      expect(normalise_url_for_match(paginator_reference_url(page_three, 'first'))).to eq('/')
+      expect(normalise_url_for_match(paginator_reference_url(page_three, 'last'))).to eq('/page/3')
     end
   end
 
@@ -115,6 +115,94 @@ RSpec.describe 'Pagination integration: navigation, URLs, and trails' do
       expect(paginator_trail_numbers(page_one)).to eq([1, 2, 3])
       expect(paginator_trail_numbers(page_two)).to eq([1, 2, 3])
       expect(paginator_trail_numbers(page_four)).to eq([2, 3, 4])
+    end
+  end
+
+  it 'renders chained paginator drop references in liquid templates' do
+    files = jekyll_merge(
+      post_files(10),
+      jekyll_files do
+        folder '_layouts' do
+          file 'drop_probe.html' do
+            contents(<<~HTML)
+              <!doctype html>
+              <html>
+                <body>
+                  <p id="current-count">{{ paginator.current.count }}</p>
+                  <p id="current-start">{{ paginator.current.start }}</p>
+                  <p id="current-end">{{ paginator.current.end }}</p>
+                  <p id="prev-url">{% if paginator.prev and paginator.prev.page %}{{ paginator.prev.page.url }}{% endif %}</p>
+                  <p id="next-url">{% if paginator.next and paginator.next.page %}{{ paginator.next.page.url }}{% endif %}</p>
+                  <p id="first-url">{% if paginator.first and paginator.first.page %}{{ paginator.first.page.url }}{% endif %}</p>
+                  <p id="last-url">{% if paginator.last and paginator.last.page %}{{ paginator.last.page.url }}{% endif %}</p>
+                  <ol id="trail-url-list">
+                    {% for entry in paginator.trail %}
+                      <li>{{ entry.num }}:{% if entry.page %}{{ entry.page.url }}{% else %}CURRENT{% endif %}</li>
+                    {% endfor %}
+                  </ol>
+                </body>
+              </html>
+            HTML
+          end
+        end
+
+        file 'index.md' do
+          frontmatter(
+            pagination_template_frontmatter(
+              {
+                'layout' => 'drop_probe',
+                'pagination' => {
+                  'enabled' => true,
+                  'items' => 'posts',
+                  'sort' => 'title asc',
+                  'per_page' => [3, 1, 2]
+                }
+              }
+            )
+          )
+          contents('Template content')
+        end
+      end
+    )
+
+    jekyll_build(default_site, files: files) do |site, output_files|
+      page_two = page_by_url(site, '/page/2/')
+      expect(page_two).not_to be_nil
+
+      page_two_output = output_files.list.find { |relative_path| relative_path.match?(%r{\Apage/2(?:/index)?\.html\z}) }
+      expect(page_two_output).not_to be_nil
+
+      rendered = output_files.read(page_two_output)
+      current_count = rendered[%r{<p id="current-count">(.*?)</p>}m, 1]
+      current_start = rendered[%r{<p id="current-start">(.*?)</p>}m, 1]
+      current_end = rendered[%r{<p id="current-end">(.*?)</p>}m, 1]
+      prev_url = rendered[%r{<p id="prev-url">(.*?)</p>}m, 1]
+      next_url = rendered[%r{<p id="next-url">(.*?)</p>}m, 1]
+      first_url = rendered[%r{<p id="first-url">(.*?)</p>}m, 1]
+      last_url = rendered[%r{<p id="last-url">(.*?)</p>}m, 1]
+      trail_lines = rendered.scan(%r{<li>(.*?)</li>}m).flatten.map do |entry|
+        number, value = entry.split(':', 2)
+        next "#{number}:CURRENT" if value == 'CURRENT'
+
+        "#{number}:#{normalise_url_for_match(value)}"
+      end
+
+      expect(current_count).to eq('1')
+      expect(current_start).to eq('4')
+      expect(current_end).to eq('4')
+      expect(normalise_url_for_match(prev_url)).to eq('/')
+      expect(normalise_url_for_match(next_url)).to eq('/page/3')
+      expect(normalise_url_for_match(first_url)).to eq('/')
+      expect(normalise_url_for_match(last_url)).to eq('/page/5')
+      expect(trail_lines).to eq(
+        [
+          '1:/',
+          '2:CURRENT',
+          '3:/page/3',
+          '4:/page/4',
+          '5:/page/5'
+        ]
+      )
     end
   end
 end

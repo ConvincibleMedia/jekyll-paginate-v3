@@ -15,8 +15,9 @@ module Jekyll
             # Clones template content/data and annotates it with pagination metadata.
             def initialize(template_page, current_page, total_pages, index_filename)
               @site = template_page.site
-              @base = ''
-              @url = ''
+              @base = template_page.instance_variable_get(:@base).to_s
+              @dir = template_page.dir.to_s
+              @url = nil
               @name = index_filename.to_s.empty? ? 'index.html' : index_filename
 
               process(@name)

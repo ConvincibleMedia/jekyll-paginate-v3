@@ -18,26 +18,33 @@ module Jekyll
           #
           # `compatibility` controls whether legacy v1/v2 keys are also emitted
           # in the Liquid payload.
-          def initialize(per_page:, items:, current_page:, total_pages:, item_keyword:, compatibility: nil)
-            @per_page = [per_page.to_i, 1].max
-            @total_indexes = [total_pages.to_i, 1].max
+          #
+          # `page_windows` can be supplied by the model to avoid recomputing
+          # variable per-page index windows for every paginator instance.
+          def initialize(per_page:, items:, current_page:, total_pages:, item_keyword:, compatibility: nil, page_windows: nil)
+            @per_page_pattern = Utils.normalise_per_page_pattern(per_page)
             @current_index_number = current_page.to_i
             @item_keyword = normalise_item_keyword(item_keyword)
             @compatibility_mode = normalise_compatibility_mode(compatibility)
+            @total_items = items.size
+            @page_windows = normalise_page_windows(page_windows, @total_items)
+            requested_total_indexes = [total_pages.to_i, 1].max
 
-            if @current_index_number > @total_indexes
-              raise ArgumentError, "page number cannot be greater than total pages (#{@current_index_number} > #{@total_indexes})"
+            if @current_index_number > requested_total_indexes
+              raise ArgumentError, "page number cannot be greater than total pages (#{@current_index_number} > #{requested_total_indexes})"
             end
 
-            start_offset = (@current_index_number - 1) * @per_page
-            end_offset = [start_offset + @per_page - 1, items.size - 1].min
+            if requested_total_indexes != @page_windows.length
+              raise ArgumentError, "total pages does not match page windows (#{requested_total_indexes} != #{@page_windows.length})"
+            end
+            @total_indexes = requested_total_indexes
 
-            @total_items = items.size
-            @items = items[start_offset..end_offset] || []
+            current_window = window_for_page_number(@current_index_number)
+            @per_page = current_window['page_size']
+            @items = items[current_window['offset_start']...current_window['offset_end']] || []
             @trail = nil
 
             @current_page_object = nil
-            @index_windows = {}
 
             initialise_index_references!
           end
@@ -245,25 +252,47 @@ module Jekyll
           end
 
           # Returns window metadata for one index page.
-          #
-          # This keeps `count`/`start`/`end` consistent across current, next,
-          # trail, and compatibility projections.
           def window_for_page_number(page_number)
-            return @index_windows[page_number] if @index_windows.key?(page_number)
+            @page_windows_by_number.fetch(page_number.to_i)
+          rescue KeyError
+            fallback_size = Utils.page_size_for_number(@per_page_pattern, page_number)
+            {
+              'num' => page_number.to_i,
+              'page_size' => fallback_size,
+              'count' => 0,
+              'offset_start' => total_items,
+              'offset_end' => total_items,
+              'start' => nil,
+              'end' => nil
+            }
+          end
 
-            start_item_index = ((page_number - 1) * per_page) + 1
-            if total_items.zero? || start_item_index > total_items
-              window = { 'count' => 0, 'start' => nil, 'end' => nil }
-            else
-              end_item_index = [start_item_index + per_page - 1, total_items].min
-              window = {
-                'count' => end_item_index - start_item_index + 1,
-                'start' => start_item_index,
-                'end' => end_item_index
+          # Normalises page-window metadata for this pagination set.
+          def normalise_page_windows(raw_page_windows, total_item_count)
+            raw_windows = if raw_page_windows.is_a?(Array) && !raw_page_windows.empty?
+                            raw_page_windows
+                          else
+                            Utils.build_pagination_windows(total_item_count, @per_page_pattern)
+                          end
+
+            windows = raw_windows.map { |entry| Utils.safe_hash(entry) }.sort_by { |entry| entry['num'].to_i }
+            windows = Utils.build_pagination_windows(total_item_count, @per_page_pattern) if windows.empty?
+
+            @page_windows_by_number = {}
+            windows.each do |window|
+              window_number = window['num'].to_i
+              @page_windows_by_number[window_number] = {
+                'num' => window_number,
+                'page_size' => [window['page_size'].to_i, 1].max,
+                'count' => [window['count'].to_i, 0].max,
+                'offset_start' => [window['offset_start'].to_i, 0].max,
+                'offset_end' => [window['offset_end'].to_i, 0].max,
+                'start' => window['start'],
+                'end' => window['end']
               }
             end
 
-            @index_windows[page_number] = window
+            @page_windows_by_number.values
           end
 
           # Normalises item alias keyword; falls back to canonical `items`.

@@ -1,6 +1,18 @@
 # frozen_string_literal: true
 
 module IntegrationHelpers
+  # Normalises URL strings for comparisons so trailing slash form does not
+  # affect expectation outcomes (`/a/b` and `/a/b/` are equivalent).
+  def normalise_url_for_match(url)
+    value = url.to_s.strip
+    return value if value.empty?
+
+    value = "/#{value}" unless value.start_with?('/')
+    return '/' if value == '/'
+
+    value.sub(%r{/\z}, '')
+  end
+
   # Builds the baseline site definition used by all integration examples.
   #
   # The returned blueprint keeps default config and core layouts in one reusable
@@ -162,12 +174,14 @@ module IntegrationHelpers
 
   # Finds a page by URL.
   def page_by_url(site, url)
-    site.pages.find { |page| page.url == url }
+    target = normalise_url_for_match(url)
+    site.pages.find { |page| normalise_url_for_match(page.url) == target }
   end
 
   # Finds a collection document by URL.
   def document_by_url(site, collection_label, url)
-    site.collections.fetch(collection_label).docs.find { |document| document.url == url }
+    target = normalise_url_for_match(url)
+    site.collections.fetch(collection_label).docs.find { |document| normalise_url_for_match(document.url) == target }
   end
 
   # Returns paginator payload as a Liquid-style hash.
