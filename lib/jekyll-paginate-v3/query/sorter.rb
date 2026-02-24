@@ -4,16 +4,17 @@ module Jekyll
 module Plugins
 module PaginateV3
 module Query
+
+# Multi-level sorter for v3 `sort` definitions.
+#
+# Example definitions:
+# - `sort: date desc`
+# - `sort: owner.name, date desc empty:first` (delimiter is configurable)
+# - `sort: ["featured desc", "date desc"]`
+#
+# Used by Pagination::Model to apply deterministic item ordering.
 class Sorter
-	# Multi-level sorter for v3 `sort` definitions.
-	#
-	# Example definitions:
-	# - `sort: date desc`
-	# - `sort: owner.name, date desc empty:first` (delimiter is configurable)
-	# - `sort: ["featured desc", "date desc"]`
-	#
-	# Used by Pagination::Model to apply deterministic item ordering.
-	
+
 	# Applies parsed sort instructions while preserving input order as a
 	# final deterministic tiebreak.
 	def self.apply(items, raw_sort, nested_separator:, equivalents:, split_delimiter: ',')
@@ -171,6 +172,7 @@ class Sorter
 		end
 	end
 end
+
 end
 end
 end

@@ -3,11 +3,12 @@
 module Jekyll
 module Plugins
 module PaginateV3
-module Utils
-	# URL and path normalisation helpers.
-	#
-	# Used by paginator/page generation code to keep output paths stable.
 
+# URL and path normalisation helpers.
+#
+# Used by paginator/page generation code to keep output paths stable.
+module Utils
+	
 	# Removes one leading slash from a path-like string.
 	def self.remove_leading_slash(path)
 		string_path = path.to_s
@@ -49,6 +50,7 @@ module Utils
 		url
 	end
 end
+
 end
 end
 end

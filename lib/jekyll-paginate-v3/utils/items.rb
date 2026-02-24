@@ -3,10 +3,11 @@
 module Jekyll
 module Plugins
 module PaginateV3
+
+# Item-level helpers for pagination and template discovery.
+#
+# Used by Pagination::Model and related runtime components.
 module Utils
-	# Item-level helpers for pagination and template discovery.
-	#
-	# Used by Pagination::Model and related runtime components.
 
 	# Calculates page count for a list and one per-page definition.
 	#
@@ -133,6 +134,7 @@ module Utils
 		item.collection.respond_to?(:label) ? item.collection.label.to_s : nil
 	end
 end
+
 end
 end
 end

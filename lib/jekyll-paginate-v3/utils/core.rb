@@ -3,10 +3,11 @@
 module Jekyll
 module Plugins
 module PaginateV3
+
+# Core helpers shared across config, query, and pagination layers.
+#
+# Used broadly by normalisers, builders, and parsers.
 module Utils
-	# Core helpers shared across config, query, and pagination layers.
-	#
-	# Used broadly by normalisers, builders, and parsers.
 
 	# Deep copy helper for plain Ruby hashes/arrays used in config merging.
 	def self.deep_copy(value)
@@ -96,6 +97,7 @@ module Utils
 		layouts.map { |entry| entry.to_s.strip }.reject(&:empty?).uniq
 	end
 end
+
 end
 end
 end

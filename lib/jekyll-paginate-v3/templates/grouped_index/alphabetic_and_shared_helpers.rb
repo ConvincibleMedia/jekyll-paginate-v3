@@ -4,12 +4,14 @@ module Jekyll
 module Plugins
 module PaginateV3
 module Templates
+
+# Alphabetic grouped-index builders plus shared range/token helpers.
+# Structure: alphabetic groups are emitted first, while shared helpers
+# provide range matching and token formatting for all grouping modes.
 class GroupedIndex
-	# Alphabetic grouped-index builders plus shared range/token helpers.
-	# Structure: alphabetic groups are emitted first, while shared helpers
-	# provide range matching and token formatting for all grouping modes.
 
 	private
+
 	def build_alphabetic_entries(candidates, config)
 		start_token = config['start']
 		token_length = start_token.length
@@ -296,6 +298,7 @@ class GroupedIndex
 		end
 	end
 end
+
 end
 end
 end

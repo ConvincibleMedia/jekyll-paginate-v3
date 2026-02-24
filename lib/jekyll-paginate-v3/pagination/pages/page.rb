@@ -5,11 +5,13 @@ module Plugins
 module PaginateV3
 module Pagination
 module Pages
+
+# In-memory index page generated from a pagination template for a
+# specific page number.
+#
+# Used by Pagination::Model to emit page-based pagination output.
 class Page < Jekyll::Page
-	# In-memory index page generated from a pagination template for a
-	# specific page number.
-	#
-	# Used by Pagination::Model to emit page-based pagination output.
+
 	attr_accessor :pager
 
 	# Clones template content/data and annotates it with pagination metadata.
@@ -35,6 +37,7 @@ class Page < Jekyll::Page
 		validate_permalink!(template_page.path)
 	end
 end
+
 end
 end
 end

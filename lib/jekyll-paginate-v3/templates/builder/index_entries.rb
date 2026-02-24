@@ -4,12 +4,14 @@ module Jekyll
 module Plugins
 module PaginateV3
 module Templates
+
+# Index-entry construction helpers for generated template definitions.
+# Structure: entries are built depth-first per index key, optionally with
+# grouped-index adapters, and emitted as filter/value/token payloads.
 class Builder
-	# Index-entry construction helpers for generated template definitions.
-	# Structure: entries are built depth-first per index key, optionally with
-	# grouped-index adapters, and emitted as filter/value/token payloads.
 
 	private
+
 	def build_index_entries(items, definition)
 		entries = []
 		recurse_build_entries(items, definition, 0, {}, {}, {}, [], entries)
@@ -191,9 +193,8 @@ class Builder
 
 		values.map { |value| value.to_s.strip }.reject(&:empty?).uniq
 	end
-
-	# Normalises one raw `templates.generate` definition into a predictable
 end
+
 end
 end
 end

@@ -4,12 +4,14 @@ module Jekyll
 module Plugins
 module PaginateV3
 module Pagination
+
+# Group navigation and generated-page metadata helpers for `Model`.
+# Structure: grouped index sets are ordered, converted into paginator
+# payloads, and then applied to every generated pagination page.
 class Model
-	# Group navigation and generated-page metadata helpers for `Model`.
-	# Structure: grouped index sets are ordered, converted into paginator
-	# payloads, and then applied to every generated pagination page.
 
 	private
+
 	def apply_grouped_set_navigation!
 		page_group_payloads = {}
 		page_objects = {}
@@ -182,6 +184,7 @@ class Model
 		Utils.ensure_leading_slash(joined)
 	end
 end
+
 end
 end
 end

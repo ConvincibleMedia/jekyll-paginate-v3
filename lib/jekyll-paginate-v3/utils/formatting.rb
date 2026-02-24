@@ -3,11 +3,12 @@
 module Jekyll
 module Plugins
 module PaginateV3
+
+# Token and placeholder formatting helpers.
+#
+# Used by paginator and generated-index code to substitute placeholders
+# in URLs and page titles.
 module Utils
-	# Token and placeholder formatting helpers.
-	#
-	# Used by paginator and generated-index code to substitute placeholders
-	# in URLs and page titles.
 
 	# Replaces `:num` and optionally `:max` placeholders.
 	def self.format_page_number(pattern, current_page, max_pages = nil)
@@ -45,6 +46,7 @@ module Utils
 		end
 	end
 end
+
 end
 end
 end

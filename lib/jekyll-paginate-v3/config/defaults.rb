@@ -3,11 +3,12 @@
 module Jekyll
 module Plugins
 module PaginateV3
+
+# Default configuration for jekyll-paginate-v3.
+#
+# These defaults intentionally describe the new v3 behaviour. Legacy
+# v1/v2 behaviour is layered on top through compatibility profiles.
 module Config
-	# Default configuration for jekyll-paginate-v3.
-	#
-	# These defaults intentionally describe the new v3 behaviour. Legacy
-	# v1/v2 behaviour is layered on top through compatibility profiles.
 	KEYWORD_DEFAULTS = {
 		'pages' => 'pages',
 		'all' => 'all',
@@ -98,6 +99,7 @@ module Config
 		}
 	}.freeze
 end
+
 end
 end
 end

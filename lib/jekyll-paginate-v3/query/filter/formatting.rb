@@ -4,10 +4,11 @@ module Jekyll
 module Plugins
 module PaginateV3
 module Query
+
+# Filter-formatting helpers used for human-readable diagnostics.
+# Structure: filter trees are traversed and rendered into concise
+# textual expressions for logging and debugging output.
 class Filter
-	# Filter-formatting helpers used for human-readable diagnostics.
-	# Structure: filter trees are traversed and rendered into concise
-	# textual expressions for logging and debugging output.
 
 	private
 
@@ -61,6 +62,7 @@ class Filter
 		definition.is_a?(Hash) && (definition.key?('min') || definition.key?('max'))
 	end
 end
+
 end
 end
 end

@@ -4,12 +4,14 @@ module Jekyll
 module Plugins
 module PaginateV3
 module Templates
+
+# Numeric and datetime grouped-index entry builders.
+# Structure: span boundaries are calculated from canonical config, then
+# candidate items are allocated to spans and emitted as template entries.
 class GroupedIndex
-	# Numeric and datetime grouped-index entry builders.
-	# Structure: span boundaries are calculated from canonical config, then
-	# candidate items are allocated to spans and emitted as template entries.
 
 	private
+	
 	def build_numeric_entries(candidates, config)
 		candidate_items = candidates.map do |candidate|
 			{
@@ -432,6 +434,7 @@ class GroupedIndex
 	end
 
 end
+
 end
 end
 end

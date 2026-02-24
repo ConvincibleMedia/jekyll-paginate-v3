@@ -4,17 +4,19 @@ module Jekyll
 module Plugins
 module PaginateV3
 module Pagination
+
+# Core pagination orchestration model.
+#
+# Responsibilities:
+# - discover pagination templates
+# - generate configured templates (`pagination.templates.generate`)
+# - resolve and filter/sort items per template
+# - emit paginated index pages/documents
+#
+# Used by Generators::PaginationGenerator as the main runtime
+# coordinator for the pagination pipeline.
 class Model
-	# Core pagination orchestration model.
-	#
-	# Responsibilities:
-	# - discover pagination templates
-	# - generate configured templates (`pagination.templates.generate`)
-	# - resolve and filter/sort items per template
-	# - emit paginated index pages/documents
-	#
-	# Used by Generators::PaginationGenerator as the main runtime
-	# coordinator for the pagination pipeline.
+
 	def initialize(site:, site_config:, log_lambda:, add_item_lambda:, remove_item_lambda:)
 		@site = site
 		@site_config = site_config
@@ -226,8 +228,8 @@ class Model
 	def all_collection_documents
 		@site.collections.values.flat_map(&:docs)
 	end
-
 end
+
 end
 end
 end

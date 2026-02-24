@@ -5,12 +5,15 @@ module Plugins
 module PaginateV3
 module Pagination
 module Pages
+
+# In-memory index document generated from a pagination template for a
+# specific page number.
+#
+# Used by Pagination::Model when paginating collection documents.
 class Document < Jekyll::Document
-	# In-memory index document generated from a pagination template for a
-	# specific page number.
-	#
-	# Used by Pagination::Model when paginating collection documents.
+
 	attr_accessor :pager
+	
 	alias_method :ext, :extname
 
 	# Clones a collection template document for one concrete page number.
@@ -50,6 +53,7 @@ class Document < Jekyll::Document
 		end
 	end
 end
+
 end
 end
 end

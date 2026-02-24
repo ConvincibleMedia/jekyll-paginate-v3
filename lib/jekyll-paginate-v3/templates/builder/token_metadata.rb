@@ -4,12 +4,14 @@ module Jekyll
 module Plugins
 module PaginateV3
 module Templates
+
+# Token and metadata helpers for generated template placeholders.
+# Structure: title/permalink token maps are derived first, then metadata
+# payloads are composed for generated templates and grouped levels.
 class Builder
-	# Token and metadata helpers for generated template placeholders.
-	# Structure: title/permalink token maps are derived first, then metadata
-	# payloads are composed for generated templates and grouped levels.
 
 	private
+	
 	def build_token_maps(index_keys, entry, slugify_config:)
 		values = Utils.safe_hash(entry['values'])
 		token_values = Utils.safe_hash(entry['token_values'])
@@ -24,15 +26,15 @@ class Builder
 			slugified_value = slugify_value(value, slugify_config)
 
 			title_tokens[key] = if configured_token_values.key?('title')
-			                      configured_token_values['title'].to_s
-			                    else
-			                      slugified_value
-			                    end
+														configured_token_values['title'].to_s
+													else
+														slugified_value
+													end
 			permalink_tokens[key] = if configured_token_values.key?('permalink')
-			                          configured_token_values['permalink'].to_s
-			                        else
-			                          slugified_value
-			                        end
+																configured_token_values['permalink'].to_s
+															else
+																slugified_value
+															end
 			compatibility_tokens[key] = slugified_value
 		end
 
@@ -206,6 +208,7 @@ class Builder
 		labels.uniq
 	end
 end
+
 end
 end
 end

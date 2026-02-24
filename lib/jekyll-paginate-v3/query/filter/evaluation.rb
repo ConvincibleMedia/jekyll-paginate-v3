@@ -4,10 +4,11 @@ module Jekyll
 module Plugins
 module PaginateV3
 module Query
+
+# Filter-evaluation helpers for matching item values against normalised
+# filter definitions. Structure: values are extracted, each filter node is
+# evaluated recursively, then include/exclude joins are combined.
 class Filter
-	# Filter-evaluation helpers for matching item values against normalised
-	# filter definitions. Structure: values are extracted, each filter node is
-	# evaluated recursively, then include/exclude joins are combined.
 
 	private
 
@@ -221,6 +222,7 @@ class Filter
 		@log_lambda.call(message, 'warn')
 	end
 end
+
 end
 end
 end

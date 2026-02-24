@@ -4,12 +4,14 @@ module Jekyll
 module Plugins
 module PaginateV3
 module Templates
+
+# Grouped-index config normalisation for numeric, datetime, and alphabetic
+# modes. Structure: raw group config is validated and converted into
+# canonical step/start/growth settings consumed by entry builders.
 class GroupedIndex
-	# Grouped-index config normalisation for numeric, datetime, and alphabetic
-	# modes. Structure: raw group config is validated and converted into
-	# canonical step/start/growth settings consumed by entry builders.
 
 	private
+	
 	def normalise_numeric_group_config
 		if @raw_group.is_a?(Integer) || @raw_group.is_a?(Float) || (@raw_group.is_a?(String) && numeric_string?(@raw_group))
 			step_value = parse_positive_numeric(@raw_group, name: 'group')
@@ -360,8 +362,8 @@ class GroupedIndex
 	rescue ArgumentError
 		false
 	end
-
 end
+
 end
 end
 end

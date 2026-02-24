@@ -4,11 +4,12 @@ module Jekyll
 module Plugins
 module PaginateV3
 module Config
+
+# Legacy compatibility migration helpers for v1/v2 style configuration.
+# Structure: each helper converts a specific legacy shape into the shared
+# v3 config model consumed by the runtime pipeline.
 class Normaliser
 	class << self
-		# Legacy compatibility migration helpers for v1/v2 style configuration.
-		# Structure: each helper converts a specific legacy shape into the shared
-		# v3 config model consumed by the runtime pipeline.
 
 		private
 		def migrate_legacy_shortcuts!(template_config, compatibility_mode, raw_overrides = nil)
@@ -163,6 +164,7 @@ class Normaliser
 		end
 	end
 end
+
 end
 end
 end

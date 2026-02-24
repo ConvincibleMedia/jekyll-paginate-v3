@@ -4,12 +4,14 @@ module Jekyll
 module Plugins
 module PaginateV3
 module Templates
+
+# Grouped-index mode detection and candidate interpretation helpers.
+# Structure: explicit config hints are checked first, then item values are
+# sampled to infer numeric, datetime, or alphabetic grouping mode.
 class GroupedIndex
-	# Grouped-index mode detection and candidate interpretation helpers.
-	# Structure: explicit config hints are checked first, then item values are
-	# sampled to infer numeric, datetime, or alphabetic grouping mode.
 
 	private
+	
 	def normalise_keyword(raw_keyword, fallback)
 		keyword = raw_keyword.to_s.strip
 		keyword.empty? ? fallback : keyword
@@ -283,6 +285,7 @@ class GroupedIndex
 	end
 
 end
+
 end
 end
 end

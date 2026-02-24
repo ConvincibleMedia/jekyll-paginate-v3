@@ -4,11 +4,12 @@ module Jekyll
 module Plugins
 module PaginateV3
 module Config
+
+# Site and template config normalisation helpers used by `Normaliser`.
+# Structure: site-level keys are canonicalised first, then template
+# defaults and per-template settings are normalised for runtime use.
 class Normaliser
 	class << self
-		# Site and template config normalisation helpers used by `Normaliser`.
-		# Structure: site-level keys are canonicalised first, then template
-		# defaults and per-template settings are normalised for runtime use.
 
 		private
 		def normalise_site_pagination_source(raw_pagination)
@@ -340,6 +341,7 @@ class Normaliser
 		# Modern keys retain precedence when both forms are supplied.
 	end
 end
+
 end
 end
 end

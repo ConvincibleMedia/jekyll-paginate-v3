@@ -4,12 +4,14 @@ module Jekyll
 module Plugins
 module PaginateV3
 module Query
+
+# Filter-normalisation helpers that convert public filter shorthand into
+# one canonical internal tree model. Structure: each supported shorthand
+# form is parsed and wrapped into consistent scalar/range/group nodes.
 class Filter
-	# Filter-normalisation helpers that convert public filter shorthand into
-	# one canonical internal tree model. Structure: each supported shorthand
-	# form is parsed and wrapped into consistent scalar/range/group nodes.
 
 	private
+
 	def normalise_filter(filter)
 		normalised = normalise_filter_definition(filter)
 		return false if normalised == false
@@ -510,6 +512,7 @@ class Filter
 		value.is_a?(Date) || value.is_a?(DateTime) || value.is_a?(Time)
 	end
 end
+
 end
 end
 end

@@ -4,17 +4,18 @@ module Jekyll
 module Plugins
 module PaginateV3
 module Query
+
+# Filtering engine for pagination and generated index discovery.
+#
+# Public filter definitions are normalised into a single recursive group
+# shape:
+# - `{ include: [...], exclude: [...], join: and|or }`
+#
+# Shorthand forms (scalar, range, array, delimited string, scalar hash)
+# are all converted into this group model so evaluation follows one
+# consistent code path.
 class Filter
-	# Filtering engine for pagination and generated index discovery.
-	#
-	# Public filter definitions are normalised into a single recursive group
-	# shape:
-	# - `{ include: [...], exclude: [...], join: and|or }`
-	#
-	# Shorthand forms (scalar, range, array, delimited string, scalar hash)
-	# are all converted into this group model so evaluation follows one
-	# consistent code path.
-	
+
 	# Class helper that instantiates a configured engine per call.
 	def self.filter_items(items, filters, nested_separator:, equivalents:, split_delimiter: ',', now_keyword: 'now', today_keyword: 'today', log_lambda: nil)
 		engine = new(
@@ -77,6 +78,7 @@ class Filter
 		current_items
 	end
 end
+
 end
 end
 end

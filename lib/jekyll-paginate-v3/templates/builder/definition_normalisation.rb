@@ -4,12 +4,14 @@ module Jekyll
 module Plugins
 module PaginateV3
 module Templates
+
+# Generated-template definition normalisation helpers for `Builder`.
+# Structure: each generation definition is validated and canonicalised
+# so downstream entry-building and template emission stay deterministic.
 class Builder
-	# Generated-template definition normalisation helpers for `Builder`.
-	# Structure: each generation definition is validated and canonicalised
-	# so downstream entry-building and template emission stay deterministic.
 
 	private
+
 	def normalise_definition(raw_definition, default_location)
 		definition = Utils.safe_hash(raw_definition)
 		return nil if definition.empty?
@@ -172,13 +174,8 @@ class Builder
 
 		keys.join(', ')
 	end
-
-	# Builds placeholder maps used by generated `permalink` and `title`
-	# strings.
-	#
-	# By default both title/permalink placeholders are slugified values
-	# (legacy behaviour). Grouped indexing can override title/permalink
 end
+
 end
 end
 end

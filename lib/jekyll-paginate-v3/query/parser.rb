@@ -4,18 +4,19 @@ module Jekyll
 module Plugins
 module PaginateV3
 module Query
+
+# Parses and evaluates the shared "search" format used across v3.
+#
+# Supported input forms:
+# - String: `pages`, `posts`, `all`, `everything`
+# - Hash: `{ pages: '*' }`, `{ posts: ['news/*', 'blog/*'] }`
+# - Array: combination of string/hash entries
+# - Delimited String: `pages, posts` (delimiter is configurable)
+#
+# Used by Pagination::Model and Templates::Builder to resolve configured
+# sources into concrete site items.
 class Parser
-	# Parses and evaluates the shared "search" format used across v3.
-	#
-	# Supported input forms:
-	# - String: `pages`, `posts`, `all`, `everything`
-	# - Hash: `{ pages: '*' }`, `{ posts: ['news/*', 'blog/*'] }`
-	# - Array: combination of string/hash entries
-	# - Delimited String: `pages, posts` (delimiter is configurable)
-	#
-	# Used by Pagination::Model and Templates::Builder to resolve configured
-	# sources into concrete site items.
-	
+
 	CANONICAL_TYPES = %w[pages all everything].freeze
 
 	# Parses a search definition into an array of normalised entries.
@@ -131,6 +132,7 @@ class Parser
 		end
 	end
 end
+
 end
 end
 end

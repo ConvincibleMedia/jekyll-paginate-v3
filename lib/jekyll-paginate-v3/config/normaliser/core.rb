@@ -4,18 +4,20 @@ module Jekyll
 module Plugins
 module PaginateV3
 module Config
+
+# Normalises site and template pagination config into predictable
+# internal structures consumed by pagination runtime classes.
+#
+# Site-level config is normalised to the nested public v3 structure:
+# - pagination.syntax.*
+# - pagination.templates.location
+# - pagination.templates.generate
+# - pagination.templates.defaults.*
+#
+# Template-level config is normalised to a flat hash used during
+# pagination emission for one concrete template page/document.
 class Normaliser
-	# Normalises site and template pagination config into predictable
-	# internal structures consumed by pagination runtime classes.
-	#
-	# Site-level config is normalised to the nested public v3 structure:
-	# - pagination.syntax.*
-	# - pagination.templates.location
-	# - pagination.templates.generate
-	# - pagination.templates.defaults.*
-	#
-	# Template-level config is normalised to a flat hash used during
-	# pagination emission for one concrete template page/document.
+	
 	LEGACY_FILTER_KEYS = %w[category tag locale].freeze
 	LEGACY_TEMPLATE_DEFAULT_KEYS = %w[items filters sort per_page limit offset trail title permalink sort_field sort_reverse indexpage extension].freeze
 	LEGACY_SITE_KEY_ALIASES = %w[split separator nested_key_separator].freeze
@@ -117,6 +119,7 @@ class Normaliser
 		page_config
 	end
 end
+
 end
 end
 end

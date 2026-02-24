@@ -3,11 +3,12 @@
 module Jekyll
 module Plugins
 module PaginateV3
-module Utils
-	# Nested frontmatter lookup helpers with equivalent-key support.
-	#
-	# Used by filtering, sorting, and index grouping for nested key reads.
 
+# Nested frontmatter lookup helpers with equivalent-key support.
+#
+# Used by filtering, sorting, and index grouping for nested key reads.
+module Utils
+	
 	# Splits a nested key according to configured separator.
 	def self.split_nested_key(key, separator)
 		key.to_s.split(separator.to_s).map(&:strip).reject(&:empty?)
@@ -113,6 +114,7 @@ module Utils
 		end
 	end
 end
+
 end
 end
 end

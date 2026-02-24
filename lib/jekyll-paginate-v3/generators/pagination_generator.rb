@@ -4,12 +4,13 @@ module Jekyll
 module Plugins
 module PaginateV3
 module Generators
+
+# Jekyll generator entry point for paginate-v3.
+#
+# Used by Jekyll's generator lifecycle to invoke the v3 pagination
+# pipeline for each site build.
 class PaginationGenerator < Jekyll::Generator
-	# Jekyll generator entry point for paginate-v3.
-	#
-	# Used by Jekyll's generator lifecycle to invoke the v3 pagination
-	# pipeline for each site build.
-	
+
 	safe true
 	priority :lowest
 
@@ -90,6 +91,7 @@ class PaginationGenerator < Jekyll::Generator
 		!site.config['paginate'].nil?
 	end
 end
+
 end
 end
 end

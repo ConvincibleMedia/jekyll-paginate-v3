@@ -4,12 +4,14 @@ module Jekyll
 module Plugins
 module PaginateV3
 module Pagination
+
+# Core template-pagination pipeline helpers for `Model`.
+# Structure: each template resolves items, filters/sorts them, emits
+# pages, then wires trail and cross-page paginator references.
 class Model
-	# Core template-pagination pipeline helpers for `Model`.
-	# Structure: each template resolves items, filters/sorts them, emits
-	# pages, then wires trail and cross-page paginator references.
 
 	private
+	
 	def paginate_template(template, config)
 		split_delimiter = config['split'] || @split_delimiter
 		nested_separator = config['separator'] || @nested_separator
@@ -191,8 +193,8 @@ class Model
 			}
 		end
 	end
-
 end
+
 end
 end
 end

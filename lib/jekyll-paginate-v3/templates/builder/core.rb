@@ -4,15 +4,18 @@ module Jekyll
 module Plugins
 module PaginateV3
 module Templates
+
+# Builds generated pagination templates from `pagination.templates.generate`.
+#
+# Generated templates are ordinary pages/documents with
+# `pagination.enabled: true`, so the core pagination model can process
+# them exactly like hand-written pagination templates.
+#
+# Used by Pagination::Model before normal page pagination starts.
 class Builder
-	# Builds generated pagination templates from `pagination.templates.generate`.
-	#
-	# Generated templates are ordinary pages/documents with
-	# `pagination.enabled: true`, so the core pagination model can process
-	# them exactly like hand-written pagination templates.
-	#
-	# Used by Pagination::Model before normal page pagination starts.
+
 	SPECIAL_KEYS = %w[items index filter filters group layout layouts location frontmatter permalink title slugify silent allow_empty].freeze
+
 	def initialize(site:, site_config:, add_item_lambda:, resolve_items_lambda:, log_lambda:)
 		@site = site
 		@site_config = site_config
@@ -143,8 +146,8 @@ class Builder
 		@log_lambda.call("Unable to generate template from layout '#{layout_name}': #{error.message}", 'warn') unless definition['silent']
 		nil
 	end
-
 end
+
 end
 end
 end
