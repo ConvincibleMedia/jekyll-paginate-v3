@@ -142,7 +142,7 @@ class Model
 	# hierarchy is preferred.
 	def legacy_v1_template_candidate(items)
 		source_root = File.expand_path(@site.config['source'].to_s)
-		paginate_path = @site_config.dig('templates', 'defaults', 'permalink')
+		paginate_path = @site_config.dig('templates', 'permalink')
 
 		items.select { |item| legacy_v1_pagination_candidate?(source_root, paginate_path, item) }.sort_by { |item| -item.path.to_s.size }.first
 	end

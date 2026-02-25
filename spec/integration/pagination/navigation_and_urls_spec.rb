@@ -73,6 +73,7 @@ RSpec.describe 'Pagination integration: navigation, URLs, and trails' do
 
 			expect(paginator_reference_number(page_one, 'prev')).to be_nil
 			expect(normalise_url_for_match(paginator_reference_url(page_one, 'next'))).to eq('/page/2')
+			expect(normalise_url_for_match(paginator_reference_url(page_two, 'previous'))).to eq('/')
 			expect(normalise_url_for_match(paginator_reference_url(page_two, 'prev'))).to eq('/')
 			expect(normalise_url_for_match(paginator_reference_url(page_two, 'next'))).to eq('/page/3')
 			expect(paginator_reference_number(page_three, 'next')).to be_nil
@@ -131,6 +132,7 @@ RSpec.describe 'Pagination integration: navigation, URLs, and trails' do
 									<p id="current-count">{{ paginator.current.count }}</p>
 									<p id="current-start">{{ paginator.current.start }}</p>
 									<p id="current-end">{{ paginator.current.end }}</p>
+									<p id="previous-url">{% if paginator.previous and paginator.previous.page %}{{ paginator.previous.page.url }}{% endif %}</p>
 									<p id="prev-url">{% if paginator.prev and paginator.prev.page %}{{ paginator.prev.page.url }}{% endif %}</p>
 									<p id="next-url">{% if paginator.next and paginator.next.page %}{{ paginator.next.page.url }}{% endif %}</p>
 									<p id="first-url">{% if paginator.first and paginator.first.page %}{{ paginator.first.page.url }}{% endif %}</p>
@@ -176,6 +178,7 @@ RSpec.describe 'Pagination integration: navigation, URLs, and trails' do
 			current_count = rendered[%r{<p id="current-count">(.*?)</p>}m, 1]
 			current_start = rendered[%r{<p id="current-start">(.*?)</p>}m, 1]
 			current_end = rendered[%r{<p id="current-end">(.*?)</p>}m, 1]
+			previous_url = rendered[%r{<p id="previous-url">(.*?)</p>}m, 1]
 			prev_url = rendered[%r{<p id="prev-url">(.*?)</p>}m, 1]
 			next_url = rendered[%r{<p id="next-url">(.*?)</p>}m, 1]
 			first_url = rendered[%r{<p id="first-url">(.*?)</p>}m, 1]
@@ -190,6 +193,7 @@ RSpec.describe 'Pagination integration: navigation, URLs, and trails' do
 			expect(current_count).to eq('1')
 			expect(current_start).to eq('4')
 			expect(current_end).to eq('4')
+			expect(normalise_url_for_match(previous_url)).to eq('/')
 			expect(normalise_url_for_match(prev_url)).to eq('/')
 			expect(normalise_url_for_match(next_url)).to eq('/page/3')
 			expect(normalise_url_for_match(first_url)).to eq('/')
@@ -206,4 +210,3 @@ RSpec.describe 'Pagination integration: navigation, URLs, and trails' do
 		end
 	end
 end
-

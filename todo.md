@@ -1,3 +1,3 @@
 # Roadmap
 
-No planned features at present.
+* Num is I18n aware

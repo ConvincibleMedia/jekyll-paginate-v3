@@ -24,14 +24,13 @@ class Normaliser
 			source['syntax'] = syntax unless syntax.empty?
 
 			templates = Utils.safe_hash(source['templates'])
-			template_defaults = Utils.safe_hash(templates['defaults'])
+			templates.delete('defaults')
 			LEGACY_TEMPLATE_DEFAULT_KEYS.each do |legacy_key|
 				next unless source.key?(legacy_key)
-				next if template_defaults.key?(legacy_key)
+				next if templates.key?(legacy_key)
 
-				template_defaults[legacy_key] = source[legacy_key]
+				templates[legacy_key] = source[legacy_key]
 			end
-			templates['defaults'] = template_defaults unless template_defaults.empty?
 			source['templates'] = templates unless templates.empty?
 
 			LEGACY_SITE_KEY_ALIASES.each { |legacy_key| source.delete(legacy_key) }
@@ -177,7 +176,9 @@ class Normaliser
 		# Returns: a value consumed by the next pipeline step.
 		def normalise_templates(raw_templates, split_delimiter:, raw_overrides:)
 			defaults = Utils.deep_copy(DEFAULTS['templates'])
-			source = defaults.merge(Utils.safe_hash(raw_templates))
+			source_hash = Utils.safe_hash(raw_templates)
+			source = defaults.merge(source_hash)
+			source.delete('defaults')
 
 			source['location'] = defaults['location'] if source['location'].nil? || source['location'].to_s.strip.empty?
 			source['generate'] = if source['generate'].is_a?(Array)
@@ -188,12 +189,8 @@ class Normaliser
 															[]
 														end
 
-			merged_defaults = Jekyll::Utils.deep_merge_hashes(
-				Utils.safe_hash(defaults['defaults']),
-				Utils.safe_hash(source['defaults'])
-			)
-			source['defaults'] = normalise_template_defaults(
-				merged_defaults,
+			source = normalise_template_defaults(
+				source,
 				raw_overrides: extract_template_defaults_overrides(raw_overrides),
 				split_delimiter: split_delimiter
 			)
@@ -201,11 +198,11 @@ class Normaliser
 			source
 		end
 
-		# Extracts template-default override keys from either modern nested
-		# config or legacy top-level aliases.
+		# Extracts template-default override keys from template-level config
+		# and from legacy top-level aliases.
 		def extract_template_defaults_overrides(raw_overrides)
 			override_hash = Utils.safe_hash(raw_overrides)
-			template_overrides = Utils.safe_hash(Utils.safe_hash(override_hash['templates'])['defaults'])
+			template_overrides = Utils.safe_hash(override_hash['templates'])
 
 			LEGACY_TEMPLATE_DEFAULT_KEYS.each do |legacy_key|
 				next unless override_hash.key?(legacy_key)
@@ -214,7 +211,10 @@ class Normaliser
 				template_overrides[legacy_key] = override_hash[legacy_key]
 			end
 
-			template_overrides
+			template_overrides.delete('defaults')
+			template_overrides.delete('location')
+			template_overrides.delete('generate')
+			template_overrides.select { |key, _| LEGACY_TEMPLATE_DEFAULT_KEYS.include?(key) }
 		end
 
 		# Normalises one template-default hash (used by site defaults and
@@ -271,11 +271,11 @@ class Normaliser
 		# Params: `raw_items`.
 		# Returns: a value consumed by the next pipeline step.
 		def normalise_items_value(raw_items)
-			return DEFAULTS.dig('templates', 'defaults', 'items') if raw_items.nil?
+			return DEFAULTS.dig('templates', 'items') if raw_items.nil?
 			return raw_items if raw_items.is_a?(Hash) || raw_items.is_a?(Array)
 
 			value = raw_items.to_s.strip
-			value.empty? ? DEFAULTS.dig('templates', 'defaults', 'items') : value
+			value.empty? ? DEFAULTS.dig('templates', 'items') : value
 		end
 
 		# Purpose: Normalises trail into canonical form.
@@ -329,7 +329,7 @@ class Normaliser
 			return sort_entries unless sort_entries.empty?
 
 			if sort_field.empty?
-				fallback_sort = DEFAULTS.dig('templates', 'defaults', 'sort')
+				fallback_sort = DEFAULTS.dig('templates', 'sort')
 				return Utils.arrayify(fallback_sort, split_delimiter: split_delimiter).map(&:to_s).map(&:strip).reject(&:empty?)
 			end
 

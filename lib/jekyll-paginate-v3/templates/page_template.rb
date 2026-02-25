@@ -29,11 +29,16 @@ class PageTemplate < Jekyll::Page
 		read_yaml(File.join(site.source, layout_dir), layout_name)
 
 		layout_data = Jekyll::Utils.deep_merge_hashes(self.data, {})
+		generated_metadata_hash = Utils.safe_hash(generated_metadata)
 		self.data = Jekyll::Utils.deep_merge_hashes(frontmatter, layout_data)
 		self.data['layout'] = File.basename(layout_name, File.extname(layout_name))
-		self.data['pagination'] = Jekyll::Utils.deep_merge_hashes(pagination_config, Utils.safe_hash(layout_data['pagination']))
+		self.data['pagination'] = Utils.merge_generated_template_pagination(
+			pagination_config,
+			layout_data['pagination'],
+			generated_metadata_hash['compatibility']
+		)
 		self.data['pagination']['template'] = true
-		self.data['paginate_v3'] = Utils.safe_hash(generated_metadata)
+		self.data['paginate_v3'] = generated_metadata_hash
 
 		apply_v2_compatibility_metadata!
 

@@ -47,7 +47,9 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Pagination::Paginator do
 		expect(payload['current'].count).to eq(2)
 		expect(payload['current'].start).to eq(3)
 		expect(payload['current'].to_h['end']).to eq(4)
+		expect(payload['previous'].num).to eq(1)
 		expect(payload['prev'].num).to eq(1)
+		expect(payload['prev']).to equal(payload['previous'])
 		expect(payload['prev'].page.url).to eq('/articles/')
 		expect(payload['prev'].count).to eq(2)
 		expect(payload['prev'].start).to eq(1)
@@ -154,7 +156,9 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Pagination::Paginator do
 		expect(payload['current'].count).to eq(2)
 		expect(payload['current'].start).to eq(7)
 		expect(payload['current'].to_h['end']).to eq(8)
+		expect(payload['previous'].count).to eq(2)
 		expect(payload['prev'].count).to eq(2)
+		expect(payload['prev']).to equal(payload['previous'])
 		expect(payload['prev'].start).to eq(5)
 		expect(payload['prev'].to_h['end']).to eq(6)
 		expect(payload['next'].count).to eq(2)
@@ -206,9 +210,9 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Pagination::Paginator do
 			key: 'category',
 			current: current_reference,
 			next_reference: nil,
-			prev_reference: nil,
 			first_reference: first_reference,
-			last_reference: first_reference
+			last_reference: first_reference,
+			previous_reference: nil
 		)
 		deepest_level_payload = described_class::GroupPayload.new(
 			key: 'size',
@@ -228,5 +232,7 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Pagination::Paginator do
 		expect(payload['group'].current.num).to eq(1)
 		expect(payload['group'].current.to_h).to include('start' => '80', 'end' => '100')
 		expect(payload['group'].next.page.url).to eq('/topics/80/')
+		expect(payload['group'].previous).to be_nil
+		expect(payload['group'].prev).to equal(payload['group'].previous)
 	end
 end

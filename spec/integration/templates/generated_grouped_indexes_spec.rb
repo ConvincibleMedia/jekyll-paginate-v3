@@ -280,6 +280,7 @@ RSpec.describe 'Pagination integration: grouped generated indexes' do
 			expect(groups_payload.map { |entry| entry.fetch('key') }).to eq(%w[category size published_on])
 			expect(paginator_group_payload(target_page).fetch('key')).to eq('published_on')
 			expect(paginator_group_reference(target_page, 'current')).to include('num' => 2)
+			expect(normalise_url_for_match(paginator_group_reference(target_page, 'previous').fetch('page').url)).to eq('/combo/cat/200/2027-01-01')
 			expect(normalise_url_for_match(paginator_group_reference(target_page, 'prev').fetch('page').url)).to eq('/combo/cat/200/2027-01-01')
 		end
 	end

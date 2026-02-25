@@ -12,7 +12,7 @@ module Config
 # - pagination.syntax.*
 # - pagination.templates.location
 # - pagination.templates.generate
-# - pagination.templates.defaults.*
+# - pagination.templates.*
 #
 # Template-level config is normalised to a flat hash used during
 # pagination emission for one concrete template page/document.
@@ -74,8 +74,8 @@ class Normaliser
 		config['compatibility'] = compatibility_mode unless compatibility_mode.nil?
 
 		normalise_site_common!(config, compatibility_mode, raw_pagination)
-		migrate_legacy_shortcuts!(config.dig('templates', 'defaults'), compatibility_mode, raw_pagination)
-		apply_v2_legacy_page_templates!(config.dig('templates', 'defaults'), raw_pagination, compatibility_mode)
+		migrate_legacy_shortcuts!(config['templates'], compatibility_mode, raw_pagination)
+		apply_v2_legacy_page_templates!(config['templates'], raw_pagination, compatibility_mode)
 		migrate_v2_autopages!(config, site_hash['autopages'], compatibility_mode)
 
 		config
@@ -89,7 +89,7 @@ class Normaliser
 	def self.normalise_template_config(site_config, template_pagination_config)
 		raw_template_pagination = Utils.safe_hash(template_pagination_config)
 		compatibility_mode = normalise_compatibility(raw_template_pagination['compatibility']) || normalise_compatibility(site_config['compatibility'])
-		site_template_defaults = Utils.safe_hash(site_config.dig('templates', 'defaults'))
+		site_template_defaults = extract_template_defaults_overrides('templates' => site_config['templates'])
 
 		page_config = Jekyll::Utils.deep_merge_hashes(
 			Utils.deep_copy(site_template_defaults),

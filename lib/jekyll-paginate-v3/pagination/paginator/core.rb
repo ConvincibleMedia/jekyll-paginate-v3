@@ -13,7 +13,7 @@ module Pagination
 # Used by Pagination::Model for every generated page/document.
 class Paginator < ::Liquid::Drop
 
-	attr_reader :per_page, :items, :total_items, :total_indexes, :current, :next, :prev, :first, :last, :trail, :groups
+	attr_reader :per_page, :items, :total_items, :total_indexes, :current, :next, :previous, :first, :last, :trail, :groups
 
 	def initialize(per_page:, items:, current_page:, total_pages:, item_keyword:, compatibility: nil, page_windows: nil)
 		@per_page_pattern = Utils.normalise_per_page_pattern(per_page)
@@ -51,7 +51,7 @@ class Paginator < ::Liquid::Drop
 	def bind_pages(current_page_object:, previous_page_object:, next_page_object:, first_page_object:, last_page_object:)
 		@current_page_object = current_page_object
 		@current = build_index_reference(@current_index_number, nil)
-		@prev = @current_index_number > 1 ? build_index_reference(@current_index_number - 1, previous_page_object) : nil
+		@previous = @current_index_number > 1 ? build_index_reference(@current_index_number - 1, previous_page_object) : nil
 		@next = @current_index_number < @total_indexes ? build_index_reference(@current_index_number + 1, next_page_object) : nil
 		@first = build_index_reference(1, first_page_object, allow_current_page_object: true)
 		@last = build_index_reference(@total_indexes, last_page_object, allow_current_page_object: true)
@@ -70,6 +70,13 @@ class Paginator < ::Liquid::Drop
 	# Shortcut to the deepest grouped-set payload.
 	def group
 		groups.last
+	end
+
+	# Backwards-compatible alias for previous index reference.
+	#
+	# `prev` remains documented and available in Liquid templates.
+	def prev
+		previous
 	end
 
 	# Builds one trail entry for a page number.
@@ -114,14 +121,14 @@ class Paginator < ::Liquid::Drop
 	def previous_page
 		return nil unless compatibility_mode?
 
-		prev&.num
+		previous&.num
 	end
 
 	# Legacy v1/v2 alias for previous page URL.
 	def previous_page_path
 		return nil unless compatibility_mode?
 
-		index_reference_path(prev)
+		index_reference_path(previous)
 	end
 
 	# Legacy v1/v2 alias for next page number.
@@ -221,6 +228,7 @@ class Paginator < ::Liquid::Drop
 			'total_indexes' => total_indexes,
 			'current' => current,
 			'next' => self.next,
+			'previous' => previous,
 			'prev' => prev,
 			'first' => first,
 			'last' => last,
@@ -233,7 +241,7 @@ class Paginator < ::Liquid::Drop
 	# Initialises numeric index references before page objects are bound.
 	def initialise_index_references!
 		@current = build_index_reference(@current_index_number, nil)
-		@prev = @current_index_number > 1 ? build_index_reference(@current_index_number - 1, nil) : nil
+		@previous = @current_index_number > 1 ? build_index_reference(@current_index_number - 1, nil) : nil
 		@next = @current_index_number < @total_indexes ? build_index_reference(@current_index_number + 1, nil) : nil
 		@first = build_index_reference(1, nil)
 		@last = build_index_reference(@total_indexes, nil)

@@ -40,20 +40,18 @@ module Config
 		'templates' => {
 			'location' => 'pages',
 			'generate' => [],
-			'defaults' => {
-				'items' => 'posts',
-				'filters' => [],
-				'sort' => 'date desc',
-				'per_page' => 10,
-				'limit' => 0,
-				'offset' => 0,
-				'trail' => {
-					'before' => 2,
-					'after' => 2
-				},
-				'title' => ':title - page :num',
-				'permalink' => '/page/:num'
-			}
+			'items' => 'posts',
+			'filters' => [],
+			'sort' => 'date desc',
+			'per_page' => 10,
+			'limit' => 0,
+			'offset' => 0,
+			'trail' => {
+				'before' => 2,
+				'after' => 2
+			},
+			'title' => ':title - page :num',
+			'permalink' => '/page/:num'
 		}
 	}.freeze
 
@@ -75,12 +73,10 @@ module Config
 				'items' => 'posts'
 			},
 			'templates' => {
-				'defaults' => {
-					'permalink' => '/page/:num/',
-					'trail' => {
-						'before' => 2,
-						'after' => 2
-					}
+				'permalink' => '/page/:num/',
+				'trail' => {
+					'before' => 2,
+					'after' => 2
 				}
 			}
 		},
@@ -92,9 +88,7 @@ module Config
 			'templates' => {
 				'location' => 'pages',
 				'generate' => [],
-				'defaults' => {
-					'items' => 'posts'
-				}
+				'items' => 'posts'
 			}
 		}
 	}.freeze

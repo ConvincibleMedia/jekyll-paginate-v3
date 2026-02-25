@@ -96,6 +96,26 @@ module Utils
 		layouts.concat(arrayify(source['layout'], split_delimiter: split_delimiter)) if source.key?('layout')
 		layouts.map { |entry| entry.to_s.strip }.reject(&:empty?).uniq
 	end
+
+	# Merges generated-template pagination config with layout pagination.
+	#
+	# Default behaviour matches normal Jekyll precedence semantics:
+	# generated template config overrides layout defaults.
+	#
+	# In v2 compatibility mode we retain legacy override order, but strip
+	# layout `enabled` so generated templates cannot be disabled by layout
+	# frontmatter.
+	def self.merge_generated_template_pagination(generated_pagination, layout_pagination, compatibility_mode)
+		generated_hash = safe_hash(generated_pagination)
+		layout_hash = safe_hash(layout_pagination)
+
+		if compatibility_mode == 'v2'
+			layout_hash.delete('enabled')
+			return Jekyll::Utils.deep_merge_hashes(generated_hash, layout_hash)
+		end
+
+		Jekyll::Utils.deep_merge_hashes(layout_hash, generated_hash)
+	end
 end
 
 end

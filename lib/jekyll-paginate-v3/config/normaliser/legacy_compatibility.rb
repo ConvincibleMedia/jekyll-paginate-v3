@@ -61,13 +61,11 @@ class Normaliser
 			overlay['enabled'] = true
 			overlay['keywords'] = { 'items' => 'posts' }
 			overlay['templates'] = {
-				'defaults' => {
-					'per_page' => site_hash['paginate'].to_i,
-					'items' => 'posts'
-				}
+				'per_page' => site_hash['paginate'].to_i,
+				'items' => 'posts'
 			}
 			unless site_hash['paginate_path'].nil?
-				overlay['templates']['defaults']['permalink'] = site_hash['paginate_path'].to_s
+				overlay['templates']['permalink'] = site_hash['paginate_path'].to_s
 			end
 
 			overlay

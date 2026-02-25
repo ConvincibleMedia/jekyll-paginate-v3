@@ -7,8 +7,8 @@ module Pagination
 
 # Lightweight Liquid-facing object for paginator neighbour links.
 #
-# Exposed under `paginator.current`, `paginator.next`, `paginator.prev`,
-# `paginator.first`, and `paginator.last`.
+# Exposed under `paginator.current`, `paginator.next`, `paginator.previous`,
+# alias `paginator.prev`, plus `paginator.first` and `paginator.last`.
 class IndexReference < ::Liquid::Drop
 	attr_reader :num, :page
 

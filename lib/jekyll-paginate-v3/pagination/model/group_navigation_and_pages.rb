@@ -33,9 +33,9 @@ class Model
 					key: entry['index_key'],
 					current: build_group_reference(entry, current_number, include_page: false),
 					next_reference: next_entry.nil? ? nil : build_group_reference(next_entry, current_number + 1, include_page: true),
-					prev_reference: previous_entry.nil? ? nil : build_group_reference(previous_entry, current_number - 1, include_page: true),
 					first_reference: build_group_reference(first_entry, 1, include_page: true),
-					last_reference: build_group_reference(last_entry, ordered_entries.length, include_page: true)
+					last_reference: build_group_reference(last_entry, ordered_entries.length, include_page: true),
+					previous_reference: previous_entry.nil? ? nil : build_group_reference(previous_entry, current_number - 1, include_page: true)
 				)
 
 				entry['pages'].each do |page|

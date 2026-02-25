@@ -34,7 +34,7 @@ pagination:
   enabled: true
 ```
 
-Create pagination templates (by default these must be pages on the site, not collection documents). Each template specifies what it paginates:
+Create pagination templates (by default these must be pages, not collection documents). Each template specifies what it paginates:
 
 ```yaml
 # post-index.md - example
@@ -46,7 +46,23 @@ pagination:
 ---
 ```
 
-Then on the layouts used by the generated indexes:
+Or alternatively (or in addition), specify that pagination templates should be generated:
+
+```yaml
+# _config.yml
+pagination:
+  enabled: true
+  templates:
+    generate:
+    - items: posts # template to paginate posts
+      layout: post-listing.html
+    - items: news # template to paginate 'news' collection
+      layout: news-listing.html
+```
+
+The paginator will find these templates and create indexes from them (pages with a certain number of the paginated items assigned to them).
+
+Then on the layouts used by the created indexes:
 
 ```liquid
 {% for item in paginator.items %}
@@ -75,7 +91,7 @@ pagination:
     location: pages # see Search Format below
 
     # Auto-generate templates
-    generate: [] # see Template Generation below
+    generate: [] # see Generated Templates below
 
     # The following are treated as default config that will be used for all templates unless overridden
 
@@ -100,13 +116,12 @@ pagination:
 
   syntax:
     separator: '.' # see Nested Keys below
-    split: "," # see Split/Delimiter below
-  keywords: {} # overrides keyword tokens (pages/all/everything/now/today/day/month/year/hour/minute/second/items)
+    split: ',' # see Split/Delimiter below
+  keywords: # see Keywords below
   equivalents: # see Equivalents below
 ```
 
 The values shown above are the defaults that will apply if you don't even specify these config keys.
-Keyword values must be unique, and must match `[a-z]+`.
 
 
 ## Pagination Templates
@@ -118,7 +133,9 @@ pagination:
   enabled: true
 ```
 
-PaginateV3 looks for templates according to the configuration at `pagination.templates.location`, which uses the [Search Format](#search-format). By default this is `pages`, so pagination templates must be site pages. However, for example, you could create a special collection just for your templates, e.g. `index`, and set `pagination.templates.location: index`.
+However, PaginateV3 needs ti *find* this page/document. It looks for templates according to the configuration at `pagination.templates.location`, which uses the [Search Format](#search-format). By default this is `pages`, so pagination templates must be site pages. However, for example, you could create a special collection just for your templates, e.g. `index`, and set `pagination.templates.location: index`.
+
+The template can have additional configuration, which overrides the defaults set in `site.pagination`. You can also place `pagination` configuration in a layout used by a pagination template. The configuration options on both are merged, with the template having priority (unless in v2 compatibility mode, in which the layout has priority).
 
 ### Items
 
@@ -176,14 +193,16 @@ That is:
     * `first`/`first(N)` (e.g. `first(3)`): like `auto` but if array, only the first (N) array elements are considered.
   * `split`: overrides `split` from global config, for this filter only. Set this to `false` to disable splitting of the frontmatter value. Defaults to true: frontmatter values will be treated as arrays if they can be split.
 * Range with `min` and/or `max` for numeric values.
-  * `min`/`max` are inclusive by default, and can be numeric, datetime, or keyword-relative strings.
-  * Optional `mode` controls inclusivity:
-    * `min-inclusive` / `min-exclusive`
-    * `max-inclusive` / `max-exclusive`
-    * combinations such as `min-exclusive max-inclusive`
-  * If omitted, mode defaults to `min-inclusive max-inclusive` for bounds that are present.
-  * `now` means current time, and supports optional whole-second offsets (e.g. `now`, `now+60`, `now-120`). The `now` keyword is configurable at `pagination.keywords.now`.
-  * `today` means the current day, and supports optional whole-day offsets (e.g. `today`, `today+1`, `today-2`). For day-based ranges, `min` uses `00:00:00` and `max` uses `23:59:59`. The `today` keyword is configurable at `pagination.keywords.today`.
+  * `min`/`max` are inclusive by default, and can be:
+    * Numeric e.g. `3`, `0.4`
+    * Date/time e.g. `2026-01-01`, `2026-01-01 12:00:00`
+    * Keyword `today` or `now`
+      * `today` means current day, and supports optional whole-day offsets (e.g. `today`, `today+1`, `today-2`).
+      * `now` means current time, and supports optional whole-second offsets (e.g. `now`, `now+60`, `now-120`).
+  * `mode` (optional) controls inclusivity:
+    * `min-exclusive`
+    * `max-exclusive`
+    * `min-exclusive max-exclusive`
 * Array (or delimited string): combine several filters with an OR operation
 * Hash with:
 
@@ -207,12 +226,12 @@ pagination:
   - date desc
 ```
 
-The syntax is `field [options]`. `sort` doesn't have to be an array, a single sort field can just be a string directly.
+The syntax is `field [options]`. The options are:
 
-Options:
+* direction: `asc`/`ascending` (default) or `desc`/`descending`.
+* empty handling: `empty:first` or `empty:last` (default) specifies how to handle items that lack that frontmatter entirely.
 
-- direction: `asc`/`ascending` (default) or `desc`/`descending`
-- empty handling: `empty:first` or `empty:last` (default) specifies how to handle items that lack that frontmatter entirely
+`sort` doesn't have to be an array, a single sort field can just be a string directly.
 
 ### Trail
 
@@ -231,214 +250,7 @@ The permalink can be used to create index pages at different filenames and with 
 
 ## Generated Templates
 
-This feature automatically generates templates by indexing frontmatter values. This is the successor to the "AutoPages" feature from V2.
-
-```yaml
-pagination:
-  templates:
-    generate:
-    - items: posts # required. Search Format: what items to consider
-      index: tag # optional. frontmatter key(s) to index
-      #filters: # optionally filter those items (same format as pagination filters)
-      layout: tags.html
-      permalink: /tag/:tag/
-      title: 'Posts tagged :tag' # placeholders for the indexed keys
-    - items: products
-      index: category, subcategory # multi-level indexing
-      filter: /^s/ # singular 'filter' is a shorthand to apply filter to the indexed frontmatter key(s)
-      layouts: [autopage_category.html] # multiple layouts
-      frontmatter: # add arbitrary frontmatter
-        section: catalogue
-      #location: # override whether this generated template will be in 'pages' or a collection name
-```
-
-Each `generate` entry must specify `items`; entries without `items` are invalid and are skipped.
-
-If `index` is set, the generator will look in all the items you've identified and index them by the values in the frontmatter key(s) you specify on `index`.
-
-For instance if you look in `posts` and index on `tags`, it might find posts with the tags "cat" and "dog". It will create a pagination template for "cat" and "dog", each of which will paginate posts with the tags "cat" and "dog" respectively.
-
-Generated template `permalink` and `title` strings can use placeholders for every key named in `index`. If `index` is omitted, one template is generated from the entry settings and there are no index-key placeholders available for substitution.
-
-Placeholder values in the permalink are slugified. You can configure this with:
-
-```yaml
-index: category
-permalink: /topic/:category/
-slugify:
-  mode: default # passed to Jekyll::Utils.slugify
-  case: false   # true preserves case
-```
-
-You could generate pagination templates very specifically with a filter, for instance:
-
-```yaml
-generate:
-- items: products
-  index: category
-  filter: coats, boots
-  # generates 2 templates: products with "coats" category, and products with "boots" category
-- items: tools, regions
-  index: collection
-  # generates 2 templates: one for the "tools" collection and one for the "regions" collection
-```
-
-### Grouped Indexing (`generate[].group`)
-
-Generated templates can index frontmatter keys by ranges/bins instead of one-template-per-unique-value.
-
-```yaml
-generate:
-- items: posts
-  index: size
-  group: 100
-  permalink: /size/:size/
-  title: 'Size up to :size'
-```
-
-This produces grouped templates such as `0 <= size <= 100`, `100 < size <= 200`, etc.
-
-You can also group selected keys in multi-level indexing:
-
-```yaml
-generate:
-- items: posts
-  index: category, size, published_on
-  group:
-    size: 100
-    published_on: year
-```
-
-For grouped numeric/datetime keys, placeholder values use the group upper bound. For alphabetic grouping, placeholders use the range start.
-
-#### Group config shape
-
-* Single indexed key:
-  * `group` can be supplied directly (`group: 100`, `group: year`, `group: aa`, or hash long form).
-  * Or explicitly keyed by the indexed key:
-
-  ```yaml
-  index: category
-  group:
-    category: 100
-  ```
-* Multi-level indexed keys:
-  * `group` must be a hash keyed by indexed frontmatter keys.
-  * Grouping can be configured for any subset of indexed keys.
-  * Scalar/unkeyed `group` values are invalid in multi-level mode.
-* For every grouped key, `step` is required (except scalar shorthand forms like `group: 100`).
-* For every grouped key, if `start` is omitted it defaults by mode:
-  * numeric: `0`
-  * datetime: earliest parseable datetime value in the candidate set
-  * alphabetic: `a`
-
-#### Numeric grouping
-
-`group: <number>` is shorthand for:
-
-```yaml
-group:
-  start: 0
-  step: <number>
-  grow: 1
-```
-
-Long form:
-
-```yaml
-group:
-  start: 0        # inclusive start for group 1
-  step: 100       # or [100, 200, 400]
-  grow: 1.1       # only with scalar step; 1 = linear
-  min: 10         # minimum step size after growth
-  max: 1000       # maximum step size after growth
-  empty: true     # emit empty groups too
-  total: 8        # max group count; final group is open-ended
-```
-
-Rules:
-
-* Group 1 is `start <= x <= end`; groups 2+ are `start < x <= end`.
-* If `total` is set, the final group's upper bound is ignored (open-ended lower bound).
-* `step` cannot be negative/zero.
-* `step` arrays cannot be used with `grow`.
-* Safety limits:
-  * `grow` must be between `0.01` and `10000`.
-  * step size is clamped to internal hard bounds (`0.001` to `100000000`).
-  * automatic grouping without `total` stops with an error if it would exceed 100 groups.
-  * `total` can be 1..10000.
-
-#### Datetime grouping
-
-Datetime grouping supports day counts and duration tokens:
-
-```yaml
-group: year # equivalent to year(1)
-# or
-group:
-  start: 2026-12-12
-  step: month(2)      # calendar-aware month increments
-  min: 1              # 1 day
-  max: year(5)
-```
-
-Supported duration forms:
-
-* Numeric values are whole/fractional days.
-* `day(x)`, `month(x)`, `year(x)`, `hour(x)`, `minute(x)`, `second(x)`.
-* Bare unit keywords are allowed and imply `(1)`, e.g. `year`.
-* Unit keywords are configurable at `pagination.keywords.day/month/year/hour/minute/second`.
-
-`start` also supports `now`/`today` (with optional offsets), plus anchored expressions such as `year(today)`, `month(now)`, `hour(now)`, `minute(now)`.
-Anchored expressions use the configured keywords too.
-
-For month/year durations, datetime stepping is calendar-aware (`+2 months` is not approximated as `+60 days`).
-
-Permalink placeholder formatting for grouped datetime indexes:
-
-* `YYYY-MM-DD` by default
-* `YYYY-MM-DD-HH-MM-SS` when grouping uses hour/minute/second units or fractional days
-
-Title placeholders use the calculated upper-bound datetime value.
-
-#### Alphabetic grouping
-
-Alphabetic mode groups by normalised string prefixes:
-
-```yaml
-group: aa
-# or
-group:
-  start: aa
-  step: 2
-  other: '0-9'
-```
-
-Rules:
-
-* `start` is truncated to max length 3.
-* Values are stringified, downcased, transliterated, and grouped by letter prefix.
-* `step` increments the alphabetic token range (`aa-ab`, `ac-ad`, ...).
-* Placeholder values use the range start (not end).
-* Non-letter-leading values are discarded unless `other` is configured.
-* `other` (when configured) is always ordered last.
-* In hash form, `step` is required.
-
-#### Grouping mode detection
-
-Grouping mode is chosen heuristically from `group` config and observed frontmatter values:
-
-* explicit config hints are preferred (`year(...)`, alphabetic `start`, etc.)
-* otherwise values are sampled to infer numeric/datetime/alphabetic mode
-* values that cannot be interpreted for the selected mode are excluded
-
-Internally, grouped templates are emitted using standard filters (including range-filter `mode`) so behaviour is consistent with ordinary pagination filtering.
-
-When grouped-set ordering is calculated, the generate template sort is inspected per grouped key:
-
-* if the grouped index key has explicit sort direction, that direction is used
-* otherwise grouped sets default to ascending order
-* alphabetic `other` groups stay last
+See [Generated Templates](/lib/jekyl-paginate-v3/templates/readme.md) for detailed readme about this feature.
 
 
 ## Search Format
@@ -456,13 +268,11 @@ A number of config keys require that you specify "where in the site to look". Th
 | `all` | Look in the documents of all collections |
 | `everything` | `pages` + `all` |
 
-The special keywords `pages`, `all` and `everything` can be changed with the `pagination.keywords` config (in case you have a collection called "all", for instance). `pagination.keywords` is also used for datetime/grouping keywords (`now`, `today`, `day`, `month`, `year`, `hour`, `minute`, `second`) and `items`.
-
 In the hash form, the hash key is one of the strings above, and the value is a glob pattern. Only file paths that match the glob pattern will be looked at. For instance:
 
 ```yaml
 items:
-  pages: '*' # all pags
+  pages: '*' # all pages
   posts: '/blog/*' # posts in the folder 'blog'
 ```
 
@@ -471,7 +281,7 @@ items:
 
 In several places where config expects an array, you are allowed to specify the array as a delimited string. The default delimiter is `,`, however you can change this with the config `pagination.syntax.split`. Set to `false` to disable splitting.
 
-When filtering items, by default, frontmatter values are also split on the delimiter to treat them as arrays. This can be disabled/adjusted per filter.
+When filtering items, by default, frontmatter values are also split on the delimiter to treat them as arrays. This can be disabled/adjusted per filter by setting `split` on the filter.
 
 
 ## Nested Keys
@@ -491,21 +301,7 @@ data:
 
 `data.categories.size` would access the array `[34, 12]`.
 
-The separator `.` can be changed to a different string using the config `pagination.syntax.separator`.
-
-
-## Equivalents
-
-You can specify frontmatter keys that should be treated as the same frontmatter key. The `equivalents` config is an array of arrays, where the inner array is a set of frontmatter keys to treat as if equivalent.
-
-By default this is set so that `tag` and `tags` are treated as equivalent, as well as `category` and `categories`. So if you filter on either of these, it will be treated the same as filtering on the other.
-
-
-## Compatibility
-
-PaginateV3 is an enhanced replacement for [PaginateV2](https://github.com/sverrirs/jekyll-paginate-v2) or even [V1](https://github.com/jekyll/jekyll-paginate).
-
-Set `pagination: compatibility: v1` or `v2` in your site config to enable compatibility mode. This does not guarantee that behaviour will be identical to those gems, but it will do its best to read your existing config and interpret it correctly.
+The separator `.` can be changed to `:` using the config `pagination.syntax.separator`.
 
 
 ## Paginator
@@ -529,19 +325,42 @@ Set `pagination: compatibility: v1` or `v2` in your site config to enable compat
   * `page`: The actual page/doc object (not set for current page) on which you can access `url` as normal, to get a link to that page.
   * `current`: `true` if this trail item is the current page.
   * `distance`: Relative page number. 0 for current page, positive for pages after, negative for pages before.
-* `groups`: grouped-set navigation payload for generated indexed templates (`templates.generate` + `index`), highest index level first. In non-multi-level indexes this has one element. Each element has:
-  * `key`: frontmatter key represented by this grouped set.
-  * `current`, `next`, `prev`, `first`, `last`: group-set references, where each has:
-    * `num`: 1-based group-set number in the ordered set.
-    * `page`: page/document object for page 1 of that group set (not set for `current`).
-    * `count`: number of items in that group set.
-    * `start`: grouped start label/value.
-    * `end`: grouped end label/value (omitted for open-ended sets and alphabetic `other` sets).
-* `group`: shortcut to the deepest entry of `groups` (`groups[-1]`).
 
 `page.pagination` also remains available, being a copy of the pagination settings from the template that generated this index (minus `enabled`). This allows you to read back settings like `per_page`, `limit`, etc., if needed.
 
-The term "items" to refer to the items being paginated can be changed with the `pagination.keywords.items` config entry. For instance, in V2 the term was "posts".
+
+## Equivalents
+
+You can specify frontmatter keys that should be treated as the same frontmatter key. The `equivalents` config is an array of arrays, where the inner array is a set of frontmatter keys to treat as if equivalent.
+
+By default this is set so that `tag` and `tags` are treated as equivalent, as well as `category` and `categories`. So if you filter on either of these, it will be treated the same as filtering on the other.
+
+
+## Keywords
+
+The following keywords have special meaning in certain contexts within pagination configuration. If these clash with your site (e.g. you have a collection called 'all') then you can change the keyword with `pagination.keywords.<keyword>: 'new_keyword'`.
+
+* `pages`
+* `all`
+* `everything`
+* `now`
+* `today`
+* `day`
+* `month`
+* `year`
+* `hour`
+* `minute`
+* `second`
+* `items`
+
+
+## Compatibility
+
+PaginateV3 can be used as an enhanced replacement for [PaginateV2](https://github.com/sverrirs/jekyll-paginate-v2) or even [V1](https://github.com/jekyll/jekyll-paginate).
+
+Set `pagination: compatibility: v1` or `v2` in your site config to enable compatibility mode. This does not guarantee that behaviour will be identical to those gems, but it will do its best to read your existing config and interpret it as you originally intended.
+
+### V2
 
 In compatibility mode, legacy paginator keys (`page`, `total_pages`, `*_page_path`, `page_trail`, etc., are added alongside the V3 paginator structure.
 

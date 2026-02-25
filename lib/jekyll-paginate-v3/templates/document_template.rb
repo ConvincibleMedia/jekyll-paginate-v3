@@ -20,7 +20,8 @@ class DocumentTemplate < Jekyll::Document
 	def initialize(site:, collection:, layout_name:, pagination_config:, frontmatter:, generated_metadata:)
 		layout_path = resolve_layout_path(site, layout_name)
 		parsed_layout = parse_layout(layout_path)
-		token_signature = Utils.safe_hash(generated_metadata['tokens']).sort.to_h.to_s
+		generated_metadata_hash = Utils.safe_hash(generated_metadata)
+		token_signature = Utils.safe_hash(generated_metadata_hash['tokens']).sort.to_h.to_s
 		virtual_path = File.join(site.source, collection.relative_directory, "_paginate_v3_#{Digest::MD5.hexdigest([layout_name, token_signature].join(':'))}.md")
 
 		initialise_document(site, collection, virtual_path)
@@ -29,9 +30,13 @@ class DocumentTemplate < Jekyll::Document
 		merge_data!(frontmatter)
 		self.content = parsed_layout['content']
 		self.data['layout'] = File.basename(layout_name, File.extname(layout_name))
-		self.data['pagination'] = Jekyll::Utils.deep_merge_hashes(pagination_config, Utils.safe_hash(parsed_layout['data']['pagination']))
+		self.data['pagination'] = Utils.merge_generated_template_pagination(
+			pagination_config,
+			parsed_layout['data']['pagination'],
+			generated_metadata_hash['compatibility']
+		)
 		self.data['pagination']['template'] = true
-		self.data['paginate_v3'] = Utils.safe_hash(generated_metadata)
+		self.data['paginate_v3'] = generated_metadata_hash
 
 		apply_v2_compatibility_metadata!
 
