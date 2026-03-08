@@ -2,16 +2,16 @@
 
 RSpec.describe Jekyll::Plugins::PaginateV3::Query::Filter do
 	TestCollection = Struct.new(:label)
-	TestItem = Struct.new(:data, :collection)
+	TestItem = Struct.new(:data, :collection, :path)
 
 	# Builds a minimal item object compatible with filter evaluation.
-	def build_item(data, collection: nil)
+	def build_item(data, collection: nil, path: nil)
 		collection_object = collection.nil? ? nil : TestCollection.new(collection)
-		TestItem.new(data, collection_object)
+		TestItem.new(data, collection_object, path)
 	end
 
 	# Runs the filter engine with stable defaults used across examples.
-	def apply_filters(items, filters, now_keyword: 'now', today_keyword: 'today', split_delimiter: ',')
+	def apply_filters(items, filters, now_keyword: 'now', today_keyword: 'today', split_delimiter: ',', log_lambda: nil, context_label: nil)
 		described_class.filter_items(
 			items,
 			filters,
@@ -19,7 +19,9 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Query::Filter do
 			equivalents: [%w[tag tags]],
 			split_delimiter: split_delimiter,
 			now_keyword: now_keyword,
-			today_keyword: today_keyword
+			today_keyword: today_keyword,
+			log_lambda: log_lambda,
+			context_label: context_label
 		)
 	end
 
@@ -31,6 +33,56 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Query::Filter do
 
 		filtered = apply_filters(items, { 'category' => { 'unsupported' => 'value' } })
 		expect(filtered).to eq(items)
+	end
+
+	it 'logs a warning when a filter definition is invalid' do
+		logger = double('logger', call: nil)
+		items = [
+			build_item({ 'title' => 'One', 'category' => 'news' }, path: '_posts/one.md')
+		]
+
+		filtered = apply_filters(
+			items,
+			{ 'category' => { 'unsupported' => 'value' } },
+			log_lambda: logger.method(:call),
+			context_label: "Template 'index.md'"
+		)
+
+		expect(filtered).to eq(items)
+		expect(logger).to have_received(:call).with(
+			a_string_including("Template 'index.md': Ignoring invalid filter for key='category'"),
+			'warn'
+		)
+	end
+
+	it 'logs detailed debug diagnostics for key-level filtering decisions' do
+		logger = double('logger', call: nil)
+		items = [
+			build_item({ 'title' => 'One', 'category' => 'news' }, path: '_posts/one.md'),
+			build_item({ 'title' => 'Two', 'category' => 'blog' }, path: '_posts/two.md'),
+			build_item({ 'title' => 'Three' }, path: '_posts/three.md')
+		]
+
+		filtered = apply_filters(
+			items,
+			{ 'category' => 'news' },
+			log_lambda: logger.method(:call),
+			context_label: "Template 'index.md'"
+		)
+
+		expect(filtered).to eq([items.first])
+		expect(logger).to have_received(:call).with(
+			a_string_including("Template 'index.md': Filter key='category'"),
+			'debug'
+		)
+		expect(logger).to have_received(:call).with(
+			a_string_including("Filter key='category' missing key/value on: _posts/three.md"),
+			'debug'
+		)
+		expect(logger).to have_received(:call).with(
+			a_string_including("Filter key='category' excluded item sample: _posts/two.md=[\"blog\"]"),
+			'debug'
+		)
 	end
 
 	it 'distinguishes strict and auto scalar matching for array values' do

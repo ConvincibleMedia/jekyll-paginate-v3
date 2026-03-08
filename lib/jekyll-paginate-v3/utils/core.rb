@@ -29,15 +29,13 @@ module Utils
 		delimiter.empty? ? default_delimiter : delimiter
 	end
 
-	# Splits one string using the configured delimiter, trims entries, and
-	# rejects blank strings.
+	# Splits one string using the configured delimiter, trims entries, and rejects blank strings.
 	def self.split_delimited_string(value, delimiter)
 		split_pattern = Regexp.new(Regexp.escape(delimiter.to_s))
 		value.to_s.split(split_pattern, -1).map(&:strip).reject(&:empty?)
 	end
 
-	# Converts scalars/arrays into a flat array and applies delimited-string
-	# expansion for all string entries.
+	# Converts scalars/arrays into a flat array and applies delimited-string expansion for all string entries.
 	def self.delimited_array(value, delimiter: ',')
 		if value.is_a?(Array)
 			value.flatten.compact.flat_map do |entry|
@@ -52,8 +50,7 @@ module Utils
 		end
 	end
 
-	# Converts a value into an array. Strings can be treated as
-	# delimiter-defined lists.
+	# Converts a value into an array. Strings can be treated as delimiter-defined lists.
 	def self.arrayify(value, split_commas: false, split_delimiter: nil)
 		delimiter = split_delimiter
 		delimiter = ',' if delimiter.nil? && split_commas
@@ -99,12 +96,9 @@ module Utils
 
 	# Merges generated-template pagination config with layout pagination.
 	#
-	# Default behaviour matches normal Jekyll precedence semantics:
-	# generated template config overrides layout defaults.
+	# Default behaviour matches normal Jekyll precedence semantics: generated template config overrides layout defaults.
 	#
-	# In v2 compatibility mode we retain legacy override order, but strip
-	# layout `enabled` so generated templates cannot be disabled by layout
-	# frontmatter.
+	# In v2 compatibility mode we retain legacy override order, but strip layout `enabled` so generated templates cannot be disabled by layout frontmatter.
 	def self.merge_generated_template_pagination(generated_pagination, layout_pagination, compatibility_mode)
 		generated_hash = safe_hash(generated_pagination)
 		layout_hash = safe_hash(layout_pagination)

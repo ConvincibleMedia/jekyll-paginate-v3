@@ -112,8 +112,10 @@ pagination:
     # URL of index pages
     permalink: /page/:num # relative to the template's permalink
 
-  compatibility: # optional: v2 or v1
+  # Compatibility mode
+  compatibility: # optional: 'v2' or 'v1'
 
+  # Advanced settings
   syntax:
     separator: '.' # see Nested Keys below
     split: ',' # see Split/Delimiter below
@@ -121,7 +123,7 @@ pagination:
   equivalents: # see Equivalents below
 ```
 
-The values shown above are the defaults that will apply if you don't even specify these config keys.
+Where values are shown above, these are the defaults that will apply if you don't even specify these config keys.
 
 
 ## Pagination Templates
@@ -250,7 +252,7 @@ The permalink can be used to create index pages at different filenames and with 
 
 ## Generated Templates
 
-See [Generated Templates](/lib/jekyl-paginate-v3/templates/readme.md) for detailed readme about this feature.
+See [Generated Templates](/lib/jekyll-paginate-v3/templates/readme.md) for detailed readme about this feature.
 
 
 ## Search Format

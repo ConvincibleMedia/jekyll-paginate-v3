@@ -5,8 +5,7 @@ module Plugins
 module PaginateV3
 module Config
 
-# Normalises site and template pagination config into predictable
-# internal structures consumed by pagination runtime classes.
+# Normalises site and template pagination config into predictable internal structures consumed by pagination runtime classes.
 #
 # Site-level config is normalised to the nested public v3 structure:
 # - pagination.syntax.*

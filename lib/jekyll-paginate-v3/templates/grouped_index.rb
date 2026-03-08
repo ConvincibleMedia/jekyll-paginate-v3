@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require 'date'
-require 'unicode_normalize'
+require 'unicode_normalize/normalize'
 require 'jekyll-paginate-v3/templates/grouped_index/core'
 require 'jekyll-paginate-v3/templates/grouped_index/mode_detection'
 require 'jekyll-paginate-v3/templates/grouped_index/config_normalisation'

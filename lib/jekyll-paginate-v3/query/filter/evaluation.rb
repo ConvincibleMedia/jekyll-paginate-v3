@@ -221,6 +221,13 @@ class Filter
 
 		@log_lambda.call(message, 'warn')
 	end
+
+	# Emits a debug message through the optional logger callback.
+	def log_debug(message)
+		return if @log_lambda.nil?
+
+		@log_lambda.call(message, 'debug')
+	end
 end
 
 end

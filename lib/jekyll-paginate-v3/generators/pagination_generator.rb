@@ -19,6 +19,7 @@ class PaginationGenerator < Jekyll::Generator
 	# Normalises config, wires lightweight callbacks for mutating site
 	# content, then delegates all pagination behaviour to Pagination::Model.
 	def generate(site)
+		logger = nil
 		config = Config::Normaliser.normalise_site_config(site.config)
 		config = enable_implicit_v1_compatibility(config, site)
 
@@ -29,6 +30,7 @@ class PaginationGenerator < Jekyll::Generator
 			logger.info('Disabled in site config.')
 			return
 		end
+		logger.info('Enabled. Starting pagination pipeline.')
 
 		# Shared logger callback so deeper layers do not depend directly on
 		# Jekyll logger globals.
@@ -65,6 +67,13 @@ class PaginationGenerator < Jekyll::Generator
 
 		processed_templates = model.run
 		logger.info("Complete, processed #{processed_templates} pagination template(s)")
+	rescue StandardError => error
+		if logger.nil?
+			Jekyll.logger.error('Pagination:', "Failed with #{error.class}: #{error.message}")
+		else
+			logger.error("Failed with #{error.class}: #{error.message}")
+		end
+		raise
 	end
 
 	private

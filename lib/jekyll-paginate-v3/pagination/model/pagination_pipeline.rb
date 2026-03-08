@@ -13,10 +13,12 @@ class Model
 	private
 	
 	def paginate_template(template, config)
+		template_path = Utils.relative_item_path(template)
 		split_delimiter = config['split'] || @split_delimiter
 		nested_separator = config['separator'] || @nested_separator
 		all_items = resolve_items(config['items'])
-		@log_lambda.call("Template '#{Utils.relative_item_path(template)}': resolved #{all_items.length} candidate item(s).", 'debug')
+		@log_lambda.call("Template '#{template_path}': resolved #{all_items.length} candidate item(s).", 'debug')
+		log_item_path_sample("Template '#{template_path}': candidate item sample", all_items)
 		filtered_items = Query::Filter.filter_items(
 			all_items,
 			config['filters'],
@@ -25,9 +27,11 @@ class Model
 			split_delimiter: split_delimiter,
 			now_keyword: config.dig('keywords', 'now') || @site_config.dig('keywords', 'now'),
 			today_keyword: config.dig('keywords', 'today') || @site_config.dig('keywords', 'today'),
-			log_lambda: @log_lambda
+			log_lambda: @log_lambda,
+			context_label: "Template '#{template_path}'"
 		)
-		@log_lambda.call("Template '#{Utils.relative_item_path(template)}': #{filtered_items.length} item(s) after filters=#{config['filters']}.", 'debug')
+		@log_lambda.call("Template '#{template_path}': #{filtered_items.length} item(s) after filters=#{config['filters']}.", 'debug')
+		log_item_path_sample("Template '#{template_path}': filtered item sample", filtered_items)
 
 		sorted_items = Query::Sorter.apply(
 			filtered_items,
@@ -36,20 +40,24 @@ class Model
 			equivalents: @equivalents,
 			split_delimiter: split_delimiter
 		)
-		@log_lambda.call("Template '#{Utils.relative_item_path(template)}': sorted #{sorted_items.length} item(s) by #{config['sort']} before offset.", 'debug')
+		@log_lambda.call("Template '#{template_path}': sorted #{sorted_items.length} item(s) by #{config['sort']} before offset.", 'debug')
+		log_item_path_sample("Template '#{template_path}': sorted item sample", sorted_items)
 
 		offset = [config['offset'].to_i, 0].max
 		sorted_items = sorted_items.drop(offset)
-		@log_lambda.call("Template '#{Utils.relative_item_path(template)}': #{sorted_items.length} item(s) after offset=#{offset}.", 'debug')
+		@log_lambda.call("Template '#{template_path}': #{sorted_items.length} item(s) after offset=#{offset}.", 'debug')
+		log_item_path_sample("Template '#{template_path}': offset item sample", sorted_items)
 
 		page_windows = Utils.build_pagination_windows(sorted_items.length, config['per_page'])
 		# `limit` caps the number of emitted index pages, not the source items.
 		if config['limit'].to_i > 0
+			original_window_count = page_windows.length
 			page_windows = page_windows.first(config['limit'].to_i)
+			@log_lambda.call("Template '#{template_path}': page windows limited from #{original_window_count} to #{page_windows.length} by limit=#{config['limit']}.", 'debug')
 		end
 		total_pages = page_windows.length
 
-		@log_lambda.call("Template '#{Utils.relative_item_path(template)}': generating #{total_pages} page(s) with per_page=#{config['per_page']} limit=#{config['limit']}.", 'debug')
+		@log_lambda.call("Template '#{template_path}': generating #{total_pages} page(s) with per_page=#{config['per_page']} limit=#{config['limit']}.", 'debug')
 		generated_pages = emit_paginated_pages(template, config, sorted_items, page_windows)
 		register_grouped_set_if_applicable(template, config, generated_pages)
 	end

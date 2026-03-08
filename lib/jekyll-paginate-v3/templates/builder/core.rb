@@ -53,7 +53,8 @@ class Builder
 				split_delimiter: @split_delimiter,
 				now_keyword: @site_config.dig('keywords', 'now'),
 				today_keyword: @site_config.dig('keywords', 'today'),
-				log_lambda: @log_lambda
+				log_lambda: @log_lambda,
+				context_label: "Generated definition #{definition_index + 1}"
 			)
 			@log_lambda.call("Definition #{definition_index + 1} retained #{source_items.length} source item(s) after filters.", 'debug')
 
