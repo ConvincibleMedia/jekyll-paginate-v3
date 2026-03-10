@@ -53,7 +53,12 @@ class Normaliser
 
 			config['keywords'] = normalise_keywords(config['keywords'])
 			config['equivalents'] = normalise_equivalents(config['equivalents'], split_delimiter)
-			config['templates'] = normalise_templates(config['templates'], split_delimiter: split_delimiter, raw_overrides: raw_overrides)
+			config['templates'] = normalise_templates(
+				config['templates'],
+				split_delimiter: split_delimiter,
+				raw_overrides: raw_overrides,
+				keywords: config['keywords']
+			)
 		end
 
 		# Resolves template syntax from local overrides, accepting both the
@@ -174,7 +179,7 @@ class Normaliser
 		# Connects to: the surrounding pagination flow in this file.
 		# Params: `raw_templates`, `split_delimiter`, `raw_overrides`.
 		# Returns: a value consumed by the next pipeline step.
-		def normalise_templates(raw_templates, split_delimiter:, raw_overrides:)
+		def normalise_templates(raw_templates, split_delimiter:, raw_overrides:, keywords:)
 			defaults = Utils.deep_copy(DEFAULTS['templates'])
 			source_hash = Utils.safe_hash(raw_templates)
 			source = defaults.merge(source_hash)
@@ -192,7 +197,8 @@ class Normaliser
 			source = normalise_template_defaults(
 				source,
 				raw_overrides: extract_template_defaults_overrides(raw_overrides),
-				split_delimiter: split_delimiter
+				split_delimiter: split_delimiter,
+				keywords: keywords
 			)
 
 			source
@@ -219,12 +225,17 @@ class Normaliser
 
 		# Normalises one template-default hash (used by site defaults and
 		# by per-template runtime config).
-		def normalise_template_defaults(template_defaults, raw_overrides:, split_delimiter:)
+		def normalise_template_defaults(template_defaults, raw_overrides:, split_delimiter:, keywords:)
 			config = Utils.safe_hash(template_defaults)
 			template_override_hash = extract_template_defaults_overrides(raw_overrides)
 			sort_explicitly_set = template_override_hash.key?('sort') && present_config_value?(template_override_hash['sort'])
 
 			config['items'] = normalise_items_value(config['items'])
+			config['collection'] = normalise_collection_targets(
+				config['collection'],
+				split_delimiter: split_delimiter,
+				keywords: keywords
+			)
 			config['filters'] = Utils.safe_hash(config['filters'])
 			config['offset'] = [config['offset'].to_i, 0].max
 			config['per_page'] = normalise_per_page(config['per_page'], split_delimiter: split_delimiter)
@@ -247,6 +258,54 @@ class Normaliser
 			config.delete('extension')
 
 			config
+		end
+
+		# Normalises index destination config accepted on `pagination.collection`.
+		#
+		# Accepts:
+		# - String values (`self`, `shadow`, `clone`, `pages`, collection label)
+		# - Arrays
+		# - Delimited strings (using configured split delimiter)
+		#
+		# Returns an array with one or two canonical entries.
+		def normalise_collection_targets(raw_collection, split_delimiter:, keywords:)
+			default_targets = Utils.deep_copy(DEFAULTS.dig('templates', 'collection'))
+			entries = Utils.delimited_array(raw_collection, delimiter: split_delimiter)
+			entries = Utils.deep_copy(default_targets) if entries.empty?
+
+			normalised = entries.map do |entry|
+				normalise_collection_target_entry(entry, keywords)
+			end.reject { |entry| entry.to_s.empty? }
+
+			normalised = Utils.deep_copy(default_targets) if normalised.empty?
+			if normalised.length > 2
+				raise ArgumentError, 'pagination.collection may contain at most two values.'
+			end
+
+			normalised
+		end
+
+		# Converts one collection target token into canonical runtime value.
+		def normalise_collection_target_entry(raw_entry, keywords)
+			entry = raw_entry.to_s.strip
+			return '' if entry.empty?
+
+			keyword_map = {
+				'pages' => keywords['pages'],
+				'self' => keywords['self'],
+				'shadow' => keywords['shadow'],
+				'clone' => keywords['clone']
+			}
+
+			keyword_map.each do |canonical, keyword|
+				next if keyword.to_s.empty?
+				return canonical if entry == keyword
+			end
+
+			canonical = entry.downcase
+			return canonical if %w[pages self shadow clone].include?(canonical)
+
+			entry
 		end
 
 		# Builds internal page template settings.

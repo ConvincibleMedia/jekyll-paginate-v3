@@ -18,7 +18,7 @@ pagination:
       layouts: [autopage_category.html] # multiple layouts
       frontmatter: # add arbitrary frontmatter
         section: catalogue
-      location: # override whether this generated template will be in 'pages' or a collection name
+      collection: pages # the type of page/document created indexes will be (see Created Index Pages in main readme)
 ```
 
 Each entry under `generate` provides an instruction for one or more templates to generate.

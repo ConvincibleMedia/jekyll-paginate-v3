@@ -1,13 +1,13 @@
 # frozen_string_literal: true
 
 RSpec.describe Jekyll::Plugins::PaginateV3::Templates::GroupedIndex do
-	TestCollection = Struct.new(:label)
-	TestItem = Struct.new(:data, :collection)
+	GroupedIndexTestCollection = Struct.new(:label)
+	GroupedIndexTestItem = Struct.new(:data, :collection)
 
 	# Builds a minimal item object compatible with grouped indexing evaluation.
 	def build_item(data, collection: nil)
-		collection_object = collection.nil? ? nil : TestCollection.new(collection)
-		TestItem.new(data, collection_object)
+		collection_object = collection.nil? ? nil : GroupedIndexTestCollection.new(collection)
+		GroupedIndexTestItem.new(data, collection_object)
 	end
 
 	# Runs grouped indexing with stable defaults.

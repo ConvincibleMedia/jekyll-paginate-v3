@@ -57,10 +57,10 @@ class GroupedIndex
 		case @raw_group
 		when Hash
 			hash_group = Utils.safe_hash(@raw_group)
+			return 'datetime' if datetime_group_hash_hint?(hash_group)
 			start_value = hash_group['start']
 			return 'alphabetic' if alphabetic_start_token?(start_value)
 			return 'alphabetic' if hash_group.key?('other')
-			return 'datetime' if datetime_group_hash_hint?(hash_group)
 		when String
 			value = @raw_group.strip
 			return nil if value.empty?
@@ -247,8 +247,8 @@ class GroupedIndex
 	def alphabetic_start_token?(value)
 		return false unless value.is_a?(String)
 
-		token = normalise_alpha_value(value)['letters']
-		!token.empty?
+		normalised = normalise_alpha_value(value)
+		normalised['starts_with_letter'] && !normalised['letters'].empty?
 	end
 
 	# Detects duration-like expressions such as `month(2)`.

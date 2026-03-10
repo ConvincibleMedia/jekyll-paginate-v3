@@ -12,7 +12,7 @@ class Builder
 
 	private
 
-	def normalise_definition(raw_definition, default_location)
+	def normalise_definition(raw_definition, default_collection)
 		definition = Utils.safe_hash(raw_definition)
 		return nil if definition.empty?
 		silent = normalise_boolean(definition['silent'])
@@ -50,7 +50,7 @@ class Builder
 			'group_by_key' => group_configuration['group_by_key'],
 			'group_fallback_by_key' => group_configuration['group_fallback_by_key'],
 			'layouts' => layouts,
-			'location' => normalise_location(definition['location'], default_location),
+			'collection' => normalise_collection(definition['collection'], default_collection),
 			'frontmatter' => Utils.safe_hash(definition['frontmatter']),
 			'permalink' => definition['permalink'].to_s,
 			'title' => definition['title'].to_s,
@@ -71,18 +71,38 @@ class Builder
 		overrides
 	end
 
-	# Purpose: Normalises location into canonical form.
+	# Purpose: Normalises collection targets into canonical form.
 	# Connects to: the surrounding pagination flow in this file.
-	# Params: `raw_location`, `default_location`.
+	# Params: `raw_collection`, `default_collection`.
 	# Returns: a value consumed by the next pipeline step.
-	def normalise_location(raw_location, default_location)
-		location = raw_location.to_s.strip
-		return default_location if location.empty?
+	def normalise_collection(raw_collection, default_collection)
+		entries = Utils.delimited_array(raw_collection, delimiter: @split_delimiter)
+		entries = Utils.deep_copy(default_collection) if entries.empty?
+		if entries.length > 2
+			raise ArgumentError, 'Generated index config `collection` may contain at most two values.'
+		end
 
-		return 'pages' if location == 'pages'
-		return default_location if location == 'all' || location == 'everything'
+		entries = entries.map { |entry| normalise_collection_entry(entry) }.reject { |entry| entry.to_s.empty? }
+		entries = Utils.deep_copy(default_collection) if entries.empty?
+		entries
+	end
 
-		location
+	# Normalises one collection target and coerces template-relative keywords.
+	def normalise_collection_entry(raw_entry)
+		entry = raw_entry.to_s.strip
+		return '' if entry.empty?
+
+		pages_keyword = @site_config.dig('keywords', 'pages').to_s
+		self_keyword = @site_config.dig('keywords', 'self').to_s
+		shadow_keyword = @site_config.dig('keywords', 'shadow').to_s
+		clone_keyword = @site_config.dig('keywords', 'clone').to_s
+
+		return 'pages' if entry == pages_keyword || entry.casecmp('pages').zero?
+		return 'pages' if entry == self_keyword || entry.casecmp('self').zero?
+		return 'pages' if entry == shadow_keyword || entry.casecmp('shadow').zero?
+		return 'pages' if entry == clone_keyword || entry.casecmp('clone').zero?
+
+		entry
 	end
 
 	# Returns true when a config value should be treated as explicitly set.
@@ -157,14 +177,19 @@ class Builder
 		}
 	end
 
-	# Uses `templates.location` to infer whether generated templates should
-	# default to `pages` or a collection.
-	def default_generation_location
-		first_type = Query::Parser.first_type(@site_config.dig('templates', 'location'), @site_config['keywords'], split_delimiter: @split_delimiter)
-		return 'pages' if first_type.nil?
-		return 'pages' if %w[pages all everything].include?(first_type)
+	# Resolves default generated-template collection targets from site defaults.
+	#
+	# `self`, `shadow`, and `clone` are template-relative modes and therefore
+	# become `pages` during template generation.
+	def default_generation_collection
+		raw_collection = @site_config.dig('templates', 'collection')
+		entries = Utils.arrayify(raw_collection).map { |entry| entry.to_s.strip }.reject(&:empty?)
+		entries = ['pages'] if entries.empty?
+		if entries.length > 2
+			raise ArgumentError, 'pagination.collection may contain at most two values.'
+		end
 
-		first_type
+		entries.map { |entry| normalise_collection_entry(entry) }
 	end
 
 	# Builds one concise debug label for configured index keys.

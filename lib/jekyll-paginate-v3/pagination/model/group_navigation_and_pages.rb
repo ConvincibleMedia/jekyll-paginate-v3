@@ -129,7 +129,6 @@ class Model
 	def resolved_page_permalink(template, config, current_page, total_pages)
 		page_template = page_template_config(config, current_page)
 		template_permalink = Utils.format_page_number(page_template['permalink'], current_page, total_pages)
-		return nil if template_permalink.to_s.strip.empty? && current_page == 1
 		return Utils.ensure_leading_slash(template_permalink) if v1_absolute_paginate_path?(config, current_page)
 
 		first_page_url = template_first_page_url(template)

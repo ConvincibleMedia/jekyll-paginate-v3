@@ -1,13 +1,13 @@
 # frozen_string_literal: true
 
 RSpec.describe Jekyll::Plugins::PaginateV3::Query::Sorter do
-	TestCollection = Struct.new(:label)
-	TestItem = Struct.new(:data, :collection)
+	SorterTestCollection = Struct.new(:label)
+	SorterTestItem = Struct.new(:data, :collection)
 
 	# Builds a minimal item object compatible with sorter evaluation.
 	def build_item(data, collection: nil)
-		collection_object = collection.nil? ? nil : TestCollection.new(collection)
-		TestItem.new(data, collection_object)
+		collection_object = collection.nil? ? nil : SorterTestCollection.new(collection)
+		SorterTestItem.new(data, collection_object)
 	end
 
 	# Runs the sorter with stable defaults used across examples.

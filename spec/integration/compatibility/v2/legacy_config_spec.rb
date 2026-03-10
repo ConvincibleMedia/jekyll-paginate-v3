@@ -11,7 +11,7 @@ RSpec.describe 'Pagination integration: v2 legacy configuration' do
 							'permalink' => '/shop/',
 							'pagination' => {
 								'enabled' => true,
-								'collection' => 'products',
+								'items' => 'products',
 								'category' => 'featured',
 								'per_page' => 1,
 								'sort' => 'title asc'
@@ -194,7 +194,7 @@ RSpec.describe 'Pagination integration: v2 legacy configuration' do
 								'permalink' => '/shop/',
 								'pagination' => {
 									'enabled' => true,
-									'collection' => 'products',
+									'items' => 'products',
 									'category' => 'featured',
 									'tag' => 'sale',
 									'locale' => 'en_GB',

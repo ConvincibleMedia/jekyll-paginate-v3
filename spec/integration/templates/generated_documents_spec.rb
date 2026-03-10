@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 RSpec.describe 'Pagination integration: generated templates in collections' do
-	it 'creates generated templates as collection documents when location is a collection' do
+	it 'creates generated templates as collection documents when collection target is a collection' do
 		files = post_files(3) do |index|
 			case index
 			when 1 then { 'category' => 'news' }
@@ -21,7 +21,7 @@ RSpec.describe 'Pagination integration: generated templates in collections' do
 								'items' => 'posts',
 								'index' => 'category',
 								'layout' => 'autopage_category.html',
-								'location' => 'guides',
+								'collection' => 'guides',
 								'permalink' => '/guides/:category/',
 								'title' => 'Guide :category',
 								'per_page' => 1,
@@ -81,7 +81,7 @@ RSpec.describe 'Pagination integration: generated templates in collections' do
 		end
 	end
 
-	it 'defaults generated template location from templates.location when omitted' do
+	it 'defaults generated template collection target from pagination.collection when omitted' do
 		files = post_files(1) { { 'category' => 'news' } }
 
 		jekyll_build(
@@ -89,8 +89,8 @@ RSpec.describe 'Pagination integration: generated templates in collections' do
 			config: {
 				'pagination' => {
 					'enabled' => true,
+					'collection' => 'products',
 					'templates' => {
-						'location' => 'products',
 						'generate' => [
 							{
 								'items' => 'posts',
@@ -111,4 +111,3 @@ RSpec.describe 'Pagination integration: generated templates in collections' do
 		end
 	end
 end
-

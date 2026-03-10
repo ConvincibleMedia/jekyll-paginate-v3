@@ -9,6 +9,7 @@ module Config
 #
 # Site-level config is normalised to the nested public v3 structure:
 # - pagination.syntax.*
+# - pagination.collection
 # - pagination.templates.location
 # - pagination.templates.generate
 # - pagination.templates.*
@@ -18,7 +19,7 @@ module Config
 class Normaliser
 	
 	LEGACY_FILTER_KEYS = %w[category tag locale].freeze
-	LEGACY_TEMPLATE_DEFAULT_KEYS = %w[items filters sort per_page limit offset trail title permalink sort_field sort_reverse indexpage extension].freeze
+	LEGACY_TEMPLATE_DEFAULT_KEYS = %w[items collection filters sort per_page limit offset trail title permalink sort_field sort_reverse indexpage extension].freeze
 	LEGACY_SITE_KEY_ALIASES = %w[split separator nested_key_separator].freeze
 	V2_AUTOPAGE_DEFAULTS = {
 		'tags' => {
@@ -109,7 +110,8 @@ class Normaliser
 		page_config = normalise_template_defaults(
 			page_config,
 			raw_overrides: raw_template_pagination,
-			split_delimiter: syntax['split']
+			split_delimiter: syntax['split'],
+			keywords: site_config['keywords']
 		)
 
 		migrate_legacy_shortcuts!(page_config, compatibility_mode, raw_template_pagination)

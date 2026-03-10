@@ -79,13 +79,13 @@ class Model
 
 		page_windows.each do |page_window|
 			current_page = page_window['num']
-			# Preserve the source item type: collection templates emit documents,
-			# page templates emit pages.
-			generated = if template.respond_to?(:collection)
-										Pages::Document.new(template, current_page, total_pages, index_file)
-									else
-										Pages::Page.new(template, current_page, total_pages, index_file)
-									end
+			generated = build_generated_item(
+				template: template,
+				config: config,
+				current_page: current_page,
+				total_pages: total_pages,
+				index_file: index_file
+			)
 
 			generated.pager = Paginator.new(
 				per_page: config['per_page'],
@@ -123,6 +123,127 @@ class Model
 		bind_paginator_references(new_pages)
 		apply_page_trail(new_pages, config)
 		new_pages
+	end
+
+	# Builds one generated index object according to configured collection mode.
+	def build_generated_item(template:, config:, current_page:, total_pages:, index_file:)
+		target_mode = collection_target_mode_for_page(template, config, current_page)
+		target_collection = collection_target_for_page(template, target_mode)
+
+		case target_mode
+		when 'pages'
+			Pages::Page.new(template, current_page, total_pages, index_file)
+		when 'shadow'
+			Pages::ShadowPage.new(
+				template,
+				current_page,
+				total_pages,
+				index_file,
+				collection: collection_template?(template) ? template.collection : nil
+			)
+		else
+			if target_collection.nil?
+				raise ArgumentError, "Unable to resolve collection target '#{target_mode}' for template '#{Utils.relative_item_path(template)}'."
+			end
+
+			Pages::Document.new(
+				template,
+				current_page,
+				total_pages,
+				index_file,
+				collection: target_collection
+			)
+		end
+	end
+
+	# Resolves one normalised collection mode for a generated page number.
+	def collection_target_mode_for_page(template, config, current_page)
+		targets = Utils.arrayify(config['collection']).map(&:to_s).map(&:strip).reject(&:empty?)
+		targets = ['self', 'shadow'] if targets.empty?
+		target = current_page == 1 ? targets.first : targets.last
+
+		normalise_collection_target_for_template(template, target)
+	end
+
+	# Resolves one collection object for collection-targeted modes.
+	def collection_target_for_page(template, target_mode)
+		case target_mode
+		when 'self'
+			return template.collection if collection_template?(template)
+		when 'clone'
+			return clone_collection_for(template.collection) if collection_template?(template)
+		when 'pages', 'shadow'
+			return nil
+		end
+
+		ensure_collection_exists(target_mode)
+	end
+
+	# Converts abstract target modes to executable runtime modes.
+	def normalise_collection_target_for_template(template, target_mode)
+		value = target_mode.to_s.strip
+		value = 'pages' if value.empty?
+		return value unless %w[self shadow clone].include?(value)
+		return 'pages' unless collection_template?(template)
+		return value if value == 'self'
+		return value if value == 'clone'
+
+		'shadow'
+	end
+
+	# Returns true when a template is a collection document.
+	def collection_template?(template)
+		template.is_a?(Jekyll::Document)
+	end
+
+	# Resolves or creates clone collection (`<source>_indexes`) for one source.
+	def clone_collection_for(source_collection)
+		source_label = source_collection.label.to_s
+		return @clone_collection_cache[source_label] if @clone_collection_cache.key?(source_label)
+
+		clone_label = "#{source_label}_indexes"
+		collection = ensure_collection_exists(clone_label, clone_of: source_label)
+		@clone_collection_cache[source_label] = collection
+	end
+
+	# Resolves a named collection, optionally creating and cloning config.
+	def ensure_collection_exists(collection_label, clone_of: nil)
+		label = collection_label.to_s.strip
+		return nil if label.empty?
+
+		collections = @site.collections
+		return collections[label] if collections.key?(label)
+
+		if clone_of.nil?
+			raise ArgumentError, "Unknown collection '#{label}' configured in pagination.collection."
+		end
+
+		ensure_collection_config!(label, clone_of)
+		collection = Jekyll::Collection.new(@site, label)
+		collections[label] = collection
+		collection
+	end
+
+	# Copies collection and default config entries for clone collections.
+	def ensure_collection_config!(clone_label, source_label)
+		@site.config['collections'] ||= {}
+		source_config = Utils.safe_hash(@site.config['collections'][source_label])
+		@site.config['collections'][clone_label] = Utils.deep_copy(source_config)
+
+		@site.config['defaults'] = Utils.arrayify(@site.config['defaults'])
+		source_defaults = @site.config['defaults'].select do |entry|
+			scope = Utils.safe_hash(Utils.safe_hash(entry)['scope'])
+			scope['type'].to_s == source_label
+		end
+
+		source_defaults.each do |entry|
+			clone_entry = Utils.deep_copy(entry)
+			clone_entry['scope'] ||= {}
+			clone_entry['scope']['type'] = clone_label
+			@site.config['defaults'] << clone_entry
+		end
+
+		@site.frontmatter_defaults.reset if @site.respond_to?(:frontmatter_defaults)
 	end
 
 	# Attaches a compact neighbourhood of page links around each generated

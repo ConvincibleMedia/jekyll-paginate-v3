@@ -39,7 +39,7 @@ class PaginationGenerator < Jekyll::Generator
 		# Abstract site mutation so the model can add pages or documents
 		# without knowing where Jekyll stores each item type.
 		add_item_lambda = lambda do |item|
-			if item.respond_to?(:collection) && !item.collection.nil?
+			if item.is_a?(Jekyll::Document)
 				site.collections[item.collection.label].docs << item
 			else
 				site.pages << item
@@ -50,7 +50,7 @@ class PaginationGenerator < Jekyll::Generator
 		# Mirror add_item_lambda for replacing template pages with generated
 		# paginated siblings.
 		remove_item_lambda = lambda do |item|
-			if item.respond_to?(:collection) && !item.collection.nil?
+			if item.is_a?(Jekyll::Document)
 				site.collections[item.collection.label].docs.delete_if { |doc| doc == item }
 			else
 				site.pages.delete_if { |page| page == item }
@@ -97,7 +97,7 @@ class PaginationGenerator < Jekyll::Generator
 		return if report_entries.empty?
 
 		segments = report_entries.map do |entry|
-			location_label = generated_template_location_label(entry['location'])
+			location_label = generated_template_location_label(entry['collection'])
 			invalid_suffix = entry['valid'] ? '' : ' (invalid config)'
 			"##{entry['number']}: #{entry['created']} template(s) in #{location_label}#{invalid_suffix}"
 		end
@@ -106,11 +106,19 @@ class PaginationGenerator < Jekyll::Generator
 	end
 
 	# Converts a generated-template destination location into readable text.
-	def generated_template_location_label(location)
-		location_name = location.to_s.strip
-		return 'pages (site root)' if location_name.empty? || location_name == 'pages'
+	def generated_template_location_label(collection_targets)
+		targets = Utils.arrayify(collection_targets).map(&:to_s).map(&:strip).reject(&:empty?)
+		targets = ['pages'] if targets.empty?
+		return target_label(targets.first) if targets.length == 1
 
-		"collection '#{location_name}'"
+		"page1=#{target_label(targets.first)} page2+=#{target_label(targets[1])}"
+	end
+
+	# Converts one collection target token to a readable log label.
+	def target_label(target)
+		return 'pages (site root)' if target == 'pages'
+
+		"collection '#{target}'"
 	end
 
 	# Logs one info-level summary line for search-location discovery and totals.

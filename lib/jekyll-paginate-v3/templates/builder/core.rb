@@ -14,7 +14,7 @@ module Templates
 # Used by Pagination::Model before normal page pagination starts.
 class Builder
 
-	SPECIAL_KEYS = %w[items index filter filters group layout layouts location frontmatter permalink title slugify silent allow_empty].freeze
+	SPECIAL_KEYS = %w[items index filter filters group layout layouts collection frontmatter permalink title slugify silent allow_empty].freeze
 
 	def initialize(site:, site_config:, add_item_lambda:, resolve_items_lambda:, log_lambda:)
 		@site = site
@@ -34,8 +34,8 @@ class Builder
 		return empty_build_report unless generate_definitions.is_a?(Array)
 
 		@log_lambda.call("Generating templates from #{generate_definitions.length} definition(s).", 'debug')
-		default_location = default_generation_location
-		@log_lambda.call("Default generated template location resolved to '#{default_location}'.", 'debug')
+		default_collection = default_generation_collection
+		@log_lambda.call("Default generated template collection target resolved to '#{default_collection.join(',')}'.", 'debug')
 		build_report = {
 			'total' => 0,
 			'entries' => []
@@ -43,19 +43,19 @@ class Builder
 
 		generate_definitions.each_with_index do |raw_definition, definition_index|
 			entry_number = definition_index + 1
-			default_entry_location = normalise_location(Utils.safe_hash(raw_definition)['location'], default_location)
-			definition = normalise_definition(raw_definition, default_location)
+			default_entry_collection = normalise_collection(Utils.safe_hash(raw_definition)['collection'], default_collection)
+			definition = normalise_definition(raw_definition, default_collection)
 			if definition.nil?
 				build_report['entries'] << {
 					'number' => entry_number,
-					'location' => default_entry_location,
+					'collection' => default_entry_collection,
 					'created' => 0,
 					'valid' => false
 				}
 				next
 			end
 
-			@log_lambda.call("Processing generate definition #{entry_number}: index=#{describe_index_keys(definition['index'])} items=#{definition['items']} layouts=#{definition['layouts'].join(', ')} location=#{definition['location']} allow_empty=#{definition['allow_empty']}", 'debug')
+			@log_lambda.call("Processing generate definition #{entry_number}: index=#{describe_index_keys(definition['index'])} items=#{definition['items']} layouts=#{definition['layouts'].join(', ')} collection=#{definition['collection'].join(',')} allow_empty=#{definition['allow_empty']}", 'debug')
 			source_items = @resolve_items_lambda.call(definition['items'])
 			@log_lambda.call("Definition #{entry_number} resolved #{source_items.length} source item(s) before filters.", 'debug')
 			source_items = Query::Filter.filter_items(
@@ -74,7 +74,7 @@ class Builder
 			created = build_for_definition(definition, source_items, entry_number)
 			build_report['entries'] << {
 				'number' => entry_number,
-				'location' => definition['location'],
+				'collection' => definition['collection'],
 				'created' => created,
 				'valid' => true
 			}
@@ -145,9 +145,11 @@ class Builder
 		pagination_config = Utils.deep_copy(definition['pagination_overrides'])
 		pagination_config['enabled'] = true
 		pagination_config['items'] = definition['items']
+		pagination_config['collection'] = Utils.deep_copy(definition['collection'])
 		pagination_config['filters'] = Utils.deep_copy(definition['filters']).merge(entry['filters'])
 
-		if definition['location'] == 'pages'
+		first_target = definition['collection'].first
+		if first_target == 'pages'
 			Templates::PageTemplate.new(
 				site: @site,
 				layout_name: layout_name,
@@ -156,9 +158,9 @@ class Builder
 				generated_metadata: generated_metadata
 			)
 		else
-			collection = @site.collections[definition['location']]
+			collection = @site.collections[first_target]
 			if collection.nil?
-				@log_lambda.call("Skipping generated template in unknown collection '#{definition['location']}'.", 'warn') unless definition['silent']
+				@log_lambda.call("Skipping generated template in unknown collection '#{first_target}'.", 'warn') unless definition['silent']
 				return nil
 			end
 

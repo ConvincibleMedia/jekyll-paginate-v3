@@ -19,10 +19,6 @@ class Normaliser
 			template_overrides = extract_template_defaults_overrides(override_hash)
 			explicit_filters = Utils.safe_hash(template_overrides['filters'])
 
-			if override_hash.key?('collection') && present_config_value?(override_hash['collection']) && !template_overrides.key?('items')
-				template_config['items'] = override_hash['collection']
-			end
-
 			LEGACY_FILTER_KEYS.each do |legacy_key|
 				next unless override_hash.key?(legacy_key)
 				next unless present_config_value?(override_hash[legacy_key])
@@ -32,7 +28,6 @@ class Normaliser
 				template_config['filters'][legacy_key] = override_hash[legacy_key]
 			end
 
-			template_config.delete('collection')
 			LEGACY_FILTER_KEYS.each { |legacy_key| template_config.delete(legacy_key) }
 		end
 

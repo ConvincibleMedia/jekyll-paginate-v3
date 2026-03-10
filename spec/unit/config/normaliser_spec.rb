@@ -33,6 +33,7 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
 			expect(config.dig('keywords', 'now')).to eq('now')
 			expect(config.dig('keywords', 'today')).to eq('today')
 			expect(config.dig('templates', 'location')).to eq('pages')
+			expect(config.dig('templates', 'collection')).to eq(%w[self shadow])
 			expect(config.dig('templates', 'generate')).to be_an(Array)
 			expect(config.dig('templates', 'generate').length).to eq(1)
 		end
@@ -135,11 +136,12 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
 			end.to raise_error(ArgumentError, /must be unique/)
 		end
 
-		it 'migrates v2 legacy shortcuts without overriding explicit filters' do
+		it 'migrates v2 legacy filter shortcuts without overriding explicit filters' do
 			config = described_class.normalise_site_config(
 				'pagination' => {
 					'compatibility' => 'v2',
-					'collection' => 'products',
+					'items' => 'products',
+					'collection' => 'pages',
 					'category' => 'featured',
 					'tag' => 'legacy-tag',
 					'filters' => {
@@ -149,11 +151,11 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
 			)
 
 			expect(config.dig('templates', 'items')).to eq('products')
+			expect(config.dig('templates', 'collection')).to eq(['pages'])
 			expect(config.dig('templates', 'filters')).to include(
 				'category' => 'explicit-category',
 				'tag' => 'legacy-tag'
 			)
-			expect(config.dig('templates')).not_to have_key('collection')
 			expect(config.dig('templates')).not_to have_key('category')
 			expect(config.dig('templates')).not_to have_key('tag')
 		end
@@ -200,6 +202,43 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
 			expect(collections_definition['layouts']).to eq(['autopage_collection.html'])
 			expect(collections_definition['items']).to eq('all')
 		end
+
+		it 'normalises template collection targets from delimited strings' do
+			config = described_class.normalise_site_config(
+				'pagination' => {
+					'enabled' => true,
+					'collection' => 'pages,clone'
+				}
+			)
+
+			expect(config.dig('templates', 'collection')).to eq(%w[pages clone])
+		end
+
+		it 'rejects collection target lists longer than two entries' do
+			expect do
+				described_class.normalise_site_config(
+					'pagination' => {
+						'enabled' => true,
+						'collection' => 'pages,self,shadow'
+					}
+				)
+			end.to raise_error(ArgumentError, /at most two values/)
+		end
+
+		it 'supports custom collection keywords through pagination.keywords' do
+			config = described_class.normalise_site_config(
+				'pagination' => {
+					'enabled' => true,
+					'keywords' => {
+						'self' => 'same',
+						'shadow' => 'mask'
+					},
+					'collection' => 'same,mask'
+				}
+			)
+
+			expect(config.dig('templates', 'collection')).to eq(%w[self shadow])
+		end
 	end
 
 	describe '.normalise_template_config' do
@@ -214,6 +253,7 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
 				site_config,
 				{
 					'enabled' => true,
+					'collection' => 'clone,pages',
 					'nested_key_separator' => ':',
 					'filters' => {
 						'author:name' => 'Alice'
@@ -222,6 +262,7 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
 			)
 
 			expect(config['separator']).to eq(':')
+			expect(config['collection']).to eq(%w[clone pages])
 			expect(config.dig('filters', 'author:name')).to eq('Alice')
 		end
 	end

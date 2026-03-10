@@ -28,6 +28,7 @@ class Model
 		@equivalents = site_config['equivalents']
 		@item_keyword = site_config.dig('keywords', 'items') || 'items'
 		@generated_index_sets = {}
+		@clone_collection_cache = {}
 		@template_search_reports = []
 		@template_search_report_lookup = {}
 	end
@@ -249,7 +250,7 @@ class Model
 	def legacy_v1_pagination_candidate?(source_root, paginate_path, item)
 		return false unless item.respond_to?(:name)
 		return false unless item.respond_to?(:path)
-		return false if item.respond_to?(:collection) && !item.collection.nil?
+		return false if item.is_a?(Jekyll::Document)
 		return false if Utils.generated_index?(item)
 		return false unless item.name.to_s == 'index.html'
 

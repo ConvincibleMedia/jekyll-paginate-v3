@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 RSpec.describe 'Pagination integration: generated template edge cases' do
-	it 'silently skips generated templates targeting unknown collections when silent is enabled' do
+	it 'silently skips generated templates targeting unknown collection destinations when silent is enabled' do
 		files = post_files(1) { { 'category' => 'news' } }
 
 		jekyll_build(
@@ -15,7 +15,7 @@ RSpec.describe 'Pagination integration: generated template edge cases' do
 								'items' => 'posts',
 								'index' => 'category',
 								'layout' => 'autopage_category.html',
-								'location' => 'unknown_collection',
+								'collection' => 'unknown_collection',
 								'permalink' => '/topics/:category/',
 								'title' => 'Topic :category',
 								'silent' => true
@@ -211,7 +211,7 @@ RSpec.describe 'Pagination integration: generated template edge cases' do
 		end
 	end
 
-	it 'falls back to templates.location when generate location is all or everything' do
+	it 'treats generated template self/shadow/clone collection modes as pages' do
 		files = post_files(1) { { 'category' => 'news' } }
 
 		jekyll_build(
@@ -220,12 +220,11 @@ RSpec.describe 'Pagination integration: generated template edge cases' do
 				'pagination' => {
 					'enabled' => true,
 					'templates' => {
-						'location' => 'products',
 						'generate' => [
 							{
 								'items' => 'posts',
 								'index' => 'category',
-								'location' => 'everything',
+								'collection' => 'self,clone',
 								'layout' => 'autopage_category.html',
 								'permalink' => '/collection-index/:category/',
 								'title' => 'Collection :category'
@@ -237,9 +236,11 @@ RSpec.describe 'Pagination integration: generated template edge cases' do
 			files: files
 		) do |site,|
 			generated_document = document_by_url(site, 'products', '/collection-index/news/')
+			generated_page = page_by_url(site, '/collection-index/news/')
 
-			expect(generated_document).not_to be_nil
-			expect(paginator_item_titles(generated_document)).to eq(['Post 01'])
+			expect(generated_document).to be_nil
+			expect(generated_page).not_to be_nil
+			expect(paginator_item_titles(generated_page)).to eq(['Post 01'])
 		end
 	end
 

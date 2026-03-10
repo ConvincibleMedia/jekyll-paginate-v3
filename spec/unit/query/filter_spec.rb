@@ -1,13 +1,13 @@
 # frozen_string_literal: true
 
 RSpec.describe Jekyll::Plugins::PaginateV3::Query::Filter do
-	TestCollection = Struct.new(:label)
-	TestItem = Struct.new(:data, :collection, :path)
+	FilterTestCollection = Struct.new(:label)
+	FilterTestItem = Struct.new(:data, :collection, :path)
 
 	# Builds a minimal item object compatible with filter evaluation.
 	def build_item(data, collection: nil, path: nil)
-		collection_object = collection.nil? ? nil : TestCollection.new(collection)
-		TestItem.new(data, collection_object, path)
+		collection_object = collection.nil? ? nil : FilterTestCollection.new(collection)
+		FilterTestItem.new(data, collection_object, path)
 	end
 
 	# Runs the filter engine with stable defaults used across examples.
@@ -74,7 +74,7 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Query::Filter do
 		expect(logger).to have_received(:call).with(
 			a_string_including("Template 'index.md': Filter key='category'"),
 			'debug'
-		)
+		).at_least(:once)
 		expect(logger).to have_received(:call).with(
 			a_string_including("Filter key='category' missing key/value on: _posts/three.md"),
 			'debug'

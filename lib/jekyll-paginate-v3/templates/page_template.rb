@@ -18,15 +18,10 @@ class PageTemplate < Jekyll::Page
 		@base = site.source
 		@name = 'index.html'
 
-		layout_dir = '_layouts'
-		@path = if site.in_theme_dir(site.source) == site.source
-							site.in_theme_dir(site.source, layout_dir, layout_name)
-						else
-							site.in_source_dir(site.source, layout_dir, layout_name)
-						end
+		@path = resolve_layout_path(site, layout_name)
 
 		process(@name)
-		read_yaml(File.join(site.source, layout_dir), layout_name)
+		read_yaml(File.dirname(@path), File.basename(@path))
 
 		layout_data = Jekyll::Utils.deep_merge_hashes(self.data, {})
 		generated_metadata_hash = Utils.safe_hash(generated_metadata)
@@ -45,11 +40,27 @@ class PageTemplate < Jekyll::Page
 		apply_permalink!
 
 		data.default_proc = proc do |_, key|
-			site.frontmatter_defaults.find(File.join(layout_dir, layout_name), type, key)
+			site.frontmatter_defaults.find(File.join('_layouts', layout_name), type, key)
 		end
 	end
 
 	private
+
+	# Resolves layout path from theme first, then site source.
+	def resolve_layout_path(site, layout_name)
+		layout_dir = '_layouts'
+		path = if site.in_theme_dir(site.source) == site.source
+							site.in_theme_dir(site.source, layout_dir, layout_name)
+						else
+							site.in_source_dir(site.source, layout_dir, layout_name)
+						end
+
+		unless File.exist?(path)
+			raise ArgumentError, "Layout '#{path}' does not exist"
+		end
+
+		path
+	end
 
 	# Adds legacy-friendly fields only when v2 compatibility is active.
 	def apply_v2_compatibility_metadata!

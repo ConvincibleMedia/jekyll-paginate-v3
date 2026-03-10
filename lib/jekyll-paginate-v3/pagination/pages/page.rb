@@ -15,26 +15,67 @@ class Page < Jekyll::Page
 	attr_accessor :pager
 
 	# Clones template content/data and annotates it with pagination metadata.
-	def initialize(template_page, current_page, total_pages, index_filename)
-		@site = template_page.site
-		@base = template_page.instance_variable_get(:@base).to_s
-		@dir = template_page.dir.to_s
+	def initialize(template_item, current_page, total_pages, index_filename)
+		@site = template_item.site
+		@base = template_base_path(template_item)
+		@dir = template_directory(template_item)
 		@url = nil
 		@name = index_filename.to_s.empty? ? 'index.html' : index_filename
 
 		process(@name)
 
-		self.data = Jekyll::Utils.deep_merge_hashes(template_page.data, {})
-		self.content = template_page.content
+		self.data = Jekyll::Utils.deep_merge_hashes(template_item.data, {})
+		self.content = template_item.content
 		self.data['pagination_info'] = {
 			'curr_page' => current_page,
 			'total_pages' => total_pages
 		}
-		self.ext = template_page.extname
-		self.data['path'] = template_page.path if current_page == 1
+		self.ext = template_extname(template_item)
+		self.data['path'] = template_path(template_item) if current_page == 1
 
-		validate_data!(template_page.path)
-		validate_permalink!(template_page.path)
+		validate_data!(template_path(template_item))
+		validate_permalink!(template_path(template_item))
+	end
+
+	private
+
+	# Resolves a stable page base path for generated in-memory pages.
+	def template_base_path(template_item)
+		if template_item.is_a?(Jekyll::Page)
+			return template_item.instance_variable_get(:@base).to_s
+		end
+
+		template_item.site.source.to_s
+	end
+
+	# Resolves one source directory-like value for generated page URLs.
+	def template_directory(template_item)
+		directory = if template_item.respond_to?(:dir)
+									template_item.dir.to_s
+								elsif template_item.respond_to?(:url)
+									template_item.url.to_s
+								else
+									'/'
+								end
+
+		directory = '/' if directory.strip.empty?
+		directory = "/#{directory}" unless directory.start_with?('/')
+		directory.end_with?('/') ? directory : "#{directory}/"
+	end
+
+	# Resolves source extname from pages or documents.
+	def template_extname(template_item)
+		return template_item.extname.to_s if template_item.respond_to?(:extname)
+		return template_item.ext.to_s if template_item.respond_to?(:ext)
+
+		'.html'
+	end
+
+	# Resolves source path used by validators and compatibility metadata.
+	def template_path(template_item)
+		return template_item.path.to_s if template_item.respond_to?(:path)
+
+		''
 	end
 end
 

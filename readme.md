@@ -97,6 +97,8 @@ pagination:
 
     # What to paginate
     items: posts # see Items below
+    # Where indexes are emitted for templates
+    collection: self, shadow # see Collection Targets below
     filters: [] # see Filters below
     sort: date desc # see Sorting below
     # How items are divided per page
@@ -135,9 +137,37 @@ pagination:
   enabled: true
 ```
 
-However, PaginateV3 needs ti *find* this page/document. It looks for templates according to the configuration at `pagination.templates.location`, which uses the [Search Format](#search-format). By default this is `pages`, so pagination templates must be site pages. However, for example, you could create a special collection just for your templates, e.g. `index`, and set `pagination.templates.location: index`.
+However, PaginateV3 needs to *find* this page/document. It looks for templates according to the configuration at `pagination.templates.location`, which uses the [Search Format](#search-format). By default this is `pages`, so pagination templates must be site pages. However, for example, you could create a special collection just for your templates, e.g. `index`, and set `pagination.templates.location: index`.
 
 The template can have additional configuration, which overrides the defaults set in `site.pagination`. You can also place `pagination` configuration in a layout used by a pagination template. The configuration options on both are merged, with the template having priority (unless in v2 compatibility mode, in which the layout has priority).
+
+### Created Index Pages
+
+Having found a template, PaginateV3 creates index pages as required. E.g. if your settings specify 10 items to a page, and there are 15 items, it will create two index pages (for items 1–10 and 11–15). The first index page replaces the pagination template itself. Further index pages are additions. They will all inherit the settings, frontmatter and content of the template.
+
+`pagination.collection` controls the type of page/document that each created index page will be.
+
+```yaml
+pagination:
+  enabled: true
+  collection: self, shadow # default
+```
+
+The value can either be a single string (e.g. `pages`), which treats all index pages the same, or two strings (e.g. `[self, pages]`), which gives the treatment for page 1 and pages 2+ separately. The strings can be any of the following:
+
+* `pages`: create index pages as site pages.
+* `<collection_name>`: create index pages as documents in the given collection.
+* `self`: create index pages in the same collection as the template.
+* `shadow`: create index pages as site pages, but make those pages respond to `page.collection` (this will return the collection of the template).
+* `clone`: create index pages as documents in a new collection called `<source_collection>_indexes` (created automatically if missing).
+
+If your site works with collections, each of `self`, `shadow` and `clone` have pros and cons. You should choose which mode depending on how you site iterates and works with collections.
+
+| Value    | Effect | Pros | Cons |
+| -------- | ------ | ---- | ---- |
+| `self`   | True document in original collection | Full document semantics | `{% for item in site.<collection> %}` will include index pages 2+ |
+| `shadow` | Page with collection metadata only | Keeps `site.<collection>` clean | Not a true collection member |
+| `clone`  | True document in `<source>_indexes` | Keeps document semantics and separates indexes from source collection loops | Introduces an additional collection |
 
 ### Items
 
@@ -345,6 +375,9 @@ The following keywords have special meaning in certain contexts within paginatio
 * `pages`
 * `all`
 * `everything`
+* `self`
+* `shadow`
+* `clone`
 * `now`
 * `today`
 * `day`
