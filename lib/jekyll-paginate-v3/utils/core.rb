@@ -21,16 +21,27 @@ module Utils
 	end
 
 	# Normalises a configurable delimiter.
-	# Returns `default_delimiter` when the input is blank or not a string.
+	# Returns `default_delimiter` when the input is blank or unsupported.
+	#
+	# `false` disables delimited splitting globally.
 	def self.normalise_split_delimiter(raw_delimiter, default_delimiter = ',')
+		return false if raw_delimiter == false
 		return default_delimiter unless raw_delimiter.is_a?(String)
 
 		delimiter = raw_delimiter
+		return false if delimiter.strip.downcase == 'false'
 		delimiter.empty? ? default_delimiter : delimiter
 	end
 
 	# Splits one string using the configured delimiter, trims entries, and rejects blank strings.
 	def self.split_delimited_string(value, delimiter)
+		if delimiter == false
+			entry = value.to_s.strip
+			return [] if entry.empty?
+
+			return [entry]
+		end
+
 		split_pattern = Regexp.new(Regexp.escape(delimiter.to_s))
 		value.to_s.split(split_pattern, -1).map(&:strip).reject(&:empty?)
 	end

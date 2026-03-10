@@ -91,6 +91,48 @@ RSpec.describe 'Pagination integration: item resolution and search syntax' do
 		end
 	end
 
+	it 'respects syntax.split false by disabling delimited splitting in search definitions' do
+		files = jekyll_merge(
+			jekyll_merge(
+				post_files(1),
+				collection_document('products', 'item.md', { 'layout' => 'listing', 'title' => 'Product Item', 'permalink' => '/products/item/' }, 'Item')
+			),
+			jekyll_files do
+				file 'index.md' do
+					frontmatter(
+						pagination_template_frontmatter(
+							{
+								'pagination' => {
+									'enabled' => true,
+									'items' => 'posts,products',
+									'per_page' => 20,
+									'sort' => 'title asc'
+								}
+							}
+						)
+					)
+					contents('Template content')
+				end
+			end
+		)
+
+		jekyll_build(
+			default_site,
+			config: {
+				'pagination' => {
+					'enabled' => true,
+					'syntax' => {
+						'split' => false
+					}
+				}
+			},
+			files: files
+		) do |site,|
+			titles = paginator_item_titles(page_by_url(site, '/'))
+			expect(titles).to eq([])
+		end
+	end
+
 	it 'respects configured keyword aliases for pages/all/everything' do
 		files = jekyll_merge(
 			post_files(1),
@@ -143,4 +185,3 @@ RSpec.describe 'Pagination integration: item resolution and search syntax' do
 		end
 	end
 end
-

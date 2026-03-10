@@ -87,7 +87,7 @@ class Model
 	def grouped_set_sort_direction(config, index_key)
 		return 'asc' if index_key.to_s.strip.empty?
 
-		split_delimiter = config['split'] || @split_delimiter
+		split_delimiter = config.key?('split') ? config['split'] : @split_delimiter
 		sort_instructions = Query::Sorter.parse(config['sort'], split_delimiter: split_delimiter)
 		sort_entry = sort_instructions.find { |entry| entry['field'] == index_key }
 		return 'asc' if sort_entry.nil?
@@ -141,8 +141,6 @@ class Model
 	def v1_absolute_paginate_path?(config, current_page)
 		return false if current_page == 1
 		return false unless config['compatibility'] == 'v1'
-		return false unless legacy_v1_site_config_present?
-		return false if @site.config['paginate_path'].nil?
 
 		true
 	end

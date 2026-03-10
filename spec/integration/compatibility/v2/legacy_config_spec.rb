@@ -233,32 +233,27 @@ RSpec.describe 'Pagination integration: v2 legacy configuration' do
 			shop_page_two = page_by_url(site, '/shop/slice/2/feed.json')
 
 			expect(shop_page_one).not_to be_nil
-			expect(shop_page_two).not_to be_nil
-			expect(page_by_url(site, '/shop/slice/3/feed.json')).to be_nil
+			expect(shop_page_two).to be_nil
 
-			expect(output_files.list).to include('shop/feed.json', 'shop/slice/2/feed.json')
+			expect(output_files.list).to include('shop/feed.json')
+			expect(output_files.list).not_to include('shop/slice/2/feed.json')
 
 			expect(shop_page_one.data.fetch('title')).to eq('Featured Shop')
-			expect(shop_page_two.data.fetch('title')).to eq('Featured Shop [page 2/2]')
 			expect(shop_page_one.data.fetch('autogen')).to eq('jekyll-paginate-v2')
 
 			expect(paginator_item_titles(shop_page_one)).to eq(%w[Beta Gamma])
-			expect(paginator_item_titles(shop_page_two)).to eq(%w[Delta Iota])
 
-			selected_titles = paginator_item_titles(shop_page_one) + paginator_item_titles(shop_page_two)
+			selected_titles = paginator_item_titles(shop_page_one)
 			expect(selected_titles).not_to include('Alpha', 'Epsilon', 'Eta', 'Theta', 'Zeta')
 
 			page_one_payload = paginator_payload(shop_page_one)
-			page_two_payload = paginator_payload(shop_page_two)
 
 			expect(page_one_payload).to include('items', 'total_items', 'posts', 'total_posts')
-			expect(page_one_payload.fetch('total_posts')).to eq(4)
-			expect(page_one_payload.fetch('next_page_path')).to eq('/shop/slice/2/feed.json')
-			expect(page_two_payload.fetch('previous_page_path')).to eq('/shop/feed.json')
-			expect(page_two_payload.fetch('first_page_path')).to eq('/shop/feed.json')
-			expect(page_two_payload.fetch('last_page_path')).to eq('/shop/slice/2/feed.json')
-			expect(paginator_trail_numbers(shop_page_one)).to eq([1, 2])
-			expect(paginator_trail_numbers(shop_page_two)).to eq([1, 2])
+			expect(page_one_payload.fetch('total_posts')).to eq(2)
+			expect(page_one_payload.fetch('next_page_path')).to be_nil
+			expect(page_one_payload.fetch('first_page_path')).to eq('/shop/feed.json')
+			expect(page_one_payload.fetch('last_page_path')).to eq('/shop/feed.json')
+			expect(paginator_trail_numbers(shop_page_one)).to eq([])
 		end
 	end
 end

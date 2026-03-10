@@ -21,6 +21,24 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Query::Parser do
 				]
 			)
 		end
+
+		it 'does not split scalar search definitions when split is disabled' do
+			entries = described_class.parse(
+				'pages,products',
+				{
+					'pages' => 'pages',
+					'all' => 'all',
+					'everything' => 'everything'
+				},
+				split_delimiter: false
+			)
+
+			expect(entries).to eq(
+				[
+					{ 'type' => 'pages,products', 'paths' => nil }
+				]
+			)
+		end
 	end
 
 	describe '.path_allowed?' do

@@ -72,7 +72,7 @@ RSpec.describe 'Pagination integration: v1' do
 			files: files
 		) do |site,|
 			blog_page_one = page_by_url(site, '/blog/')
-			blog_page_two = page_by_url(site, '/blog/page/2/')
+			blog_page_two = page_by_url(site, '/page/2/')
 			root_page = page_by_url(site, '/')
 
 			expect(blog_page_one).not_to be_nil

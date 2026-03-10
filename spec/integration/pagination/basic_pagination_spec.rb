@@ -36,6 +36,7 @@ RSpec.describe 'Pagination integration: core behaviour' do
 			expect(normalise_url_for_match(paginator_reference_url(generated_pages[0], 'next'))).to eq('/page/2')
 			expect(paginator_reference_number(generated_pages[2], 'next')).to be_nil
 			expect(generated_pages[0].data.dig('pagination', 'template')).to be_nil
+			expect(generated_pages[0].data.dig('pagination', 'enabled')).to be_nil
 			expect(generated_pages[0].data.dig('pagination', 'index')).to eq(true)
 		end
 	end
@@ -88,7 +89,7 @@ RSpec.describe 'Pagination integration: core behaviour' do
 		end
 	end
 
-	it 'applies offset and limit after sorting to cap emitted page count' do
+	it 'applies offset and limit after sorting to cap the item set' do
 		files = jekyll_merge(
 			post_files(8),
 			jekyll_files do
@@ -114,11 +115,113 @@ RSpec.describe 'Pagination integration: core behaviour' do
 
 		jekyll_build(default_site, files: files) do |site,|
 			generated_pages = generated_pagination_pages(site).sort_by { |page| paginator_index_number(page) }
-			expect(generated_pages.map { |page| normalise_url_for_match(page.url) }).to eq(['/', '/page/2'])
+			expect(generated_pages.map { |page| normalise_url_for_match(page.url) }).to eq(['/'])
 
 			expect(paginator_item_titles(generated_pages[0])).to eq(['Post 04', 'Post 05'])
-			expect(paginator_item_titles(generated_pages[1])).to eq(['Post 06', 'Post 07'])
+			expect(generated_pages[1]).to be_nil
+			expect(page_by_url(site, '/page/2/')).to be_nil
 			expect(page_by_url(site, '/page/3/')).to be_nil
+		end
+	end
+
+	it 'merges template pagination with layout pagination and keeps template precedence by default' do
+		files = jekyll_merge(
+			post_files(3),
+			jekyll_files do
+				folder '_layouts' do
+					file 'paged.html' do
+						frontmatter(
+							'pagination' => {
+								'sort' => 'title desc',
+								'per_page' => 2
+							}
+						)
+						contents('{{ content }}')
+					end
+				end
+
+				file 'index.md' do
+					frontmatter(
+						pagination_template_frontmatter(
+							{
+								'layout' => 'paged',
+								'pagination' => {
+									'enabled' => true,
+									'items' => 'posts',
+									'per_page' => 1
+								}
+							}
+						)
+					)
+					contents('Template content')
+				end
+			end
+		)
+
+		jekyll_build(default_site, files: files) do |site,|
+			page_one = page_by_url(site, '/')
+			page_two = page_by_url(site, '/page/2/')
+			page_three = page_by_url(site, '/page/3/')
+
+			expect(page_one).not_to be_nil
+			expect(page_two).not_to be_nil
+			expect(page_three).not_to be_nil
+			expect(paginator_item_titles(page_one)).to eq(['Post 03'])
+		end
+	end
+
+	it 'merges template pagination with layout pagination and gives layout precedence in v2 mode' do
+		files = jekyll_merge(
+			post_files(3),
+			jekyll_files do
+				folder '_layouts' do
+					file 'paged.html' do
+						frontmatter(
+							'pagination' => {
+								'sort' => 'title desc',
+								'per_page' => 2
+							}
+						)
+						contents('{{ content }}')
+					end
+				end
+
+				file 'index.md' do
+					frontmatter(
+						pagination_template_frontmatter(
+							{
+								'layout' => 'paged',
+								'pagination' => {
+									'enabled' => true,
+									'items' => 'posts',
+									'per_page' => 1
+								}
+							}
+						)
+					)
+					contents('Template content')
+				end
+			end
+		)
+
+		jekyll_build(
+			default_site,
+			config: {
+				'pagination' => {
+					'enabled' => true,
+					'compatibility' => 'v2'
+				}
+			},
+			files: files
+		) do |site,|
+			page_one = page_by_url(site, '/')
+			page_two = page_by_url(site, '/page/2/')
+			page_three = page_by_url(site, '/page/3/')
+
+			expect(page_one).not_to be_nil
+			expect(page_two).not_to be_nil
+			expect(page_three).to be_nil
+			expect(paginator_item_titles(page_one)).to eq(['Post 03', 'Post 02'])
 		end
 	end
 
@@ -175,4 +278,3 @@ RSpec.describe 'Pagination integration: core behaviour' do
 		end
 	end
 end
-

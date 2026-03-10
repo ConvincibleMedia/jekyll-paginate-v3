@@ -14,7 +14,7 @@ class Model
 	
 	def paginate_template(template, config)
 		template_path = Utils.relative_item_path(template)
-		split_delimiter = config['split'] || @split_delimiter
+		split_delimiter = config.key?('split') ? config['split'] : @split_delimiter
 		nested_separator = config['separator'] || @nested_separator
 		all_items = resolve_items(config['items'])
 		@log_lambda.call("Template '#{template_path}': resolved #{all_items.length} candidate item(s).", 'debug')
@@ -48,13 +48,14 @@ class Model
 		@log_lambda.call("Template '#{template_path}': #{sorted_items.length} item(s) after offset=#{offset}.", 'debug')
 		log_item_path_sample("Template '#{template_path}': offset item sample", sorted_items)
 
-		page_windows = Utils.build_pagination_windows(sorted_items.length, config['per_page'])
-		# `limit` caps the number of emitted index pages, not the source items.
-		if config['limit'].to_i > 0
-			original_window_count = page_windows.length
-			page_windows = page_windows.first(config['limit'].to_i)
-			@log_lambda.call("Template '#{template_path}': page windows limited from #{original_window_count} to #{page_windows.length} by limit=#{config['limit']}.", 'debug')
+		limit = [config['limit'].to_i, 0].max
+		if limit.positive?
+			original_item_count = sorted_items.length
+			sorted_items = sorted_items.first(limit)
+			@log_lambda.call("Template '#{template_path}': items limited from #{original_item_count} to #{sorted_items.length} by limit=#{limit}.", 'debug')
 		end
+
+		page_windows = Utils.build_pagination_windows(sorted_items.length, config['per_page'])
 		total_pages = page_windows.length
 
 		@log_lambda.call("Template '#{template_path}': generating #{total_pages} page(s) with per_page=#{config['per_page']} limit=#{config['limit']}.", 'debug')
@@ -99,6 +100,7 @@ class Model
 
 			generated.data['pagination'] = Utils.safe_hash(generated.data['pagination'])
 			generated.data['pagination'].delete('template')
+			generated.data['pagination'].delete('enabled')
 			generated.data['pagination']['index'] = true
 
 			# Only mark emitted indexes as generated when their source

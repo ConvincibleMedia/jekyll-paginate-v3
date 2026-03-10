@@ -38,6 +38,19 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
 			expect(config.dig('templates', 'generate').length).to eq(1)
 		end
 
+		it 'supports disabling global split parsing with syntax.split false' do
+			config = described_class.normalise_site_config(
+				'pagination' => {
+					'enabled' => true,
+					'syntax' => {
+						'split' => false
+					}
+				}
+			)
+
+			expect(config.dig('syntax', 'split')).to eq(false)
+		end
+
 		it 'uses sort_field and sort_reverse when sort is omitted' do
 			config = described_class.normalise_site_config(
 				'pagination' => {

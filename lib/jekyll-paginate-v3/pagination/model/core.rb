@@ -53,7 +53,9 @@ class Model
 		templates.each do |template|
 			next unless template.data['pagination'].is_a?(Hash)
 
-			template_config = Config::Normaliser.normalise_template_config(@site_config, template.data['pagination'])
+			template_pagination = merged_template_pagination_config(template)
+			template.data['pagination'] = template_pagination
+			template_config = Config::Normaliser.normalise_template_config(@site_config, template_pagination)
 			unless template_config['enabled']
 				disabled_templates += 1
 				@log_lambda.call("Skipping template '#{Utils.relative_item_path(template)}' because merged `pagination.enabled` is false.", 'debug')
@@ -191,6 +193,86 @@ class Model
 			report_entry['paginated_items'] += template_pagination_report['paginated_items'].to_i
 			report_entry['indexes'] += template_pagination_report['indexes'].to_i
 		end
+	end
+
+	# Merges pagination settings from the template and its layout hierarchy.
+	#
+	# Default precedence:
+	# - layout provides defaults
+	# - template overrides layout
+	#
+	# v2 compatibility precedence:
+	# - template provides defaults
+	# - layout overrides template
+	def merged_template_pagination_config(template)
+		template_pagination = Utils.safe_hash(template.data['pagination'])
+		return template_pagination if template_pagination.empty?
+		return template_pagination if template.data.dig('paginate_v3', 'generated_template')
+
+		layout_pagination = layout_pagination_config(template)
+		return template_pagination if layout_pagination.empty?
+
+		if template_compatibility_mode(template_pagination) == 'v2'
+			Jekyll::Utils.deep_merge_hashes(template_pagination, layout_pagination)
+		else
+			Jekyll::Utils.deep_merge_hashes(layout_pagination, template_pagination)
+		end
+	end
+
+	# Resolves merged pagination settings from the template layout chain.
+	#
+	# Parent layouts are merged first so nearer layouts override them.
+	def layout_pagination_config(template)
+		layout_name = template_layout_name(template)
+		return {} if layout_name.empty?
+
+		layout_chain = []
+		seen_layouts = {}
+		current_layout_name = layout_name
+
+		until current_layout_name.empty? || seen_layouts[current_layout_name]
+			seen_layouts[current_layout_name] = true
+			layout = find_layout(current_layout_name)
+			break if layout.nil?
+
+			layout_chain << layout
+			current_layout_name = Utils.safe_hash(layout.data)['layout'].to_s.strip
+		end
+
+		merged_layout_pagination = {}
+		layout_chain.reverse_each do |layout|
+			merged_layout_pagination = Jekyll::Utils.deep_merge_hashes(
+				merged_layout_pagination,
+				Utils.safe_hash(Utils.safe_hash(layout.data)['pagination'])
+			)
+		end
+
+		merged_layout_pagination
+	end
+
+	# Resolves one template layout name from frontmatter.
+	def template_layout_name(template)
+		Utils.safe_hash(template.data)['layout'].to_s.strip
+	end
+
+	# Resolves a layout object by key, accepting optional file extensions.
+	def find_layout(layout_name)
+		layout = @site.layouts[layout_name]
+		return layout unless layout.nil?
+		return nil unless layout_name.include?('.')
+
+		basename = File.basename(layout_name, File.extname(layout_name))
+		@site.layouts[basename]
+	end
+
+	# Resolves template compatibility mode from local and site config.
+	def template_compatibility_mode(template_pagination)
+		mode = template_pagination['compatibility']
+		mode = @site_config['compatibility'] if mode.nil?
+		value = mode.to_s.strip.downcase
+		return value if %w[v1 v2].include?(value)
+
+		nil
 	end
 
 	# Categorises a template candidate and marks enabled templates.
