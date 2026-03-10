@@ -28,20 +28,22 @@ class Model
 		@equivalents = site_config['equivalents']
 		@item_keyword = site_config.dig('keywords', 'items') || 'items'
 		@generated_index_sets = {}
+		@template_search_reports = []
+		@template_search_report_lookup = {}
 	end
 
 	# Runs the full pagination pipeline for the current site build.
 	def run
 		@log_lambda.call("Pagination pipeline start: compatibility=#{@site_config['compatibility'] || 'none'} templates.location=#{@site_config.dig('templates', 'location')} generate.count=#{@site_config.dig('templates', 'generate')&.length || 0}", 'debug')
 
-		generated_template_count = build_generated_templates
+		generated_template_report = build_generated_templates
+		generated_template_count = generated_template_report['total'].to_i
 		@log_lambda.call("Generated #{generated_template_count} template(s).", 'debug')
-		@log_lambda.call("Generated #{generated_template_count} pagination template(s) from `templates.generate`.", 'info') if generated_template_count.positive?
 
 		templates = discover_templates
 		if templates.empty?
 			@log_lambda.call('Enabled, but no pagination templates were discovered.', 'warn')
-			return 0
+			return build_run_report(processed_templates: 0, generated_template_report: generated_template_report)
 		end
 
 		@log_lambda.call("Discovered #{templates.length} pagination template(s).", 'debug')
@@ -62,16 +64,16 @@ class Model
 
 		if enabled_templates.empty?
 			@log_lambda.call('Discovered pagination templates, but all resolved to `pagination.enabled: false` after config merge.', 'warn')
-			return 0
+			return build_run_report(processed_templates: 0, generated_template_report: generated_template_report)
 		end
 
-		@log_lambda.call("Processing #{enabled_templates.length} pagination template(s).", 'info')
 		processed = 0
 		enabled_templates.each do |template, template_config|
 
 			@log_lambda.call("Paginating template '#{Utils.relative_item_path(template)}' with items=#{template_config['items']} filters=#{template_config['filters']}.", 'debug')
 			begin
-				paginate_template(template, template_config)
+				template_pagination_report = paginate_template(template, template_config)
+				record_template_search_report_totals(template, template_pagination_report)
 			rescue StandardError => error
 				@log_lambda.call("Template '#{Utils.relative_item_path(template)}' failed: #{error.class}: #{error.message}", 'error')
 				raise
@@ -83,10 +85,19 @@ class Model
 		@log_lambda.call("Skipped #{disabled_templates} discovered template(s) because merged `pagination.enabled` is false.", 'debug') if disabled_templates.positive?
 
 		@log_lambda.call("Pagination pipeline complete: processed #{processed} template(s).", 'debug')
-		processed
+		build_run_report(processed_templates: processed, generated_template_report: generated_template_report)
 	end
 
 	private
+
+	# Builds the public run report consumed by the generator logger.
+	def build_run_report(processed_templates:, generated_template_report:)
+		{
+			'processed_templates' => processed_templates,
+			'generated_template_report' => generated_template_report,
+			'search_location_report' => @template_search_reports
+		}
+	end
 
 	# Builds synthetic pagination templates from `templates.generate`.
 	def build_generated_templates
@@ -97,24 +108,49 @@ class Model
 			resolve_items_lambda: method(:resolve_items),
 			log_lambda: @log_lambda
 		)
-		builder.build
+		report = builder.build
+		return report if report.is_a?(Hash)
+
+		{
+			'total' => report.to_i,
+			'entries' => []
+		}
 	end
 
 	# Discovers all pages/documents configured as pagination templates.
 	def discover_templates
-		candidates = resolve_items(
-			@site_config.dig('templates', 'location'),
-			include_templates: true,
-			include_generated_indexes: true,
-			include_hidden: true
-		)
+		search_entries = Query::Parser.parse(@site_config.dig('templates', 'location'), @site_config['keywords'], split_delimiter: @split_delimiter)
+		reset_template_search_reporting_state
 
+		combined_candidates = []
+		search_entries.each_with_index do |entry, entry_index|
+			entry_candidates = resolve_entry(entry)
+			combined_candidates.concat(entry_candidates)
+
+			entry_templates = entry_candidates.select { |item| template_discovery_state(item) == 'enabled' }.uniq
+			report_entry = {
+				'entry_number' => entry_index + 1,
+				'label' => format_search_entry_label(entry),
+				'templates_found' => entry_templates.length,
+				'paginated_items' => 0,
+				'indexes' => 0
+			}
+			@template_search_reports << report_entry
+			entry_candidates.uniq.each do |candidate|
+				@template_search_report_lookup[candidate.object_id] ||= []
+				@template_search_report_lookup[candidate.object_id] << report_entry
+			end
+		end
+
+		candidates = combined_candidates.uniq
+		candidates.sort_by! { |item| Utils.relative_item_path(item) }
 		discovery_counts = Hash.new(0)
 		templates = candidates.select do |item|
 			state = template_discovery_state(item)
 			discovery_counts[state] += 1
 			state == 'enabled'
 		end
+
 		@log_lambda.call(
 			"Template discovery summary: candidates=#{candidates.length} enabled=#{discovery_counts['enabled']} disabled=#{discovery_counts['disabled']} missing_pagination=#{discovery_counts['missing_pagination']} invalid_data=#{discovery_counts['invalid_data']}.",
 			'debug'
@@ -132,6 +168,28 @@ class Model
 		templates.concat(generated_templates)
 		templates.uniq!
 		apply_implicit_v1_template_fallback(candidates, templates)
+	end
+
+	# Resets search-location reporting state before template discovery.
+	def reset_template_search_reporting_state
+		@template_search_reports = []
+		@template_search_report_lookup = {}
+	end
+
+	# Formats one parsed search entry for info-level summary output.
+	def format_search_entry_label(entry)
+		Query::Parser.entry_label(entry)
+	end
+
+	# Adds paginated item/index totals to all matching search entry reports.
+	def record_template_search_report_totals(template, template_pagination_report)
+		report_entries = @template_search_report_lookup[template.object_id]
+		return if report_entries.nil? || report_entries.empty?
+
+		report_entries.each do |report_entry|
+			report_entry['paginated_items'] += template_pagination_report['paginated_items'].to_i
+			report_entry['indexes'] += template_pagination_report['indexes'].to_i
+		end
 	end
 
 	# Categorises a template candidate and marks enabled templates.

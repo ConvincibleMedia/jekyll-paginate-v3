@@ -38,4 +38,11 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Query::Parser do
 			expect(result).to be_nil
 		end
 	end
+
+	describe '.entry_label' do
+		it 'formats parsed entries with optional path filters' do
+			expect(described_class.entry_label({ 'type' => 'pages', 'paths' => nil })).to eq('pages')
+			expect(described_class.entry_label({ 'type' => 'products', 'paths' => ['catalog/*', 'sale/*'] })).to eq('products (catalog/*, sale/*)')
+		end
+	end
 end

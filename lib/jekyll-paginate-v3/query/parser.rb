@@ -48,6 +48,16 @@ class Parser
 		end
 	end
 
+	# Formats one parsed entry into a compact human-readable label.
+	def self.entry_label(entry)
+		normalised_entry = Utils.safe_hash(entry)
+		type = normalised_entry['type'].to_s.strip
+		paths = Utils.arrayify(normalised_entry['paths']).map { |path| path.to_s.strip }.reject(&:empty?)
+		return type if paths.empty?
+
+		"#{type} (#{paths.join(', ')})"
+	end
+
 	# Normalises keyword mapping so callers can safely pass partial config.
 	def self.normalise_keywords(raw_keywords)
 		defaults = {

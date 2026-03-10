@@ -31,20 +31,33 @@ class Builder
 	# Builds all configured generated pagination templates.
 	def build
 		generate_definitions = @site_config.dig('templates', 'generate')
-		return 0 unless generate_definitions.is_a?(Array)
+		return empty_build_report unless generate_definitions.is_a?(Array)
 
 		@log_lambda.call("Generating templates from #{generate_definitions.length} definition(s).", 'debug')
 		default_location = default_generation_location
 		@log_lambda.call("Default generated template location resolved to '#{default_location}'.", 'debug')
-		generated_count = 0
+		build_report = {
+			'total' => 0,
+			'entries' => []
+		}
 
 		generate_definitions.each_with_index do |raw_definition, definition_index|
+			entry_number = definition_index + 1
+			default_entry_location = normalise_location(Utils.safe_hash(raw_definition)['location'], default_location)
 			definition = normalise_definition(raw_definition, default_location)
-			next if definition.nil?
+			if definition.nil?
+				build_report['entries'] << {
+					'number' => entry_number,
+					'location' => default_entry_location,
+					'created' => 0,
+					'valid' => false
+				}
+				next
+			end
 
-			@log_lambda.call("Processing generate definition #{definition_index + 1}: index=#{describe_index_keys(definition['index'])} items=#{definition['items']} layouts=#{definition['layouts'].join(', ')} location=#{definition['location']} allow_empty=#{definition['allow_empty']}", 'debug')
+			@log_lambda.call("Processing generate definition #{entry_number}: index=#{describe_index_keys(definition['index'])} items=#{definition['items']} layouts=#{definition['layouts'].join(', ')} location=#{definition['location']} allow_empty=#{definition['allow_empty']}", 'debug')
 			source_items = @resolve_items_lambda.call(definition['items'])
-			@log_lambda.call("Definition #{definition_index + 1} resolved #{source_items.length} source item(s) before filters.", 'debug')
+			@log_lambda.call("Definition #{entry_number} resolved #{source_items.length} source item(s) before filters.", 'debug')
 			source_items = Query::Filter.filter_items(
 				source_items,
 				definition['filters'],
@@ -54,18 +67,33 @@ class Builder
 				now_keyword: @site_config.dig('keywords', 'now'),
 				today_keyword: @site_config.dig('keywords', 'today'),
 				log_lambda: @log_lambda,
-				context_label: "Generated definition #{definition_index + 1}"
+				context_label: "Generated definition #{entry_number}"
 			)
-			@log_lambda.call("Definition #{definition_index + 1} retained #{source_items.length} source item(s) after filters.", 'debug')
+			@log_lambda.call("Definition #{entry_number} retained #{source_items.length} source item(s) after filters.", 'debug')
 
-			generated_count += build_for_definition(definition, source_items, definition_index + 1)
+			created = build_for_definition(definition, source_items, entry_number)
+			build_report['entries'] << {
+				'number' => entry_number,
+				'location' => definition['location'],
+				'created' => created,
+				'valid' => true
+			}
+			build_report['total'] += created
 		end
 
-		@log_lambda.call("Generated #{generated_count} template object(s) in total.", 'debug')
-		generated_count
+		@log_lambda.call("Generated #{build_report['total']} template object(s) in total.", 'debug')
+		build_report
 	end
 
 	private
+
+	# Provides a stable zero-value build report when generation is disabled.
+	def empty_build_report
+		{
+			'total' => 0,
+			'entries' => []
+		}
+	end
 
 	# Expands one generate definition into concrete template pages/documents.
 	def build_for_definition(definition, source_items, definition_number)

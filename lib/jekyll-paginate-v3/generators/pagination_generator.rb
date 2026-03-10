@@ -30,7 +30,7 @@ class PaginationGenerator < Jekyll::Generator
 			logger.info('Disabled in site config.')
 			return
 		end
-		logger.info('Enabled. Starting pagination pipeline.')
+		logger.info("Enabled. Will look for templates in: #{template_location_summary(config)}")
 
 		# Shared logger callback so deeper layers do not depend directly on
 		# Jekyll logger globals.
@@ -65,8 +65,9 @@ class PaginationGenerator < Jekyll::Generator
 			remove_item_lambda: remove_item_lambda
 		)
 
-		processed_templates = model.run
-		logger.info("Complete, processed #{processed_templates} pagination template(s)")
+		run_report = model.run
+		log_generate_report(logger, run_report['generated_template_report'])
+		log_search_location_report(logger, run_report['search_location_report'], processed_templates: run_report['processed_templates'])
 	rescue StandardError => error
 		if logger.nil?
 			Jekyll.logger.error('Pagination:', "Failed with #{error.class}: #{error.message}")
@@ -77,6 +78,58 @@ class PaginationGenerator < Jekyll::Generator
 	end
 
 	private
+
+	# Formats the configured template search locations for info-level logs.
+	def template_location_summary(config)
+		search_entries = Query::Parser.parse(
+			config.dig('templates', 'location'),
+			config['keywords'],
+			split_delimiter: config.dig('syntax', 'split')
+		)
+		return '(none)' if search_entries.empty?
+
+		search_entries.map { |entry| Query::Parser.entry_label(entry) }.join(', ')
+	end
+
+	# Logs one info-level summary line for each configured generate entry.
+	def log_generate_report(logger, generated_template_report)
+		report_entries = Utils.arrayify(generated_template_report['entries'])
+		return if report_entries.empty?
+
+		segments = report_entries.map do |entry|
+			location_label = generated_template_location_label(entry['location'])
+			invalid_suffix = entry['valid'] ? '' : ' (invalid config)'
+			"##{entry['number']}: #{entry['created']} template(s) in #{location_label}#{invalid_suffix}"
+		end
+
+		logger.info("Generate report: #{segments.join('; ')}")
+	end
+
+	# Converts a generated-template destination location into readable text.
+	def generated_template_location_label(location)
+		location_name = location.to_s.strip
+		return 'pages (site root)' if location_name.empty? || location_name == 'pages'
+
+		"collection '#{location_name}'"
+	end
+
+	# Logs one info-level summary line for search-location discovery and totals.
+	def log_search_location_report(logger, search_location_report, processed_templates:)
+		report_entries = Utils.arrayify(search_location_report)
+		if report_entries.empty?
+			logger.info("Search report: no location entries were resolved. processed=#{processed_templates} template(s).")
+			return
+		end
+
+		segments = report_entries.map do |entry|
+			"#{entry['label']}: templates=#{entry['templates_found']} items=#{entry['paginated_items']} indexes=#{entry['indexes']}"
+		end
+
+		total_templates_found = report_entries.inject(0) { |sum, entry| sum + entry['templates_found'].to_i }
+		total_paginated_items = report_entries.inject(0) { |sum, entry| sum + entry['paginated_items'].to_i }
+		total_indexes = report_entries.inject(0) { |sum, entry| sum + entry['indexes'].to_i }
+		logger.info("Search report: #{segments.join('; ')}. totals: templates=#{total_templates_found} items=#{total_paginated_items} indexes=#{total_indexes} processed=#{processed_templates}.")
+	end
 
 	# Convenience bridge for old jekyll-paginate sites that still define
 	# `paginate`/`paginate_path` without explicit v3 config.

@@ -60,6 +60,10 @@ class Model
 		@log_lambda.call("Template '#{template_path}': generating #{total_pages} page(s) with per_page=#{config['per_page']} limit=#{config['limit']}.", 'debug')
 		generated_pages = emit_paginated_pages(template, config, sorted_items, page_windows)
 		register_grouped_set_if_applicable(template, config, generated_pages)
+		{
+			'paginated_items' => sorted_items.length,
+			'indexes' => generated_pages.length
+		}
 	end
 
 	# Replaces a template with one synthetic page/document per page number.
