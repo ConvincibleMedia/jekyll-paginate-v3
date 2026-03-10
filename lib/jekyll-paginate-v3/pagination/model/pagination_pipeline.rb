@@ -214,9 +214,9 @@ class Model
 		collections = @site.collections
 		return collections[label] if collections.key?(label)
 
-		if clone_of.nil?
-			raise ArgumentError, "Unknown collection '#{label}' configured in pagination.collection."
-		end
+			if clone_of.nil?
+				raise ArgumentError, "Unknown collection '#{label}' configured in pagination.templates.collection or template pagination.collection."
+			end
 
 		ensure_collection_config!(label, clone_of)
 		collection = Jekyll::Collection.new(@site, label)

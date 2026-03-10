@@ -14,6 +14,7 @@ class Normaliser
 		private
 		def normalise_site_pagination_source(raw_pagination)
 			source = Utils.deep_copy(Utils.safe_hash(raw_pagination))
+			legacy_site_template_alias_keys = LEGACY_TEMPLATE_DEFAULT_KEYS - ['collection']
 
 			syntax = Utils.safe_hash(source['syntax'])
 			syntax['split'] = source['split'] if source.key?('split') && !syntax.key?('split')
@@ -25,7 +26,7 @@ class Normaliser
 
 			templates = Utils.safe_hash(source['templates'])
 			templates.delete('defaults')
-			LEGACY_TEMPLATE_DEFAULT_KEYS.each do |legacy_key|
+			legacy_site_template_alias_keys.each do |legacy_key|
 				next unless source.key?(legacy_key)
 				next if templates.key?(legacy_key)
 
@@ -209,8 +210,13 @@ class Normaliser
 		def extract_template_defaults_overrides(raw_overrides)
 			override_hash = Utils.safe_hash(raw_overrides)
 			template_overrides = Utils.safe_hash(override_hash['templates'])
+			legacy_alias_keys = if override_hash.key?('templates')
+													LEGACY_TEMPLATE_DEFAULT_KEYS - ['collection']
+												else
+													LEGACY_TEMPLATE_DEFAULT_KEYS
+												end
 
-			LEGACY_TEMPLATE_DEFAULT_KEYS.each do |legacy_key|
+			legacy_alias_keys.each do |legacy_key|
 				next unless override_hash.key?(legacy_key)
 				next if template_overrides.key?(legacy_key)
 
@@ -260,7 +266,9 @@ class Normaliser
 			config
 		end
 
-		# Normalises index destination config accepted on `pagination.collection`.
+			# Normalises index destination config accepted on
+			# `pagination.templates.collection` (site defaults) and
+			# `pagination.collection` (template-level override).
 		#
 		# Accepts:
 		# - String values (`self`, `shadow`, `clone`, `pages`, collection label)
@@ -278,9 +286,9 @@ class Normaliser
 			end.reject { |entry| entry.to_s.empty? }
 
 			normalised = Utils.deep_copy(default_targets) if normalised.empty?
-			if normalised.length > 2
-				raise ArgumentError, 'pagination.collection may contain at most two values.'
-			end
+				if normalised.length > 2
+					raise ArgumentError, 'pagination.templates.collection may contain at most two values.'
+				end
 
 			normalised
 		end

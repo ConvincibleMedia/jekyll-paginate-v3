@@ -145,13 +145,16 @@ The template can have additional configuration, which overrides the defaults set
 
 Having found a template, PaginateV3 creates index pages as required. E.g. if your settings specify 10 items to a page, and there are 15 items, it will create two index pages (for items 1–10 and 11–15). The first index page replaces the pagination template itself. Further index pages are additions. They will all inherit the settings, frontmatter and content of the template.
 
-`pagination.collection` controls the type of page/document that each created index page will be.
+`pagination.templates.collection` controls the type of page/document that created index pages will be by default.
 
 ```yaml
 pagination:
   enabled: true
-  collection: self, shadow # default
+  templates:
+    collection: self, shadow # default
 ```
+
+You can override this per template with `pagination.collection` on the template itself.
 
 The value can either be a single string (e.g. `pages`), which treats all index pages the same, or two strings (e.g. `[self, pages]`), which gives the treatment for page 1 and pages 2+ separately. The strings can be any of the following:
 

@@ -186,7 +186,7 @@ class Builder
 		entries = Utils.arrayify(raw_collection).map { |entry| entry.to_s.strip }.reject(&:empty?)
 		entries = ['pages'] if entries.empty?
 		if entries.length > 2
-			raise ArgumentError, 'pagination.collection may contain at most two values.'
+			raise ArgumentError, 'pagination.templates.collection may contain at most two values.'
 		end
 
 		entries.map { |entry| normalise_collection_entry(entry) }

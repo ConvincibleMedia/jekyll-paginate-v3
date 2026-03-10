@@ -9,7 +9,7 @@ module Config
 #
 # Site-level config is normalised to the nested public v3 structure:
 # - pagination.syntax.*
-# - pagination.collection
+# - pagination.templates.collection
 # - pagination.templates.location
 # - pagination.templates.generate
 # - pagination.templates.*

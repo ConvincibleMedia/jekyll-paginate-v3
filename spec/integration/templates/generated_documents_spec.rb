@@ -81,7 +81,7 @@ RSpec.describe 'Pagination integration: generated templates in collections' do
 		end
 	end
 
-	it 'defaults generated template collection target from pagination.collection when omitted' do
+	it 'defaults generated template collection target from pagination.templates.collection when omitted' do
 		files = post_files(1) { { 'category' => 'news' } }
 
 		jekyll_build(
@@ -89,8 +89,8 @@ RSpec.describe 'Pagination integration: generated templates in collections' do
 			config: {
 				'pagination' => {
 					'enabled' => true,
-					'collection' => 'products',
 					'templates' => {
+						'collection' => 'products',
 						'generate' => [
 							{
 								'items' => 'posts',

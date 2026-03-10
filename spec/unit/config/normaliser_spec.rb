@@ -139,12 +139,14 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
 		it 'migrates v2 legacy filter shortcuts without overriding explicit filters' do
 			config = described_class.normalise_site_config(
 				'pagination' => {
-					'compatibility' => 'v2',
-					'items' => 'products',
-					'collection' => 'pages',
-					'category' => 'featured',
-					'tag' => 'legacy-tag',
-					'filters' => {
+						'compatibility' => 'v2',
+						'items' => 'products',
+						'templates' => {
+							'collection' => 'pages'
+						},
+						'category' => 'featured',
+						'tag' => 'legacy-tag',
+						'filters' => {
 						'category' => 'explicit-category'
 					}
 				}
@@ -203,39 +205,56 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
 			expect(collections_definition['items']).to eq('all')
 		end
 
-		it 'normalises template collection targets from delimited strings' do
-			config = described_class.normalise_site_config(
-				'pagination' => {
-					'enabled' => true,
-					'collection' => 'pages,clone'
-				}
-			)
-
-			expect(config.dig('templates', 'collection')).to eq(%w[pages clone])
-		end
-
-		it 'rejects collection target lists longer than two entries' do
-			expect do
-				described_class.normalise_site_config(
+			it 'normalises template collection targets from delimited strings' do
+				config = described_class.normalise_site_config(
 					'pagination' => {
 						'enabled' => true,
-						'collection' => 'pages,self,shadow'
+						'templates' => {
+							'collection' => 'pages,clone'
+						}
 					}
 				)
-			end.to raise_error(ArgumentError, /at most two values/)
+
+				expect(config.dig('templates', 'collection')).to eq(%w[pages clone])
+			end
+
+			it 'ignores top-level pagination.collection for site template defaults' do
+				config = described_class.normalise_site_config(
+					'pagination' => {
+						'enabled' => true,
+						'collection' => 'pages'
+					}
+				)
+
+				expect(config.dig('templates', 'collection')).to eq(%w[self shadow])
+			end
+
+			it 'rejects collection target lists longer than two entries' do
+				expect do
+					described_class.normalise_site_config(
+						'pagination' => {
+							'enabled' => true,
+							'templates' => {
+								'collection' => 'pages,self,shadow'
+							}
+						}
+					)
+				end.to raise_error(ArgumentError, /at most two values/)
 		end
 
-		it 'supports custom collection keywords through pagination.keywords' do
-			config = described_class.normalise_site_config(
-				'pagination' => {
-					'enabled' => true,
-					'keywords' => {
-						'self' => 'same',
-						'shadow' => 'mask'
-					},
-					'collection' => 'same,mask'
-				}
-			)
+			it 'supports custom collection keywords through pagination.keywords' do
+				config = described_class.normalise_site_config(
+					'pagination' => {
+						'enabled' => true,
+						'keywords' => {
+							'self' => 'same',
+							'shadow' => 'mask'
+						},
+						'templates' => {
+							'collection' => 'same,mask'
+						}
+					}
+				)
 
 			expect(config.dig('templates', 'collection')).to eq(%w[self shadow])
 		end
