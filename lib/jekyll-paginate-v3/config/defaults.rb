@@ -40,9 +40,9 @@ module Config
 			['tag', 'tags'],
 			['category', 'categories']
 		],
-		'items' => 'posts',
+		'items' => nil,
 		'collection' => ['self', 'shadow'],
-		'filters' => [],
+		'filters' => nil,
 		'sort' => 'date desc',
 		'per_page' => 10,
 		'limit' => 0,
@@ -51,11 +51,11 @@ module Config
 			'before' => 2,
 			'after' => 2
 		},
-		'title' => ':title - page :num',
-		'permalink' => '/page/:num',
+		'title' => ':title - :num',
+		'permalink' => ':num',
 		'layout' => nil,
 		'layouts' => [],
-		'group' => [],
+		'group' => nil,
 		'slugify' => {
 			'mode' => 'default',
 			'lowercase' => true
@@ -83,6 +83,8 @@ module Config
 				'all' => 'collections',
 				'items' => 'posts'
 			},
+			'items' => 'posts',
+			'title' => ':title - page :num',
 			'permalink' => '/page/:num/',
 			'trail' => {
 				'before' => 2,

@@ -47,7 +47,7 @@ RSpec.describe 'Pagination integration: template grouping and layouts' do
 		end
 	end
 
-	it 'replaces grouped placeholders in pagination title and permalink for explicit templates' do
+	it 'treats one-part grouped permalink as page2+ permalink while template permalink stays grouped base' do
 		files = jekyll_merge(
 			post_files(2) { { 'category' => 'news' } },
 			jekyll_files do
@@ -63,7 +63,7 @@ RSpec.describe 'Pagination integration: template grouping and layouts' do
 									'items' => 'posts',
 									'per_page' => 1,
 									'group' => 'category',
-									'permalink' => 'slice/:category/:num',
+									'permalink' => 'slice/:num',
 									'title' => ':title / :category / :num'
 								}
 							}
@@ -76,7 +76,7 @@ RSpec.describe 'Pagination integration: template grouping and layouts' do
 
 		jekyll_build(default_site, files: files) do |site,|
 			first_page = page_by_url(site, '/archive/news/')
-			second_page = page_by_url(site, '/archive/news/slice/news/2/')
+			second_page = page_by_url(site, '/archive/news/slice/2/')
 
 			expect(first_page).not_to be_nil
 			expect(second_page).not_to be_nil

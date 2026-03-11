@@ -165,6 +165,17 @@ class Model
 		end
 	end
 
+	# Ensures multi-page pagination outputs include `:num` in page2 permalink
+	# templates so each generated index resolves to a unique destination path.
+	def validate_numbered_permalink_template!(template, config, total_pages)
+		return unless total_pages > 1
+
+		page2_permalink = page_template_config(config, 2)['permalink'].to_s
+		return if page2_permalink.include?(':num')
+
+		raise ArgumentError, "Template '#{Utils.relative_item_path(template)}' paginates to #{total_pages} pages but page2 permalink template '#{page2_permalink}' (from `pagination.page_templates.page2.permalink` or fallback `pagination.permalink`) does not include ':num'. Add ':num' so generated indexes have unique permalinks."
+	end
+
 	# Determines the canonical URL for the first pagination page of a template.
 	def template_first_page_url(template)
 		permalink = template.data['permalink']

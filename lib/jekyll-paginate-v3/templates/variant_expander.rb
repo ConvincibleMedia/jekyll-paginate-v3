@@ -295,7 +295,17 @@ class VariantExpander
 						compatibility_mode: variant_config['compatibility']
 					)
 
-					apply_token_overrides_to_template!(variant_template, token_maps)
+					grouped_permalink = grouped_permalink_state(variant_template, variant_config, entry)
+					grouped_template_permalink = if grouped_permalink.nil?
+														nil
+													else
+														Utils.replace_tokens(grouped_permalink['template_permalink'], token_maps['permalink'])
+													end
+					apply_token_overrides_to_template!(
+						variant_template,
+						token_maps,
+						grouped_template_permalink: grouped_template_permalink
+					)
 					apply_group_metadata_to_template!(
 						variant_template,
 						entry,
@@ -306,12 +316,21 @@ class VariantExpander
 
 					variant_config['filters'] = Utils.deep_copy(variant_config['filters']).merge(entry['filters'])
 					variant_config['title'] = Utils.replace_tokens(variant_config['title'], token_maps['title'])
-					variant_config['permalink'] = Utils.replace_tokens(variant_config['permalink'], token_maps['permalink'])
+					if grouped_permalink.nil?
+						variant_config['permalink'] = Utils.replace_tokens(variant_config['permalink'], token_maps['permalink'])
+					else
+						variant_config['permalink'] = grouped_permalink['page2_permalink'].to_s
+						variant_config['page_templates'] = apply_grouped_page2_permalink_template(
+							variant_config['page_templates'],
+							variant_config['permalink']
+						)
+					end
 					variant_config['page_templates'] = tokenised_page_templates(
 						variant_config['page_templates'],
 						token_maps,
 						fallback_title: variant_config['title'],
-						fallback_permalink: variant_config['permalink']
+						fallback_permalink: variant_config['permalink'],
+						replace_page2_permalink_tokens: grouped_permalink.nil?
 					)
 					variant_config['group'] = []
 					variant_config['layouts'] = []
@@ -327,6 +346,121 @@ class VariantExpander
 		end
 
 		variants
+	end
+
+	# Resolves grouped permalink part1/part2 behaviour from docs:
+	# - two configured parts map to grouped template permalink + page2 permalink
+	# - one configured part is treated as page2 permalink only
+	# - missing grouped placeholders are implicitly prepended to part1
+	def grouped_permalink_state(template, variant_config, entry)
+		group_keys = grouped_permalink_keys(entry)
+		return nil if group_keys.empty?
+
+		first_part, second_part = split_grouped_permalink_definition(variant_config['permalink'])
+		unless present_config_value?(first_part)
+			first_part = Utils.safe_hash(template.data)['permalink']
+		end
+		first_part = prepend_missing_group_placeholders(
+			first_part,
+			group_keys,
+			compatibility_mode: variant_config['compatibility']
+		)
+		first_part = resolve_grouped_template_permalink(template, first_part)
+
+		{
+			'template_permalink' => first_part.to_s,
+			'page2_permalink' => second_part.to_s
+		}
+	end
+
+	# Resolves grouped template permalink part1 relative to template route.
+	#
+	# Absolute part1 values (starting with `/`) remain absolute. Relative
+	# part1 values are resolved against the source template permalink/URL.
+	def resolve_grouped_template_permalink(template, raw_part1)
+		part1 = raw_part1.to_s.strip
+		return part1 if part1.start_with?('/')
+
+		join_permalink_segments(base_template_permalink(template), part1)
+	end
+
+	# Returns the base permalink/URL for resolving grouped relative paths.
+	def base_template_permalink(template)
+		data = Utils.safe_hash(template.data)
+		permalink = data['permalink'].to_s.strip
+		if permalink.empty? && template.respond_to?(:url)
+			permalink = template.url.to_s.strip
+		end
+		permalink = '/' if permalink.empty?
+
+		Utils.ensure_leading_slash(permalink)
+	end
+
+	# Returns grouped keys in declaration order for one grouped entry.
+	def grouped_permalink_keys(entry)
+		Utils.arrayify(entry['levels']).map do |level|
+			Utils.safe_hash(level)['key'].to_s.strip
+		end.reject(&:empty?)
+	end
+
+	# Splits grouped permalink definition into `[part1, part2]`.
+	#
+	# Two parts: `part1 part2`
+	# One part: treated as `part2` only (`part1` is nil)
+	def split_grouped_permalink_definition(raw_permalink)
+		parts = raw_permalink.to_s.strip.split(/\s+/, 2).map { |part| part.to_s.strip }
+		if parts.length >= 2
+			[parts[0], parts[1]]
+		elsif parts.length == 1 && !parts[0].empty?
+			[nil, parts[0]]
+		else
+			[nil, '']
+		end
+	end
+
+	# Prepends grouped placeholders that are missing from permalink part1.
+	def prepend_missing_group_placeholders(first_part, group_keys, compatibility_mode:)
+		part1 = first_part.to_s.strip
+		present_keys = matched_placeholder_keys(part1, group_keys, compatibility_mode: compatibility_mode)
+		missing_placeholders = group_keys.reject { |key| present_keys.include?(key) }.map { |key| ":#{key}" }
+		return part1 if missing_placeholders.empty?
+
+		join_permalink_segments(missing_placeholders.join('/'), part1)
+	end
+
+	# Detects grouped placeholders already present in a permalink part.
+	def matched_placeholder_keys(permalink_part, group_keys, compatibility_mode:)
+		keys = group_keys.map(&:to_s).reject(&:empty?).uniq
+		return [] if keys.empty?
+
+		token_to_key = keys.each_with_object({}) { |key, map| map[key] = key }
+		if compatibility_mode == 'v2'
+			token_to_key['cat'] = 'category' if keys.include?('category')
+			token_to_key['coll'] = 'collection' if keys.include?('collection')
+		end
+
+		sorted_tokens = token_to_key.keys.sort_by { |token| [-token.length, token] }
+		placeholder_pattern = /:(#{sorted_tokens.map { |token| Regexp.escape(token) }.join('|')})/
+		permalink_part.to_s.scan(placeholder_pattern).flatten.map { |token| token_to_key[token] }.uniq
+	end
+
+	# Joins two permalink fragments with exactly one slash separator.
+	def join_permalink_segments(prefix, suffix)
+		prefix_part = prefix.to_s.strip
+		suffix_part = suffix.to_s.strip
+		return suffix_part if prefix_part.empty?
+		return prefix_part if suffix_part.empty?
+
+		"#{prefix_part.sub(%r{/\z}, '')}/#{suffix_part.sub(%r{\A/}, '')}"
+	end
+
+	# Rewrites page2 permalink template for grouped permalink part2 handling.
+	def apply_grouped_page2_permalink_template(raw_page_templates, page2_permalink)
+		page_templates = Utils.safe_hash(raw_page_templates)
+		page2_template = Utils.safe_hash(page_templates['page2'])
+		page2_template['permalink'] = page2_permalink.to_s
+		page_templates['page2'] = page2_template
+		page_templates
 	end
 
 	# Resolves one layout-specific merged/normalised config pair.
@@ -365,13 +499,15 @@ class VariantExpander
 	end
 
 	# Applies placeholder replacement on template frontmatter values.
-	def apply_token_overrides_to_template!(template, token_maps)
+	def apply_token_overrides_to_template!(template, token_maps, grouped_template_permalink: nil)
 		data = Utils.safe_hash(template.data)
 
 		if data['title'].is_a?(String)
 			data['title'] = Utils.replace_tokens(data['title'], token_maps['title'])
 		end
-		if data['permalink'].is_a?(String)
+		if grouped_template_permalink.is_a?(String)
+			data['permalink'] = grouped_template_permalink
+		elsif data['permalink'].is_a?(String)
 			data['permalink'] = Utils.replace_tokens(data['permalink'], token_maps['permalink'])
 		end
 		if template.respond_to?(:content=)
@@ -542,7 +678,7 @@ class VariantExpander
 
 	# Applies grouped placeholder tokens to configured page templates while
 	# preserving any custom v1/v2 compatibility overrides.
-	def tokenised_page_templates(raw_page_templates, token_maps, fallback_title:, fallback_permalink:)
+	def tokenised_page_templates(raw_page_templates, token_maps, fallback_title:, fallback_permalink:, replace_page2_permalink_tokens: true)
 		page_templates = Utils.safe_hash(raw_page_templates)
 		if page_templates.empty?
 			page_templates = build_page_templates(fallback_title, fallback_permalink)
@@ -551,7 +687,9 @@ class VariantExpander
 		%w[page1 page2].each do |key|
 			template = Utils.safe_hash(page_templates[key])
 			template['title'] = Utils.replace_tokens(template['title'], token_maps['title']) if template['title'].is_a?(String)
-			template['permalink'] = Utils.replace_tokens(template['permalink'], token_maps['permalink']) if template['permalink'].is_a?(String)
+			if template['permalink'].is_a?(String)
+				template['permalink'] = Utils.replace_tokens(template['permalink'], token_maps['permalink']) if key != 'page2' || replace_page2_permalink_tokens
+			end
 			page_templates[key] = template
 		end
 

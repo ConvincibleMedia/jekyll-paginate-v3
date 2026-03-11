@@ -39,12 +39,12 @@ RSpec.describe 'Pagination integration: collection target modes' do
 			expect(product_indexes.length).to eq(1)
 			expect(normalise_url_for_match(product_indexes.first.url)).to eq('/products/widgets')
 
-			shadow_page = page_by_url(site, '/products/widgets/page/2/')
+			shadow_page = page_by_url(site, '/products/widgets/2/')
 			expect(shadow_page).not_to be_nil
 			expect(shadow_page).to be_a(Jekyll::Page)
 			expect(shadow_page.data['collection']).to eq('products')
 			expect(shadow_page.collection.label).to eq('products')
-			expect(document_by_url(site, 'products', '/products/widgets/page/2/')).to be_nil
+			expect(document_by_url(site, 'products', '/products/widgets/2/')).to be_nil
 		end
 	end
 
@@ -85,7 +85,7 @@ RSpec.describe 'Pagination integration: collection target modes' do
 		) do |site,|
 			expect(generated_pagination_documents(site, 'products')).to eq([])
 			expect(page_by_url(site, '/products/widgets/')).not_to be_nil
-			expect(page_by_url(site, '/products/widgets/page/2/')).not_to be_nil
+			expect(page_by_url(site, '/products/widgets/2/')).not_to be_nil
 		end
 	end
 
@@ -125,10 +125,10 @@ RSpec.describe 'Pagination integration: collection target modes' do
 			files: files
 		) do |site,|
 			expect(document_by_url(site, 'products', '/products/widgets/')).not_to be_nil
-			expect(document_by_url(site, 'products', '/products/widgets/page/2/')).to be_nil
+			expect(document_by_url(site, 'products', '/products/widgets/2/')).to be_nil
 			expect(site.collections).to have_key('products_indexes')
-			expect(document_by_url(site, 'products_indexes', '/products/widgets/page/2/')).not_to be_nil
-			expect(document_by_url(site, 'products_indexes', '/products/widgets/page/3/')).not_to be_nil
+			expect(document_by_url(site, 'products_indexes', '/products/widgets/2/')).not_to be_nil
+			expect(document_by_url(site, 'products_indexes', '/products/widgets/3/')).not_to be_nil
 		end
 	end
 
@@ -169,7 +169,7 @@ RSpec.describe 'Pagination integration: collection target modes' do
 		) do |site,|
 			expect(generated_pagination_documents(site, 'products')).to eq([])
 			expect(document_by_url(site, 'guides', '/products/widgets/')).not_to be_nil
-			expect(document_by_url(site, 'guides', '/products/widgets/page/2/')).not_to be_nil
+			expect(document_by_url(site, 'guides', '/products/widgets/2/')).not_to be_nil
 		end
 	end
 
@@ -199,7 +199,7 @@ RSpec.describe 'Pagination integration: collection target modes' do
 
 		jekyll_build(default_site, files: files) do |site,|
 			expect(page_by_url(site, '/')).not_to be_nil
-			expect(page_by_url(site, '/page/2/')).not_to be_nil
+			expect(page_by_url(site, '/2/')).not_to be_nil
 			expect(site.collections).not_to have_key('pages_indexes')
 		end
 	end

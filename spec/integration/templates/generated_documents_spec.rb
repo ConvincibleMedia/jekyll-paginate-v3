@@ -15,6 +15,7 @@ RSpec.describe 'Pagination integration: generated templates in collections' do
 			config: {
 				'pagination' => {
 					'enabled' => true,
+					'items' => 'posts',
 					'templates' => {
 						'generate' => [
 							{
@@ -35,7 +36,7 @@ RSpec.describe 'Pagination integration: generated templates in collections' do
 			files: files
 		) do |site,|
 			news_doc_one = document_by_url(site, 'guides', '/guides/news/')
-			news_doc_two = document_by_url(site, 'guides', '/guides/news/page/2/')
+			news_doc_two = document_by_url(site, 'guides', '/guides/news/2/')
 			updates_doc = document_by_url(site, 'guides', '/guides/updates/')
 
 			expect(news_doc_one).not_to be_nil
@@ -56,6 +57,7 @@ RSpec.describe 'Pagination integration: generated templates in collections' do
 				'pagination' => {
 					'enabled' => true,
 					'collection' => 'products',
+					'items' => 'posts',
 					'templates' => {
 						'generate' => [
 							{
@@ -87,6 +89,7 @@ RSpec.describe 'Pagination integration: generated templates in collections' do
 				'pagination' => {
 					'enabled' => true,
 					'collection' => 'products',
+					'items' => 'posts',
 					'templates' => {
 						'generate' => [
 							{

@@ -72,8 +72,9 @@ RSpec.describe 'Pagination integration: v1' do
 			files: files
 		) do |site,|
 			blog_page_one = page_by_url(site, '/blog/')
-			blog_page_two = page_by_url(site, '/page/2/')
 			root_page = page_by_url(site, '/')
+			next_reference = paginator_payload(blog_page_one).fetch('next')
+			blog_page_two = next_reference.respond_to?(:page) ? next_reference.page : next_reference['page']
 
 			expect(blog_page_one).not_to be_nil
 			expect(blog_page_two).not_to be_nil

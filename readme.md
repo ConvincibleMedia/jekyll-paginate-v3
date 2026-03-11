@@ -264,8 +264,6 @@ See [Grouping](/docs/group.md) for detailed readme about this feature.
 
 The `title` and `permalink` config keys determine the title/URL of index pages produced from the template. Each can use the placeholder `:num` for the page number, while the `title` value also accepts `:title` for the original template title.
 
-If the template is grouped, both can also use placeholders for the frontmatter keys that were grouped on, e.g. `:category` or `:author.name`.
-
 Page 1 always inherits the title/permalink from the template directly, i.e. it doesn't use these formats. They apply to pages 2+.
 
 The permalink is resolved relative to the permalink of the template. So `permalink: page/:num` on a template located at `/news` would produce `news` as page 1, and `news/page/2` as page 2, etc.

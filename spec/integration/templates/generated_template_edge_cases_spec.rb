@@ -9,6 +9,7 @@ RSpec.describe 'Pagination integration: generated template edge cases' do
 			config: {
 				'pagination' => {
 					'enabled' => true,
+					'items' => 'posts',
 					'templates' => {
 						'generate' => [
 							{
@@ -39,6 +40,7 @@ RSpec.describe 'Pagination integration: generated template edge cases' do
 			config: {
 				'pagination' => {
 					'enabled' => true,
+					'items' => 'posts',
 					'templates' => {
 						'generate' => [
 							{}
@@ -92,6 +94,7 @@ RSpec.describe 'Pagination integration: generated template edge cases' do
 			config: {
 				'pagination' => {
 					'enabled' => true,
+					'items' => 'posts',
 					'templates' => {
 						'generate' => [
 							{
@@ -132,6 +135,7 @@ RSpec.describe 'Pagination integration: generated template edge cases' do
 			config: {
 				'pagination' => {
 					'enabled' => true,
+					'items' => 'posts',
 					'templates' => {
 						'generate' => [
 							{

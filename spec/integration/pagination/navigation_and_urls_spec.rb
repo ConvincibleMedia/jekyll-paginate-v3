@@ -68,17 +68,17 @@ RSpec.describe 'Pagination integration: navigation, URLs, and trails' do
 
 		jekyll_build(default_site, files: files) do |site,|
 			page_one = page_by_url(site, '/')
-			page_two = page_by_url(site, '/page/2/')
-			page_three = page_by_url(site, '/page/3/')
+			page_two = page_by_url(site, '/2/')
+			page_three = page_by_url(site, '/3/')
 
 			expect(paginator_reference_number(page_one, 'prev')).to be_nil
-			expect(normalise_url_for_match(paginator_reference_url(page_one, 'next'))).to eq('/page/2')
+			expect(normalise_url_for_match(paginator_reference_url(page_one, 'next'))).to eq('/2')
 			expect(normalise_url_for_match(paginator_reference_url(page_two, 'previous'))).to eq('/')
 			expect(normalise_url_for_match(paginator_reference_url(page_two, 'prev'))).to eq('/')
-			expect(normalise_url_for_match(paginator_reference_url(page_two, 'next'))).to eq('/page/3')
+			expect(normalise_url_for_match(paginator_reference_url(page_two, 'next'))).to eq('/3')
 			expect(paginator_reference_number(page_three, 'next')).to be_nil
 			expect(normalise_url_for_match(paginator_reference_url(page_three, 'first'))).to eq('/')
-			expect(normalise_url_for_match(paginator_reference_url(page_three, 'last'))).to eq('/page/3')
+			expect(normalise_url_for_match(paginator_reference_url(page_three, 'last'))).to eq('/3')
 		end
 	end
 
@@ -110,8 +110,8 @@ RSpec.describe 'Pagination integration: navigation, URLs, and trails' do
 
 		jekyll_build(default_site, files: files) do |site,|
 			page_one = page_by_url(site, '/')
-			page_two = page_by_url(site, '/page/2/')
-			page_four = page_by_url(site, '/page/4/')
+			page_two = page_by_url(site, '/2/')
+			page_four = page_by_url(site, '/4/')
 
 			expect(paginator_trail_numbers(page_one)).to eq([1, 2, 3])
 			expect(paginator_trail_numbers(page_two)).to eq([1, 2, 3])
@@ -168,10 +168,10 @@ RSpec.describe 'Pagination integration: navigation, URLs, and trails' do
 		)
 
 		jekyll_build(default_site, files: files) do |site, output_files|
-			page_two = page_by_url(site, '/page/2/')
+			page_two = page_by_url(site, '/2/')
 			expect(page_two).not_to be_nil
 
-			page_two_output = output_files.list.find { |relative_path| relative_path.match?(%r{\Apage/2(?:/index)?\.html\z}) }
+			page_two_output = output_files.list.find { |relative_path| relative_path.match?(%r{\A2(?:/index)?\.html\z}) }
 			expect(page_two_output).not_to be_nil
 
 			rendered = output_files.read(page_two_output)
@@ -195,16 +195,16 @@ RSpec.describe 'Pagination integration: navigation, URLs, and trails' do
 			expect(current_end).to eq('4')
 			expect(normalise_url_for_match(previous_url)).to eq('/')
 			expect(normalise_url_for_match(prev_url)).to eq('/')
-			expect(normalise_url_for_match(next_url)).to eq('/page/3')
+			expect(normalise_url_for_match(next_url)).to eq('/3')
 			expect(normalise_url_for_match(first_url)).to eq('/')
-			expect(normalise_url_for_match(last_url)).to eq('/page/5')
+			expect(normalise_url_for_match(last_url)).to eq('/5')
 			expect(trail_lines).to eq(
 				[
 					'1:/',
 					'2:CURRENT',
-					'3:/page/3',
-					'4:/page/4',
-					'5:/page/5'
+					'3:/3',
+					'4:/4',
+					'5:/5'
 				]
 			)
 		end

@@ -28,6 +28,7 @@ RSpec.describe 'Pagination integration: grouped template behaviour' do
 										}
 									}
 								],
+								'items' => 'posts',
 								'frontmatter' => {
 									'layout' => 'autopage_category',
 									'permalink' => '/size/:size/',
@@ -102,6 +103,7 @@ RSpec.describe 'Pagination integration: grouped template behaviour' do
 										}
 									}
 								],
+								'items' => 'posts',
 								'frontmatter' => {
 									'layout' => 'autopage_category',
 									'permalink' => '/published/:published_on/',
@@ -153,6 +155,7 @@ RSpec.describe 'Pagination integration: grouped template behaviour' do
 									{ 'on' => 'size', 'size' => 100 },
 									{ 'on' => 'published_on', 'size' => 'year' }
 								],
+								'items' => 'posts',
 								'frontmatter' => {
 									'layout' => 'autopage_category',
 									'permalink' => '/combo/:category/:size/:published_on/',
@@ -182,7 +185,7 @@ RSpec.describe 'Pagination integration: grouped template behaviour' do
 		end
 	end
 
-	it 'replaces grouped placeholders in pagination title/permalink templates for page 2+' do
+	it 'treats one-part grouped permalink as page2+ permalink for generated templates' do
 		files = post_files(2) { { 'category' => 'news' } }
 
 		jekyll_build(
@@ -194,13 +197,14 @@ RSpec.describe 'Pagination integration: grouped template behaviour' do
 						'generate' => [
 							{
 								'group' => 'category',
+								'items' => 'posts',
 								'frontmatter' => {
 									'layout' => 'autopage_category',
 									'permalink' => '/archive/:category/',
 									'title' => 'Listing :category'
 								},
 								'per_page' => 1,
-								'permalink' => 'slice/:category/:num',
+								'permalink' => 'slice/:num',
 								'title' => ':title / :category / :num'
 							}
 						]
@@ -210,7 +214,7 @@ RSpec.describe 'Pagination integration: grouped template behaviour' do
 			files: files
 		) do |site,|
 			first_page = page_by_url(site, '/archive/news/')
-			second_page = page_by_url(site, '/archive/news/slice/news/2/')
+			second_page = page_by_url(site, '/archive/news/slice/2/')
 
 			expect(first_page).not_to be_nil
 			expect(second_page).not_to be_nil

@@ -147,7 +147,7 @@ bunch:
 * `now`/`today` with optional offsets e.g. `now-1` (current time with seconds offset) or `today+2` (current day with day offset)
 * `year(today)`, `month(today)`, `hour(now)`, `minute(now)` mean the start of that unit from the present moment. For instance if today is 25 February 2026, then `year(today)` is 1 January 2026 while `month(today)` is 1 February 2026.
 
-#### Alphabetic
+### Alphabetic
 
 String frontmatter values can be bunched into alphabetic bunches.
 
@@ -169,24 +169,31 @@ Items that have a value that isn't alphabetical, e.g. numerical, are discarded. 
 
 When you `group` pagination, the `title` and `permalink` each gain additional placeholders for the values of the frontmatter keys on which you grouped.
 
-For instance if you group on `category, subcategory` than `title` and `permalink` both gain a `:category` and `:subcategory` placeholder.
+`permalink` is treated differently when Grouping is active, being defined in two parts separated by a space. Only the first part gains the additional placeholders.
+
+For instance if you group on `category, subcategory` then `title` and `permalink` both gain a `:category` and `:subcategory` placeholder.
 
 ```yaml
 pagination:
   items: products
   group: category, subcategory
   title: :title
-  permalink: :category/:subcategory/page/:num
+  permalink: :category/:subcategory page/:num
 ```
 
-To ensure each grouped index page outputs at a unique permalink, all placeholders must be used. If placeholders are missing, they are added by default to the beginning of the permalink in the grouping order. For instance:
+* The first part of `permalink` becomes the actual permalink of the templates that are generated for each group. 
+* The second part becomes the value of `permalink` in that generated template's `pagination`.
+* If only one part is defined, this is treated as the "second part" only.
+* If the "first part" is missing or misses out some of the placeholders, these are implicitly added at the front in grouping order.
 
-```yaml
-pagination:
-  items: products
-  group: category, subcategory
-  title: :title
-  permalink: page/:num
-```
+  Example:
 
-In the above, as `:category` and `:subcategory` are not defined in the permalink, they are implicitly added to the front. The permalink will be treated as `:category/:subcategory/page/:num`.
+  ```yaml
+  pagination:
+    items: products
+    group: category, subcategory
+    title: :title
+    permalink: page/:num # only 1 part defined
+  ```
+
+  In the above, the first part is implicitly set to `:category/:subcategory`.

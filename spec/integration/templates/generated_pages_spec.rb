@@ -15,6 +15,7 @@ RSpec.describe 'Pagination integration: generated templates in pages' do
 			config: {
 				'pagination' => {
 					'enabled' => true,
+					'items' => 'posts',
 					'templates' => {
 						'generate' => [
 							{
@@ -34,7 +35,7 @@ RSpec.describe 'Pagination integration: generated templates in pages' do
 			files: files
 		) do |site,|
 			news_page_one = page_by_url(site, '/topics/news/')
-			news_page_two = page_by_url(site, '/topics/news/page/2/')
+			news_page_two = page_by_url(site, '/topics/news/2/')
 			docs_page = page_by_url(site, '/topics/docs/')
 
 			expect(news_page_one).not_to be_nil
@@ -55,13 +56,14 @@ RSpec.describe 'Pagination integration: generated templates in pages' do
 			config: {
 				'pagination' => {
 					'enabled' => true,
+					'items' => 'posts',
 					'templates' => {
 						'generate' => [
 							{
 								'group' => 'category',
 								'slugify' => {
 									'mode' => 'default',
-									'case' => true
+									'lowercase' => false
 								},
 								'frontmatter' => {
 									'layout' => 'autopage_category',
@@ -100,6 +102,7 @@ RSpec.describe 'Pagination integration: generated templates in pages' do
 			config: {
 				'pagination' => {
 					'enabled' => true,
+					'items' => 'posts',
 					'templates' => {
 						'generate' => [
 							{
@@ -145,6 +148,7 @@ RSpec.describe 'Pagination integration: generated templates in pages' do
 			config: {
 				'pagination' => {
 					'enabled' => true,
+					'items' => 'posts',
 					'templates' => {
 						'generate' => [
 							{
@@ -169,7 +173,7 @@ RSpec.describe 'Pagination integration: generated templates in pages' do
 			files: files
 		) do |site, output_files|
 			first_page = page_by_url(site, '/section/guides/')
-			second_page = page_by_url(site, '/section/guides/page/2/')
+			second_page = page_by_url(site, '/section/guides/2/')
 
 			expect(first_page.data.fetch('section')).to eq('knowledge-base')
 			expect(first_page.data.fetch('title')).to eq('Section guides')

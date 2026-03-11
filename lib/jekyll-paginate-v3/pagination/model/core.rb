@@ -61,6 +61,7 @@ class Model
 				@log_lambda.call("Skipping template '#{Utils.relative_item_path(template)}' because merged `pagination.enabled` is false.", 'debug')
 				next
 			end
+			validate_required_template_config!(template, template_config)
 
 			enabled_templates << [template, template_config, template_pagination_source]
 		end
@@ -271,6 +272,23 @@ class Model
 		return value if %w[v1 v2].include?(value)
 
 		nil
+	end
+
+	# Ensures enabled templates have the minimum required pagination keys.
+	def validate_required_template_config!(template, template_config)
+		return if configured_value_present?(template_config['items'])
+
+		raise ArgumentError, "Template '#{Utils.relative_item_path(template)}' is enabled for pagination but does not define `pagination.items` (directly, via layout pagination config, or via global pagination template defaults)."
+	end
+
+	# Returns true when a template config value is explicitly configured.
+	def configured_value_present?(value)
+		return false if value.nil?
+		return false if value.is_a?(String) && value.strip.empty?
+		return false if value.is_a?(Array) && value.empty?
+		return false if value.is_a?(Hash) && value.empty?
+
+		true
 	end
 
 	# Categorises a template candidate and marks enabled templates.

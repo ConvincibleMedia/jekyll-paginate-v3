@@ -310,7 +310,13 @@ class Normaliser
 
 		# Returns canonical keys that are inherited by all templates.
 		def template_setting_keys
-			@template_setting_keys ||= %w[items collection filters sort per_page limit offset trail title permalink layout layouts group slugify].freeze
+			@template_setting_keys ||= %w[items filters group sort per_page limit offset trail title permalink slugify collection layout].freeze
+		end
+
+		# Returns template-default keys that have v3 built-in defaults when
+		# not configured globally.
+		def template_setting_built_in_default_keys
+			@template_setting_built_in_default_keys ||= %w[sort per_page limit offset trail title permalink slugify collection].freeze
 		end
 
 		# Returns legacy aliases that still map into template defaults.
@@ -320,7 +326,7 @@ class Normaliser
 
 		# Returns deep-copied defaults for all template settings.
 		def template_setting_defaults
-			template_setting_keys.each_with_object({}) do |key, defaults|
+			template_setting_built_in_default_keys.each_with_object({}) do |key, defaults|
 				defaults[key] = Utils.deep_copy(DEFAULTS[key])
 			end
 		end
@@ -396,11 +402,13 @@ class Normaliser
 		# Params: `raw_items`.
 		# Returns: a value consumed by the next pipeline step.
 		def normalise_items_value(raw_items)
-			return DEFAULTS['items'] if raw_items.nil?
+			return nil if raw_items.nil?
+			return nil if raw_items.is_a?(Hash) && raw_items.empty?
+			return nil if raw_items.is_a?(Array) && raw_items.empty?
 			return raw_items if raw_items.is_a?(Hash) || raw_items.is_a?(Array)
 
 			value = raw_items.to_s.strip
-			value.empty? ? DEFAULTS['items'] : value
+			value.empty? ? nil : value
 		end
 
 		# Purpose: Normalises trail into canonical form.

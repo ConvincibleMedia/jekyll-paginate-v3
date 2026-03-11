@@ -26,14 +26,14 @@ RSpec.describe 'Pagination integration: core behaviour' do
 
 		jekyll_build(default_site, files: files) do |site,|
 			generated_pages = generated_pagination_pages(site).sort_by { |page| paginator_index_number(page) }
-			expect(generated_pages.map { |page| normalise_url_for_match(page.url) }).to eq(['/', '/page/2', '/page/3'])
+			expect(generated_pages.map { |page| normalise_url_for_match(page.url) }).to eq(['/', '/2', '/3'])
 
 			expect(paginator_item_titles(generated_pages[0])).to eq(['Post 01', 'Post 02'])
 			expect(paginator_item_titles(generated_pages[1])).to eq(['Post 03', 'Post 04'])
 			expect(paginator_item_titles(generated_pages[2])).to eq(['Post 05'])
 
 			expect(paginator_reference_number(generated_pages[0], 'next')).to eq(2)
-			expect(normalise_url_for_match(paginator_reference_url(generated_pages[0], 'next'))).to eq('/page/2')
+			expect(normalise_url_for_match(paginator_reference_url(generated_pages[0], 'next'))).to eq('/2')
 			expect(paginator_reference_number(generated_pages[2], 'next')).to be_nil
 			expect(generated_pages[0].data.dig('pagination', 'template')).to be_nil
 			expect(generated_pages[0].data.dig('pagination', 'enabled')).to be_nil
@@ -119,8 +119,8 @@ RSpec.describe 'Pagination integration: core behaviour' do
 
 			expect(paginator_item_titles(generated_pages[0])).to eq(['Post 04', 'Post 05'])
 			expect(generated_pages[1]).to be_nil
-			expect(page_by_url(site, '/page/2/')).to be_nil
-			expect(page_by_url(site, '/page/3/')).to be_nil
+			expect(page_by_url(site, '/2/')).to be_nil
+			expect(page_by_url(site, '/3/')).to be_nil
 		end
 	end
 
@@ -160,8 +160,8 @@ RSpec.describe 'Pagination integration: core behaviour' do
 
 		jekyll_build(default_site, files: files) do |site,|
 			page_one = page_by_url(site, '/')
-			page_two = page_by_url(site, '/page/2/')
-			page_three = page_by_url(site, '/page/3/')
+			page_two = page_by_url(site, '/2/')
+			page_three = page_by_url(site, '/3/')
 
 			expect(page_one).not_to be_nil
 			expect(page_two).not_to be_nil
@@ -249,17 +249,17 @@ RSpec.describe 'Pagination integration: core behaviour' do
 
 		jekyll_build(default_site, files: files) do |site,|
 			page_one = page_by_url(site, '/')
-			page_two = page_by_url(site, '/page/2/')
-			page_three = page_by_url(site, '/page/3/')
-			page_four = page_by_url(site, '/page/4/')
-			page_five = page_by_url(site, '/page/5/')
+			page_two = page_by_url(site, '/2/')
+			page_three = page_by_url(site, '/3/')
+			page_four = page_by_url(site, '/4/')
+			page_five = page_by_url(site, '/5/')
 
 			expect(page_one).not_to be_nil
 			expect(page_two).not_to be_nil
 			expect(page_three).not_to be_nil
 			expect(page_four).not_to be_nil
 			expect(page_five).not_to be_nil
-			expect(page_by_url(site, '/page/6/')).to be_nil
+			expect(page_by_url(site, '/6/')).to be_nil
 
 			expect(paginator_item_titles(page_one)).to eq(['Post 01', 'Post 02', 'Post 03'])
 			expect(paginator_item_titles(page_two)).to eq(['Post 04'])
@@ -273,7 +273,7 @@ RSpec.describe 'Pagination integration: core behaviour' do
 			expect(page_four_payload.fetch('current').to_h['end']).to eq(8)
 
 			expect(paginator_reference_number(page_three, 'next')).to eq(4)
-			expect(normalise_url_for_match(paginator_reference_url(page_three, 'next'))).to eq('/page/4')
+			expect(normalise_url_for_match(paginator_reference_url(page_three, 'next'))).to eq('/4')
 			expect(paginator_reference_number(page_five, 'next')).to be_nil
 		end
 	end

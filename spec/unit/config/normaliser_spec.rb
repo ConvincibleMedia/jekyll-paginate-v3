@@ -272,7 +272,7 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
 				{ 'on' => 'category' },
 				{ 'on' => 'author.name' }
 			])
-			expect(config['slugify']).to eq({ 'mode' => 'pretty', 'case' => false })
+			expect(config['slugify']).to eq({ 'mode' => 'pretty', 'lowercase' => true })
 		end
 	end
 
@@ -335,7 +335,7 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
 				{ 'on' => 'size', 'size' => 100, 'filter' => { 'min' => 10 } },
 				{ 'on' => 'tag' }
 			])
-			expect(config['slugify']).to eq({ 'mode' => 'latin', 'case' => false })
+			expect(config['slugify']).to eq({ 'mode' => 'latin', 'lowercase' => true })
 		end
 	end
 end

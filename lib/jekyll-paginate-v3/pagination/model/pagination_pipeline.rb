@@ -115,6 +115,7 @@ class Model
 
 		page_windows = Utils.build_pagination_windows(sorted_items.length, config['per_page'])
 		total_pages = page_windows.length
+		validate_numbered_permalink_template!(template, config, total_pages)
 
 		@log_lambda.call("Template '#{template_path}': generating #{total_pages} page(s) with per_page=#{config['per_page']} limit=#{config['limit']}.", 'debug')
 		generated_pages = emit_paginated_pages(
