@@ -40,22 +40,29 @@ module Config
 			['tag', 'tags'],
 			['category', 'categories']
 		],
+		'items' => 'posts',
+		'collection' => ['self', 'shadow'],
+		'filters' => [],
+		'sort' => 'date desc',
+		'per_page' => 10,
+		'limit' => 0,
+		'offset' => 0,
+		'trail' => {
+			'before' => 2,
+			'after' => 2
+		},
+		'title' => ':title - page :num',
+		'permalink' => '/page/:num',
+		'layout' => nil,
+		'layouts' => [],
+		'group' => [],
+		'slugify' => {
+			'mode' => 'default',
+			'lowercase' => true
+		},
 		'templates' => {
 			'location' => 'pages',
-			'generate' => [],
-			'items' => 'posts',
-			'collection' => ['self', 'shadow'],
-			'filters' => [],
-			'sort' => 'date desc',
-			'per_page' => 10,
-			'limit' => 0,
-			'offset' => 0,
-			'trail' => {
-				'before' => 2,
-				'after' => 2
-			},
-			'title' => ':title - page :num',
-			'permalink' => '/page/:num'
+			'generate' => []
 		}
 	}.freeze
 
@@ -76,12 +83,10 @@ module Config
 				'all' => 'collections',
 				'items' => 'posts'
 			},
-			'templates' => {
-				'permalink' => '/page/:num/',
-				'trail' => {
-					'before' => 2,
-					'after' => 2
-				}
+			'permalink' => '/page/:num/',
+			'trail' => {
+				'before' => 2,
+				'after' => 2
 			}
 		},
 		'v1' => {
@@ -89,10 +94,10 @@ module Config
 			'keywords' => {
 				'items' => 'posts'
 			},
+			'items' => 'posts',
 			'templates' => {
 				'location' => 'pages',
-				'generate' => [],
-				'items' => 'posts'
+				'generate' => []
 			}
 		}
 	}.freeze

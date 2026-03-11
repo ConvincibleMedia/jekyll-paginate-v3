@@ -12,7 +12,65 @@ class Model
 
 	private
 	
-	def paginate_template(template, config)
+	def paginate_template(template, config, template_pagination_source)
+		variants = expand_template_variants(template, config, template_pagination_source: template_pagination_source)
+		if variants.empty?
+			@log_lambda.call("Template '#{Utils.relative_item_path(template)}': grouping/layout expansion produced no variants.", 'debug')
+			return {
+				'paginated_items' => 0,
+				'indexes' => 0
+			}
+		end
+
+		total_paginated_items = 0
+		total_indexes = 0
+
+		variants.each_with_index do |variant, variant_index|
+			variant_template = variant['template']
+			variant_config = variant['config']
+			variant_report = paginate_template_variant(
+				variant_template,
+				variant_config,
+				remove_source_template: variant_index.zero?
+			)
+			total_paginated_items += variant_report['paginated_items'].to_i
+			total_indexes += variant_report['indexes'].to_i
+		end
+
+		{
+			'paginated_items' => total_paginated_items,
+			'indexes' => total_indexes
+		}
+	end
+
+	# Expands one template into grouped/layout variants before pagination.
+	def expand_template_variants(template, config, template_pagination_source:)
+		expander = Templates::VariantExpander.new(
+			site: @site,
+			site_config: @site_config,
+			template: template,
+			template_config: config,
+			template_pagination_source: template_pagination_source,
+			merge_template_pagination_lambda: method(:merged_template_pagination_config),
+			normalise_template_config_lambda: lambda { |pagination| Config::Normaliser.normalise_template_config(@site_config, pagination) },
+			resolve_items_lambda: method(:resolve_items),
+			log_lambda: @log_lambda
+		)
+		variants = expander.expand
+		return variants unless variants.empty?
+
+		template.data['pagination'] = merged_template_pagination_config(template, template_pagination_source)
+
+		[
+			{
+				'template' => template,
+				'config' => config
+			}
+		]
+	end
+
+	# Runs pagination for one already-expanded template variant.
+	def paginate_template_variant(template, config, remove_source_template:)
 		template_path = Utils.relative_item_path(template)
 		split_delimiter = config.key?('split') ? config['split'] : @split_delimiter
 		nested_separator = config['separator'] || @nested_separator
@@ -59,7 +117,13 @@ class Model
 		total_pages = page_windows.length
 
 		@log_lambda.call("Template '#{template_path}': generating #{total_pages} page(s) with per_page=#{config['per_page']} limit=#{config['limit']}.", 'debug')
-		generated_pages = emit_paginated_pages(template, config, sorted_items, page_windows)
+		generated_pages = emit_paginated_pages(
+			template,
+			config,
+			sorted_items,
+			page_windows,
+			remove_template: remove_source_template
+		)
 		register_grouped_set_if_applicable(template, config, generated_pages)
 		{
 			'paginated_items' => sorted_items.length,
@@ -68,8 +132,8 @@ class Model
 	end
 
 	# Replaces a template with one synthetic page/document per page number.
-	def emit_paginated_pages(template, config, items, page_windows)
-		@remove_item_lambda.call(template)
+	def emit_paginated_pages(template, config, items, page_windows, remove_template: true)
+		@remove_item_lambda.call(template) if remove_template
 
 		new_pages = []
 		total_pages = page_windows.length
@@ -217,7 +281,7 @@ class Model
 		return collections[label] if collections.key?(label)
 
 			if clone_of.nil?
-				raise ArgumentError, "Unknown collection '#{label}' configured in pagination.templates.collection or template pagination.collection."
+				raise ArgumentError, "Unknown collection '#{label}' configured in pagination.collection."
 			end
 
 		ensure_collection_config!(label, clone_of)

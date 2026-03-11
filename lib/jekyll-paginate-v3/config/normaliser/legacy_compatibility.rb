@@ -55,12 +55,10 @@ class Normaliser
 
 			overlay['enabled'] = true
 			overlay['keywords'] = { 'items' => 'posts' }
-			overlay['templates'] = {
-				'per_page' => site_hash['paginate'].to_i,
-				'items' => 'posts'
-			}
+			overlay['per_page'] = site_hash['paginate'].to_i
+			overlay['items'] = 'posts'
 			unless site_hash['paginate_path'].nil?
-				overlay['templates']['permalink'] = site_hash['paginate_path'].to_s
+				overlay['permalink'] = site_hash['paginate_path'].to_s
 			end
 
 			overlay
@@ -124,17 +122,16 @@ class Normaliser
 									Utils.deep_copy(defaults['slugify'])
 								end
 
-			silent = boolean_config_value(group['silent'])
-
 			[
 				{
 					'items' => items,
-					'index' => index_key,
+					'group' => index_key,
 					'layouts' => layouts,
-					'title' => title,
-					'permalink' => permalink,
-					'slugify' => slugify,
-					'silent' => silent
+					'frontmatter' => {
+						'title' => title,
+						'permalink' => permalink
+					},
+					'slugify' => slugify
 				}
 			]
 		end
@@ -149,12 +146,6 @@ class Normaliser
 			true
 		end
 
-		# Coerces loose truthy/falsey config values to a strict boolean.
-		def boolean_config_value(value)
-			return value if value == true || value == false
-
-			value.to_s.strip.casecmp('true').zero?
-		end
 	end
 end
 

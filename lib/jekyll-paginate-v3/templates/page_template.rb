@@ -1,65 +1,50 @@
 # frozen_string_literal: true
 
+require 'digest'
+
 module Jekyll
 module Plugins
 module PaginateV3
 module Templates
 
-# Generated pagination template page built from a layout file and
-# generated frontmatter. The pagination model later expands this
-# template into index pages.
+# Generated pagination template page backed by in-memory frontmatter and
+# content.
 #
 # Used by Templates::Builder for generated page-based templates.
 class PageTemplate < Jekyll::Page
 	# Creates an in-memory page that behaves like a hand-authored
 	# pagination template.
-	def initialize(site:, layout_name:, pagination_config:, frontmatter:, generated_metadata:)
+	def initialize(site:, pagination_config:, frontmatter:, content:, generated_metadata:)
 		@site = site
 		@base = site.source
+		@dir = '/'
 		@name = 'index.html'
-
-		@path = resolve_layout_path(site, layout_name)
+		@url = '/'
+		@path = build_virtual_path(site, pagination_config, frontmatter)
 
 		process(@name)
-		read_yaml(File.dirname(@path), File.basename(@path))
 
-		layout_data = Jekyll::Utils.deep_merge_hashes(self.data, {})
 		generated_metadata_hash = Utils.safe_hash(generated_metadata)
-		self.data = Jekyll::Utils.deep_merge_hashes(frontmatter, layout_data)
-		self.data['layout'] = File.basename(layout_name, File.extname(layout_name))
-		self.data['pagination'] = Utils.merge_generated_template_pagination(
-			pagination_config,
-			layout_data['pagination'],
-			generated_metadata_hash['compatibility']
-		)
+		self.data = Utils.safe_hash(frontmatter)
+		self.content = content.to_s
+		self.data['pagination'] = Utils.safe_hash(pagination_config)
 		self.data['pagination']['template'] = true
 		self.data['paginate_v3'] = generated_metadata_hash
 
 		apply_v2_compatibility_metadata!
-
 		apply_permalink!
 
 		data.default_proc = proc do |_, key|
-			site.frontmatter_defaults.find(File.join('_layouts', layout_name), type, key)
+			site.frontmatter_defaults.find(relative_path, type, key)
 		end
 	end
 
 	private
 
-	# Resolves layout path from theme first, then site source.
-	def resolve_layout_path(site, layout_name)
-		layout_dir = '_layouts'
-		path = if site.in_theme_dir(site.source) == site.source
-							site.in_theme_dir(site.source, layout_dir, layout_name)
-						else
-							site.in_source_dir(site.source, layout_dir, layout_name)
-						end
-
-		unless File.exist?(path)
-			raise ArgumentError, "Layout '#{path}' does not exist"
-		end
-
-		path
+	# Builds a deterministic virtual source path for this synthetic page.
+	def build_virtual_path(site, pagination_config, frontmatter)
+		signature = [pagination_config, frontmatter].inspect
+		File.join(site.source, "_paginate_v3_generated_#{Digest::MD5.hexdigest(signature)}.md")
 	end
 
 	# Adds legacy-friendly fields only when v2 compatibility is active.

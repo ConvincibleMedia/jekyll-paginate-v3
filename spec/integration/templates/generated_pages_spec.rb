@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 RSpec.describe 'Pagination integration: generated templates in pages' do
-	it 'builds generated templates from index values and paginates them' do
+	it 'builds generated templates from grouped values and paginates them' do
 		files = post_files(3) do |index|
 			case index
 			when 1 then { 'category' => 'news' }
@@ -18,11 +18,12 @@ RSpec.describe 'Pagination integration: generated templates in pages' do
 					'templates' => {
 						'generate' => [
 							{
-								'items' => 'posts',
-								'index' => 'category',
-								'layout' => 'autopage_category.html',
-								'permalink' => '/topics/:category/',
-								'title' => 'Topic :category',
+								'group' => 'category',
+								'frontmatter' => {
+									'layout' => 'autopage_category',
+									'permalink' => '/topics/:category/',
+									'title' => 'Topic :category'
+								},
 								'per_page' => 1,
 								'sort' => 'title asc'
 							}
@@ -46,7 +47,7 @@ RSpec.describe 'Pagination integration: generated templates in pages' do
 		end
 	end
 
-	it 'supports slugify overrides for generated placeholder values' do
+	it 'supports slugify overrides for grouped placeholder values' do
 		files = post_files(1) { { 'category' => 'API Guides' } }
 
 		jekyll_build(
@@ -57,14 +58,15 @@ RSpec.describe 'Pagination integration: generated templates in pages' do
 					'templates' => {
 						'generate' => [
 							{
-								'items' => 'posts',
-								'index' => 'category',
-								'layout' => 'autopage_category.html',
-								'permalink' => '/topics/:category/',
-								'title' => 'Topic :category',
+								'group' => 'category',
 								'slugify' => {
 									'mode' => 'default',
 									'case' => true
+								},
+								'frontmatter' => {
+									'layout' => 'autopage_category',
+									'permalink' => '/topics/:category/',
+									'title' => 'Topic :category'
 								}
 							}
 						]
@@ -83,7 +85,7 @@ RSpec.describe 'Pagination integration: generated templates in pages' do
 		end
 	end
 
-	it 'supports multi-level index keys and precedence of explicit filters over shorthand filter' do
+	it 'supports multi-level groups and per-entry group filters' do
 		files = post_files(4) do |index|
 			case index
 			when 1 then { 'category' => 'Data Science', 'author' => { 'name' => 'Ada Lovelace' } }
@@ -101,14 +103,17 @@ RSpec.describe 'Pagination integration: generated templates in pages' do
 					'templates' => {
 						'generate' => [
 							{
-								'items' => 'posts',
-								'index' => 'category, author.name',
-								'layout' => 'autopage_tags.html',
-								'permalink' => '/catalogue/:category/:author.name/',
-								'title' => ':category by :author.name',
-								'filter' => '/^a/i',
+								'group' => [
+									{ 'on' => 'category' },
+									{ 'on' => 'author.name', 'filter' => '/^a/i' }
+								],
 								'filters' => {
 									'category' => 'Data Science'
+								},
+								'frontmatter' => {
+									'layout' => 'autopage_tags',
+									'permalink' => '/catalogue/:category/:author.name/',
+									'title' => ':category by :author.name'
 								},
 								'sort' => 'title asc'
 							}
@@ -132,7 +137,7 @@ RSpec.describe 'Pagination integration: generated templates in pages' do
 		end
 	end
 
-	it 'merges generated frontmatter and pagination overrides from definitions' do
+	it 'merges generated frontmatter and content over the synthetic template' do
 		files = post_files(2) { { 'category' => 'guides' } }
 
 		jekyll_build(
@@ -143,14 +148,14 @@ RSpec.describe 'Pagination integration: generated templates in pages' do
 					'templates' => {
 						'generate' => [
 							{
-								'items' => 'posts',
-								'index' => 'category',
-								'layout' => 'autopage_tags.html',
-								'permalink' => '/section/:category/',
-								'title' => 'Section :category',
+								'group' => 'category',
 								'frontmatter' => {
+									'layout' => 'autopage_tags',
+									'permalink' => '/section/:category/',
+									'title' => 'Section :category',
 									'section' => 'knowledge-base'
 								},
+								'content' => "Generated body for :category\n",
 								'per_page' => 1,
 								'trail' => {
 									'before' => 1,
@@ -162,7 +167,7 @@ RSpec.describe 'Pagination integration: generated templates in pages' do
 				}
 			},
 			files: files
-		) do |site,|
+		) do |site, output_files|
 			first_page = page_by_url(site, '/section/guides/')
 			second_page = page_by_url(site, '/section/guides/page/2/')
 
@@ -170,7 +175,7 @@ RSpec.describe 'Pagination integration: generated templates in pages' do
 			expect(first_page.data.fetch('title')).to eq('Section guides')
 			expect(paginator_trail_numbers(first_page)).to eq([1, 2])
 			expect(paginator_trail_numbers(second_page)).to eq([1, 2])
+			expect(output_files.read('section/guides/index.html')).to include('Generated body for guides')
 		end
 	end
 end
-

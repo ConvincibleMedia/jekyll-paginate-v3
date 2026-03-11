@@ -68,25 +68,25 @@ class Builder
 	end
 
 	# Normalises slugify config accepted on `templates.generate[]`.
-	# This uses v2 naming (`slugify.case`) for case-sensitive tokens.
+	# This uses `slugify.lowercase` to control case conversion.
 	def normalise_slugify_config(raw_slugify)
 		slugify = Utils.safe_hash(raw_slugify)
 		mode = slugify['mode'].to_s.strip
 		mode = 'default' if mode.empty?
 
-		case_sensitive = normalise_boolean(slugify['case'])
+		lowercase = normalise_boolean(slugify['lowercase'])
 
 		{
 			'mode' => mode,
-			'case' => case_sensitive
+			'lowercase' => lowercase
 		}
 	end
 
 	# Slugifies one token value according to an index definition.
 	def slugify_value(value, slugify_config)
 		mode = slugify_config['mode']
-		case_sensitive = slugify_config['case']
-		Jekyll::Utils.slugify(value.to_s, mode: mode, cased: case_sensitive)
+		lowercase = slugify_config['lowercase']
+		Jekyll::Utils.slugify(value.to_s, mode: mode, cased: !lowercase)
 	end
 
 	# Coerces loose truthy/falsey config values to a strict boolean.
@@ -156,7 +156,7 @@ class Builder
 	def add_empty_collection_entries(entries, definition)
 		return entries unless definition['allow_empty']
 		unless definition['index'] == ['collection']
-			@log_lambda.call("`allow_empty` is only applicable for `index: collection`; skipping for index=#{describe_index_keys(definition['index'])}.", 'warn') unless definition['silent']
+			@log_lambda.call("`allow_empty` is only applicable for `index: collection`; skipping for index=#{describe_index_keys(definition['index'])}.", 'warn')
 			return entries
 		end
 

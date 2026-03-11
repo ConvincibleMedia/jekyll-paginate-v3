@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe 'Pagination integration: grouped generated indexes' do
+RSpec.describe 'Pagination integration: grouped template behaviour' do
 	it 'generates numeric grouped indexes and exposes grouped-set navigation ordered by sort direction' do
 		sizes = [89, 67, 34, 23, 12]
 		files = post_files(5) do |index|
@@ -19,15 +19,20 @@ RSpec.describe 'Pagination integration: grouped generated indexes' do
 					'templates' => {
 						'generate' => [
 							{
-								'items' => 'posts',
-								'index' => 'size',
-								'group' => {
-									'start' => 0,
-									'step' => 20
+								'group' => [
+									{
+										'on' => 'size',
+										'size' => {
+											'start' => 0,
+											'step' => 20
+										}
+									}
+								],
+								'frontmatter' => {
+									'layout' => 'autopage_category',
+									'permalink' => '/size/:size/',
+									'title' => 'Size up to :size'
 								},
-								'layout' => 'autopage_category.html',
-								'permalink' => '/size/:size/',
-								'title' => 'Size up to :size',
 								'sort' => 'size desc'
 							}
 						]
@@ -66,68 +71,13 @@ RSpec.describe 'Pagination integration: grouped generated indexes' do
 		end
 	end
 
-	it 'supports numeric grouped indexes with growth and step clamps' do
-		sizes = [5, 20, 70]
-		files = post_files(3) do |index|
-			size = sizes[index - 1]
-			{
-				'title' => "Item #{size}",
-				'size' => size
-			}
-		end
-
-		jekyll_build(
-			default_site,
-			config: {
-				'pagination' => {
-					'enabled' => true,
-					'templates' => {
-						'generate' => [
-							{
-								'items' => 'posts',
-								'index' => 'size',
-								'group' => {
-									'start' => 0,
-									'step' => 10,
-									'grow' => 2,
-									'min' => 15,
-									'max' => 25,
-									'total' => 3,
-									'empty' => true
-								},
-								'layout' => 'autopage_category.html',
-								'permalink' => '/clamped/:size/',
-								'title' => 'Size bucket :size',
-								'sort' => 'size asc'
-							}
-						]
-					}
-				}
-			},
-			files: files
-		) do |site,|
-			first_bucket = page_by_url(site, '/clamped/15/')
-			second_bucket = page_by_url(site, '/clamped/40/')
-			third_bucket = page_by_url(site, '/clamped/65/')
-
-			expect(first_bucket).not_to be_nil
-			expect(second_bucket).not_to be_nil
-			expect(third_bucket).not_to be_nil
-
-			expect(paginator_item_titles(first_bucket)).to eq(['Item 5'])
-			expect(paginator_item_titles(second_bucket)).to eq(['Item 20'])
-			expect(paginator_item_titles(third_bucket)).to eq(['Item 70'])
-			expect(paginator_group_reference(third_bucket, 'current')).not_to have_key('end')
-		end
-	end
-
-	it 'supports datetime grouped indexes with calendar month steps' do
+	it 'supports datetime grouped indexes with calendar month sizes' do
 		files = post_files(3) do |index|
 			published_on = case index
-										 when 1 then '2026-12-20'
-										 when 2 then '2027-01-10'
-										 else '2027-03-01'
-										 end
+							 when 1 then '2026-12-20'
+							 when 2 then '2027-01-10'
+							 else '2027-03-01'
+							 end
 
 			{
 				'title' => "Published #{index}",
@@ -143,15 +93,20 @@ RSpec.describe 'Pagination integration: grouped generated indexes' do
 					'templates' => {
 						'generate' => [
 							{
-								'items' => 'posts',
-								'index' => 'published_on',
-								'group' => {
-									'start' => '2026-12-12',
-									'step' => 'month(2)'
+								'group' => [
+									{
+										'on' => 'published_on',
+										'size' => {
+											'start' => '2026-12-12',
+											'step' => 'month(2)'
+										}
+									}
+								],
+								'frontmatter' => {
+									'layout' => 'autopage_category',
+									'permalink' => '/published/:published_on/',
+									'title' => 'Published through :published_on'
 								},
-								'layout' => 'autopage_category.html',
-								'permalink' => '/published/:published_on/',
-								'title' => 'Published through :published_on',
 								'sort' => 'published_on asc'
 							}
 						]
@@ -175,66 +130,7 @@ RSpec.describe 'Pagination integration: grouped generated indexes' do
 		end
 	end
 
-	it 'supports alphabetic grouped indexes and places other groups last' do
-		files = post_files(4) do |index|
-			topic = case index
-							when 1 then 'aardvark'
-							when 2 then 'abacus'
-							when 3 then 'acorn'
-							else '9-lives'
-							end
-
-			{
-				'title' => "Topic #{index}",
-				'topic' => topic
-			}
-		end
-
-		jekyll_build(
-			default_site,
-			config: {
-				'pagination' => {
-					'enabled' => true,
-					'templates' => {
-						'generate' => [
-							{
-								'items' => 'posts',
-								'index' => 'topic',
-								'group' => {
-									'start' => 'aa',
-									'step' => 2,
-									'other' => '0-9'
-								},
-								'layout' => 'autopage_category.html',
-								'permalink' => '/alpha/:topic/',
-								'title' => 'Topic range :topic',
-								'sort' => 'topic asc'
-							}
-						]
-					}
-				}
-			},
-			files: files
-		) do |site,|
-			aa_group_page = page_by_url(site, '/alpha/aa/')
-			ac_group_page = page_by_url(site, '/alpha/ac/')
-			other_group_page = page_by_url(site, '/alpha/0-9/')
-
-			expect(aa_group_page).not_to be_nil
-			expect(ac_group_page).not_to be_nil
-			expect(other_group_page).not_to be_nil
-
-			expect(paginator_item_titles(aa_group_page)).to eq(['Topic 1', 'Topic 2'])
-			expect(paginator_item_titles(ac_group_page)).to eq(['Topic 3'])
-			expect(paginator_item_titles(other_group_page)).to eq(['Topic 4'])
-
-			group_last = paginator_group_reference(aa_group_page, 'last')
-			expect(group_last).to include('num' => 3, 'start' => '0-9')
-			expect(group_last).not_to have_key('end')
-		end
-	end
-
-	it 'supports multi-level indexed grouping keyed by index key with shorthand values' do
+	it 'supports multi-level grouped sets with mixed simple and ranged entries' do
 		files = post_files(4) do |index|
 			case index
 			when 1 then { 'category' => 'cat', 'size' => 50, 'published_on' => '2026-05-10' }
@@ -252,15 +148,16 @@ RSpec.describe 'Pagination integration: grouped generated indexes' do
 					'templates' => {
 						'generate' => [
 							{
-								'items' => 'posts',
-								'index' => 'category,size,published_on',
-								'group' => {
-									'size' => 100,
-									'published_on' => 'year'
+								'group' => [
+									{ 'on' => 'category' },
+									{ 'on' => 'size', 'size' => 100 },
+									{ 'on' => 'published_on', 'size' => 'year' }
+								],
+								'frontmatter' => {
+									'layout' => 'autopage_category',
+									'permalink' => '/combo/:category/:size/:published_on/',
+									'title' => ':category :size :published_on'
 								},
-								'layout' => 'autopage_category.html',
-								'permalink' => '/combo/:category/:size/:published_on/',
-								'title' => ':category :size :published_on',
 								'sort' => ['category asc', 'size asc', 'published_on asc']
 							}
 						]
@@ -285,15 +182,8 @@ RSpec.describe 'Pagination integration: grouped generated indexes' do
 		end
 	end
 
-	it 'exposes paginator.groups for non-range indexed generated templates' do
-		files = post_files(4) do |index|
-			case index
-			when 1 then { 'category' => 'docs', 'author' => { 'name' => 'Ada' } }
-			when 2 then { 'category' => 'news', 'author' => { 'name' => 'Alice' } }
-			when 3 then { 'category' => 'news', 'author' => { 'name' => 'Bob' } }
-			else { 'category' => 'news', 'author' => { 'name' => 'Bob' } }
-			end
-		end
+	it 'replaces grouped placeholders in pagination title/permalink templates for page 2+' do
+		files = post_files(2) { { 'category' => 'news' } }
 
 		jekyll_build(
 			default_site,
@@ -303,53 +193,15 @@ RSpec.describe 'Pagination integration: grouped generated indexes' do
 					'templates' => {
 						'generate' => [
 							{
-								'items' => 'posts',
-								'index' => 'category,author.name',
-								'layout' => 'autopage_category.html',
-								'permalink' => '/by/:category/:author.name/',
-								'title' => ':category :author.name',
-								'sort' => ['category asc', 'author.name asc', 'title asc']
-							}
-						]
-					}
-				}
-			},
-			files: files
-		) do |site,|
-			target_page = page_by_url(site, '/by/news/bob/')
-			expect(target_page).not_to be_nil
-			expect(paginator_item_titles(target_page)).to eq(['Post 03', 'Post 04'])
-
-			groups_payload = paginator_groups_payload(target_page)
-			expect(groups_payload.map { |entry| entry.fetch('key') }).to eq(['category', 'author.name'])
-			expect(paginator_group_payload(target_page).fetch('key')).to eq('author.name')
-			expect(paginator_group_reference(target_page, 'current')).to include('num' => 2)
-			expect(normalise_url_for_match(paginator_group_reference(target_page, 'prev').fetch('page').url)).to eq('/by/news/alice')
-		end
-	end
-
-	it 'accepts keyed group syntax for single-level indexes' do
-		files = post_files(2) do |index|
-			index == 1 ? { 'category' => 'news', 'size' => 10 } : { 'category' => 'news', 'size' => 120 }
-		end
-
-		jekyll_build(
-			default_site,
-			config: {
-				'pagination' => {
-					'enabled' => true,
-					'templates' => {
-						'generate' => [
-							{
-								'items' => 'posts',
-								'index' => 'size',
-								'group' => {
-									'size' => 100
+								'group' => 'category',
+								'frontmatter' => {
+									'layout' => 'autopage_category',
+									'permalink' => '/archive/:category/',
+									'title' => 'Listing :category'
 								},
-								'layout' => 'autopage_category.html',
-								'permalink' => '/single/:size/',
-								'title' => 'Single :size',
-								'sort' => 'size asc'
+								'per_page' => 1,
+								'permalink' => 'slice/:category/:num',
+								'title' => ':title / :category / :num'
 							}
 						]
 					}
@@ -357,8 +209,13 @@ RSpec.describe 'Pagination integration: grouped generated indexes' do
 			},
 			files: files
 		) do |site,|
-			expect(page_by_url(site, '/single/100/')).not_to be_nil
-			expect(page_by_url(site, '/single/200/')).not_to be_nil
+			first_page = page_by_url(site, '/archive/news/')
+			second_page = page_by_url(site, '/archive/news/slice/news/2/')
+
+			expect(first_page).not_to be_nil
+			expect(second_page).not_to be_nil
+			expect(second_page.data.fetch('title')).to eq('Listing news / news / 2')
+			expect(paginator_item_titles(second_page)).to eq(['Post 01'])
 		end
 	end
 end

@@ -53,8 +53,8 @@ class Model
 		templates.each do |template|
 			next unless template.data['pagination'].is_a?(Hash)
 
-			template_pagination = merged_template_pagination_config(template)
-			template.data['pagination'] = template_pagination
+			template_pagination_source = Utils.safe_hash(template.data['pagination'])
+			template_pagination = merged_template_pagination_config(template, template_pagination_source)
 			template_config = Config::Normaliser.normalise_template_config(@site_config, template_pagination)
 			unless template_config['enabled']
 				disabled_templates += 1
@@ -62,7 +62,7 @@ class Model
 				next
 			end
 
-			enabled_templates << [template, template_config]
+			enabled_templates << [template, template_config, template_pagination_source]
 		end
 
 		if enabled_templates.empty?
@@ -71,11 +71,10 @@ class Model
 		end
 
 		processed = 0
-		enabled_templates.each do |template, template_config|
-
+		enabled_templates.each do |template, template_config, template_pagination_source|
 			@log_lambda.call("Paginating template '#{Utils.relative_item_path(template)}' with items=#{template_config['items']} filters=#{template_config['filters']}.", 'debug')
 			begin
-				template_pagination_report = paginate_template(template, template_config)
+				template_pagination_report = paginate_template(template, template_config, template_pagination_source)
 				record_template_search_report_totals(template, template_pagination_report)
 			rescue StandardError => error
 				@log_lambda.call("Template '#{Utils.relative_item_path(template)}' failed: #{error.class}: #{error.message}", 'error')
@@ -204,10 +203,9 @@ class Model
 	# v2 compatibility precedence:
 	# - template provides defaults
 	# - layout overrides template
-	def merged_template_pagination_config(template)
-		template_pagination = Utils.safe_hash(template.data['pagination'])
+	def merged_template_pagination_config(template, template_pagination_source = nil)
+		template_pagination = Utils.safe_hash(template_pagination_source.nil? ? template.data['pagination'] : template_pagination_source)
 		return template_pagination if template_pagination.empty?
-		return template_pagination if template.data.dig('paginate_v3', 'generated_template')
 
 		layout_pagination = layout_pagination_config(template)
 		return template_pagination if layout_pagination.empty?
@@ -301,7 +299,7 @@ class Model
 
 		template = legacy_v1_template_candidate(candidates)
 		if template.nil?
-			@log_lambda.call("v1 compatibility: no implicit template candidate matched paginate path '#{@site_config.dig('templates', 'permalink')}'.", 'warn')
+			@log_lambda.call("v1 compatibility: no implicit template candidate matched paginate path '#{@site_config['permalink']}'.", 'warn')
 			return templates
 		end
 
@@ -323,7 +321,7 @@ class Model
 	# hierarchy is preferred.
 	def legacy_v1_template_candidate(items)
 		source_root = File.expand_path(@site.config['source'].to_s)
-		paginate_path = @site_config.dig('templates', 'permalink')
+		paginate_path = @site_config['permalink']
 
 		items.select { |item| legacy_v1_pagination_candidate?(source_root, paginate_path, item) }.sort_by { |item| -item.path.to_s.size }.first
 	end

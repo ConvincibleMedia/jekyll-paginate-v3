@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require 'yaml'
 require 'digest'
 
 module Jekyll
@@ -16,25 +15,17 @@ module Templates
 class DocumentTemplate < Jekyll::Document
 	alias_method :ext, :extname
 
-	# Creates an in-memory collection document seeded from a layout file.
-	def initialize(site:, collection:, layout_name:, pagination_config:, frontmatter:, generated_metadata:)
-		layout_path = resolve_layout_path(site, layout_name)
-		parsed_layout = parse_layout(layout_path)
+	# Creates an in-memory collection document seeded from frontmatter and
+	# content supplied by generate config.
+	def initialize(site:, collection:, pagination_config:, frontmatter:, content:, generated_metadata:)
+		virtual_path = build_virtual_path(site, collection, pagination_config, frontmatter)
 		generated_metadata_hash = Utils.safe_hash(generated_metadata)
-		token_signature = Utils.safe_hash(generated_metadata_hash['tokens']).sort.to_h.to_s
-		virtual_path = File.join(site.source, collection.relative_directory, "_paginate_v3_#{Digest::MD5.hexdigest([layout_name, token_signature].join(':'))}.md")
 
 		initialise_document(site, collection, virtual_path)
 
-		merge_data!(parsed_layout['data'])
-		merge_data!(frontmatter)
-		self.content = parsed_layout['content']
-		self.data['layout'] = File.basename(layout_name, File.extname(layout_name))
-		self.data['pagination'] = Utils.merge_generated_template_pagination(
-			pagination_config,
-			parsed_layout['data']['pagination'],
-			generated_metadata_hash['compatibility']
-		)
+		merge_data!(Utils.safe_hash(frontmatter))
+		self.content = content.to_s
+		self.data['pagination'] = Utils.safe_hash(pagination_config)
 		self.data['pagination']['template'] = true
 		self.data['paginate_v3'] = generated_metadata_hash
 
@@ -44,6 +35,14 @@ class DocumentTemplate < Jekyll::Document
 	end
 
 	private
+
+	# Builds a deterministic synthetic source path inside destination
+	# collection.
+	def build_virtual_path(site, collection, pagination_config, frontmatter)
+		signature = [collection.label, pagination_config, frontmatter].inspect
+		filename = "_paginate_v3_generated_#{Digest::MD5.hexdigest(signature)}.md"
+		File.join(site.source, collection.relative_directory, filename)
+	end
 
 	# Adds legacy-friendly fields only when v2 compatibility is active.
 	def apply_v2_compatibility_metadata!
@@ -59,39 +58,6 @@ class DocumentTemplate < Jekyll::Document
 		return if key.include?('.') || key.include?(':')
 
 		data[key] = autopage_data['value']
-	end
-
-	# Resolves layout path from theme first, then site source.
-	def resolve_layout_path(site, layout_name)
-		layout_dir = '_layouts'
-		if site.in_theme_dir(site.source) == site.source
-			site.in_theme_dir(site.source, layout_dir, layout_name)
-		else
-			site.in_source_dir(site.source, layout_dir, layout_name)
-		end
-	end
-
-	# Parses layout frontmatter/body so generated documents can inherit
-	# defaults from the selected layout.
-	def parse_layout(layout_path)
-		unless File.exist?(layout_path)
-			raise ArgumentError, "Layout '#{layout_path}' does not exist"
-		end
-
-		source = File.read(layout_path)
-		frontmatter = {}
-		body = source
-
-		if source =~ /\A---\s*\n(.*?)\n---\s*\n/m
-			raw_frontmatter = Regexp.last_match(1)
-			frontmatter = YAML.safe_load(raw_frontmatter, aliases: true) || {}
-			body = source.sub(/\A---\s*\n(.*?)\n---\s*\n/m, '')
-		end
-
-		{
-			'data' => Utils.safe_hash(frontmatter),
-			'content' => body
-		}
 	end
 
 	# Initialises minimal Jekyll::Document state for a synthetic doc.

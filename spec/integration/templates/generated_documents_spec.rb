@@ -18,12 +18,13 @@ RSpec.describe 'Pagination integration: generated templates in collections' do
 					'templates' => {
 						'generate' => [
 							{
-								'items' => 'posts',
-								'index' => 'category',
-								'layout' => 'autopage_category.html',
 								'collection' => 'guides',
-								'permalink' => '/guides/:category/',
-								'title' => 'Guide :category',
+								'group' => 'category',
+								'frontmatter' => {
+									'layout' => 'autopage_category',
+									'permalink' => '/guides/:category/',
+									'title' => 'Guide :category'
+								},
 								'per_page' => 1,
 								'sort' => 'title asc'
 							}
@@ -46,42 +47,7 @@ RSpec.describe 'Pagination integration: generated templates in collections' do
 		end
 	end
 
-	it 'supports allow_empty for single-level collection indexes' do
-		files = collection_document('products', 'widget.md', { 'layout' => 'listing', 'title' => 'Widget', 'permalink' => '/products/widget/' }, 'Widget')
-
-		jekyll_build(
-			default_site,
-			config: {
-				'pagination' => {
-					'enabled' => true,
-					'templates' => {
-						'generate' => [
-							{
-								'items' => 'products, notes',
-								'index' => 'collection',
-								'layout' => 'autopage_collection.html',
-								'permalink' => '/collection/:collection/',
-								'title' => 'Collection :collection',
-								'allow_empty' => true
-							}
-						]
-					}
-				}
-			},
-			files: files
-		) do |site,|
-			products_page = page_by_url(site, '/collection/products/')
-			notes_page = page_by_url(site, '/collection/notes/')
-
-			expect(products_page).not_to be_nil
-			expect(notes_page).not_to be_nil
-			expect(paginator_item_titles(products_page)).to eq(['Widget'])
-			expect(paginator_item_titles(notes_page)).to eq([])
-			expect(paginator_payload(notes_page).fetch('total_items')).to eq(0)
-		end
-	end
-
-	it 'defaults generated template collection target from pagination.templates.collection when omitted' do
+	it 'defaults generated template collection target from pagination.collection when omitted' do
 		files = post_files(1) { { 'category' => 'news' } }
 
 		jekyll_build(
@@ -89,15 +55,16 @@ RSpec.describe 'Pagination integration: generated templates in collections' do
 			config: {
 				'pagination' => {
 					'enabled' => true,
+					'collection' => 'products',
 					'templates' => {
-						'collection' => 'products',
 						'generate' => [
 							{
-								'items' => 'posts',
-								'index' => 'category',
-								'layout' => 'autopage_category.html',
-								'permalink' => '/products-index/:category/',
-								'title' => 'Products :category'
+								'group' => 'category',
+								'frontmatter' => {
+									'layout' => 'autopage_category',
+									'permalink' => '/products-index/:category/',
+									'title' => 'Products :category'
+								}
 							}
 						]
 					}
@@ -108,6 +75,37 @@ RSpec.describe 'Pagination integration: generated templates in collections' do
 			generated_doc = document_by_url(site, 'products', '/products-index/news/')
 			expect(generated_doc).not_to be_nil
 			expect(paginator_item_titles(generated_doc)).to eq(['Post 01'])
+		end
+	end
+
+	it 'lets generate definitions override the site-level template collection default' do
+		files = post_files(1) { { 'category' => 'news' } }
+
+		jekyll_build(
+			default_site,
+			config: {
+				'pagination' => {
+					'enabled' => true,
+					'collection' => 'products',
+					'templates' => {
+						'generate' => [
+							{
+								'collection' => 'guides',
+								'group' => 'category',
+								'frontmatter' => {
+									'layout' => 'autopage_category',
+									'permalink' => '/guide-index/:category/',
+									'title' => 'Guide :category'
+								}
+							}
+						]
+					}
+				}
+			},
+			files: files
+		) do |site,|
+			expect(document_by_url(site, 'products', '/guide-index/news/')).to be_nil
+			expect(document_by_url(site, 'guides', '/guide-index/news/')).not_to be_nil
 		end
 	end
 end

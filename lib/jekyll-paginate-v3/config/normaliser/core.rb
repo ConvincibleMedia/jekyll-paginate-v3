@@ -9,18 +9,18 @@ module Config
 #
 # Site-level config is normalised to the nested public v3 structure:
 # - pagination.syntax.*
-# - pagination.templates.collection
 # - pagination.templates.location
 # - pagination.templates.generate
-# - pagination.templates.*
+# - pagination.*
 #
 # Template-level config is normalised to a flat hash used during
 # pagination emission for one concrete template page/document.
 class Normaliser
 	
 	LEGACY_FILTER_KEYS = %w[category tag locale].freeze
-	LEGACY_TEMPLATE_DEFAULT_KEYS = %w[items collection filters sort per_page limit offset trail title permalink sort_field sort_reverse indexpage extension].freeze
+	LEGACY_TEMPLATE_DEFAULT_KEYS = %w[items collection filters sort per_page limit offset trail title permalink layout layouts group slugify sort_field sort_reverse indexpage extension].freeze
 	LEGACY_SITE_KEY_ALIASES = %w[split separator nested_key_separator].freeze
+	SITE_RESERVED_KEYS = %w[enabled templates compatibility keywords equivalents syntax debug].freeze
 	V2_AUTOPAGE_DEFAULTS = {
 		'tags' => {
 			'layout' => 'autopage_tags.html',
@@ -28,7 +28,7 @@ class Normaliser
 			'permalink' => '/tag/:tag',
 			'slugify' => {
 				'mode' => 'default',
-				'case' => false
+				'lowercase' => true
 			}
 		},
 		'categories' => {
@@ -37,7 +37,7 @@ class Normaliser
 			'permalink' => '/category/:cat',
 			'slugify' => {
 				'mode' => 'default',
-				'case' => false
+				'lowercase' => true
 			}
 		},
 		'collections' => {
@@ -46,7 +46,7 @@ class Normaliser
 			'permalink' => '/collection/:coll/',
 			'slugify' => {
 				'mode' => 'default',
-				'case' => false
+				'lowercase' => true
 			}
 		}
 	}.freeze
@@ -74,8 +74,8 @@ class Normaliser
 		config['compatibility'] = compatibility_mode unless compatibility_mode.nil?
 
 		normalise_site_common!(config, compatibility_mode, raw_pagination)
-		migrate_legacy_shortcuts!(config['templates'], compatibility_mode, raw_pagination)
-		apply_v2_legacy_page_templates!(config['templates'], raw_pagination, compatibility_mode)
+		migrate_legacy_shortcuts!(config, compatibility_mode, raw_pagination)
+		apply_v2_legacy_page_templates!(config, raw_pagination, compatibility_mode)
 		migrate_v2_autopages!(config, site_hash['autopages'], compatibility_mode)
 
 		config
@@ -89,7 +89,7 @@ class Normaliser
 	def self.normalise_template_config(site_config, template_pagination_config)
 		raw_template_pagination = Utils.safe_hash(template_pagination_config)
 		compatibility_mode = normalise_compatibility(raw_template_pagination['compatibility']) || normalise_compatibility(site_config['compatibility'])
-		site_template_defaults = extract_template_defaults_overrides('templates' => site_config['templates'])
+		site_template_defaults = extract_site_template_defaults(site_config)
 
 		page_config = Jekyll::Utils.deep_merge_hashes(
 			Utils.deep_copy(site_template_defaults),

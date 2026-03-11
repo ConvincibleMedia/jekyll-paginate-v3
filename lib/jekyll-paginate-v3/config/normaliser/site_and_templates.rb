@@ -14,7 +14,6 @@ class Normaliser
 		private
 		def normalise_site_pagination_source(raw_pagination)
 			source = Utils.deep_copy(Utils.safe_hash(raw_pagination))
-			legacy_site_template_alias_keys = LEGACY_TEMPLATE_DEFAULT_KEYS - ['collection']
 
 			syntax = Utils.safe_hash(source['syntax'])
 			syntax['split'] = source['split'] if source.key?('split') && !syntax.key?('split')
@@ -26,16 +25,19 @@ class Normaliser
 
 			templates = Utils.safe_hash(source['templates'])
 			templates.delete('defaults')
-			legacy_site_template_alias_keys.each do |legacy_key|
-				next unless source.key?(legacy_key)
-				next if templates.key?(legacy_key)
 
-				templates[legacy_key] = source[legacy_key]
+			(template_setting_keys + legacy_template_alias_keys).each do |key|
+				next unless templates.key?(key)
+				next if source.key?(key)
+
+				source[key] = templates[key]
 			end
+
+			template_setting_keys.each { |key| templates.delete(key) }
+			legacy_template_alias_keys.each { |key| templates.delete(key) }
 			source['templates'] = templates unless templates.empty?
 
 			LEGACY_SITE_KEY_ALIASES.each { |legacy_key| source.delete(legacy_key) }
-			LEGACY_TEMPLATE_DEFAULT_KEYS.each { |legacy_key| source.delete(legacy_key) }
 
 			source
 		end
@@ -56,10 +58,16 @@ class Normaliser
 			config['equivalents'] = normalise_equivalents(config['equivalents'], split_delimiter)
 			config['templates'] = normalise_templates(
 				config['templates'],
-				split_delimiter: split_delimiter,
+				split_delimiter: split_delimiter
+			)
+
+			normalised_template_defaults = normalise_template_defaults(
+				extract_site_template_defaults(config),
 				raw_overrides: raw_overrides,
+				split_delimiter: split_delimiter,
 				keywords: config['keywords']
 			)
+			apply_template_defaults_to_site_config!(config, normalised_template_defaults)
 		end
 
 		# Resolves template syntax from local overrides, accepting both the
@@ -136,15 +144,15 @@ class Normaliser
 				keywords[key] = defaults[key] if keywords[key].empty?
 			end
 
-				invalid_keywords = keywords.select { |_, value| !value.match?(/\A[a-z]+\z/) }
-				unless invalid_keywords.empty?
-					raise ArgumentError, "pagination.keywords values must match [a-z]+. Invalid entries: #{invalid_keywords.map { |key, value| "#{key}=#{value}" }.join(', ')}."
-				end
+			invalid_keywords = keywords.select { |_, value| !value.match?(/\A[a-z]+\z/) }
+			unless invalid_keywords.empty?
+				raise ArgumentError, "pagination.keywords values must match [a-z]+. Invalid entries: #{invalid_keywords.map { |key, value| "#{key}=#{value}" }.join(', ')}."
+			end
 
-				duplicate_values = keywords.values.group_by { |value| value }.select { |_, values| values.length > 1 }.keys
-				unless duplicate_values.empty?
-					raise ArgumentError, "pagination.keywords values must be unique. Duplicates: #{duplicate_values.join(', ')}."
-				end
+			duplicate_values = keywords.values.group_by { |value| value }.select { |_, values| values.length > 1 }.keys
+			unless duplicate_values.empty?
+				raise ArgumentError, "pagination.keywords values must be unique. Duplicates: #{duplicate_values.join(', ')}."
+			end
 
 			keywords
 		end
@@ -157,20 +165,20 @@ class Normaliser
 			return false if raw_equivalents == false
 
 			groups = if raw_equivalents.is_a?(Array)
-									raw_equivalents
-								elsif raw_equivalents.nil?
-									[]
-								else
-									[raw_equivalents]
-								end
+							raw_equivalents
+						elsif raw_equivalents.nil?
+							[]
+						else
+							[raw_equivalents]
+						end
 			return Utils.deep_copy(DEFAULTS['equivalents']) if groups.empty?
 
 			groups.map do |group|
 				entries = if group.is_a?(Array)
-										group.flat_map { |entry| Utils.delimited_array(entry, delimiter: split_delimiter) }
-									else
-										Utils.delimited_array(group, delimiter: split_delimiter)
-									end
+								group.flat_map { |entry| Utils.delimited_array(entry, delimiter: split_delimiter) }
+							else
+								Utils.delimited_array(group, delimiter: split_delimiter)
+							end
 
 				entries.map { |entry| entry.to_s.strip }.reject(&:empty?).uniq
 			end.reject { |group| group.length < 2 }
@@ -178,9 +186,9 @@ class Normaliser
 
 		# Purpose: Normalises templates into canonical form.
 		# Connects to: the surrounding pagination flow in this file.
-		# Params: `raw_templates`, `split_delimiter`, `raw_overrides`.
+		# Params: `raw_templates`, `split_delimiter`.
 		# Returns: a value consumed by the next pipeline step.
-		def normalise_templates(raw_templates, split_delimiter:, raw_overrides:, keywords:)
+		def normalise_templates(raw_templates, split_delimiter:)
 			defaults = Utils.deep_copy(DEFAULTS['templates'])
 			source_hash = Utils.safe_hash(raw_templates)
 			source = defaults.merge(source_hash)
@@ -188,53 +196,70 @@ class Normaliser
 
 			source['location'] = defaults['location'] if source['location'].nil? || source['location'].to_s.strip.empty?
 			source['generate'] = if source['generate'].is_a?(Array)
-															source['generate'].map { |entry| Utils.safe_hash(entry) }
-														elsif source['generate'].is_a?(Hash)
-															[Utils.safe_hash(source['generate'])]
-														else
-															[]
-														end
+										source['generate'].map { |entry| Utils.safe_hash(entry) }
+									elsif source['generate'].is_a?(Hash)
+										[Utils.safe_hash(source['generate'])]
+									else
+										[]
+									end
 
-			source = normalise_template_defaults(
-				source,
-				raw_overrides: extract_template_defaults_overrides(raw_overrides),
-				split_delimiter: split_delimiter,
-				keywords: keywords
-			)
+			template_setting_keys.each { |key| source.delete(key) }
+			legacy_template_alias_keys.each { |key| source.delete(key) }
 
 			source
 		end
 
-		# Extracts template-default override keys from template-level config
-		# and from legacy top-level aliases.
-		def extract_template_defaults_overrides(raw_overrides)
-			override_hash = Utils.safe_hash(raw_overrides)
-			template_overrides = Utils.safe_hash(override_hash['templates'])
-			legacy_alias_keys = if override_hash.key?('templates')
-													LEGACY_TEMPLATE_DEFAULT_KEYS - ['collection']
-												else
-													LEGACY_TEMPLATE_DEFAULT_KEYS
-												end
+		# Returns site-level defaults that are inherited by explicit and
+		# generated templates.
+		def extract_site_template_defaults(site_config)
+			source = Utils.safe_hash(site_config)
+			defaults = template_setting_defaults
 
-			legacy_alias_keys.each do |legacy_key|
-				next unless override_hash.key?(legacy_key)
-				next if template_overrides.key?(legacy_key)
+			template_setting_keys.each do |key|
+				next unless source.key?(key)
 
-				template_overrides[legacy_key] = override_hash[legacy_key]
+				defaults[key] = Utils.deep_copy(source[key])
 			end
 
-			template_overrides.delete('defaults')
-			template_overrides.delete('location')
-			template_overrides.delete('generate')
-			template_overrides.select { |key, _| LEGACY_TEMPLATE_DEFAULT_KEYS.include?(key) }
+			defaults
+		end
+
+		# Extracts template-level overrides from one `pagination` hash.
+		#
+		# Legacy nested aliases under `pagination.templates` remain supported
+		# so older config still migrates correctly.
+		def extract_template_defaults_overrides(raw_overrides)
+			override_hash = Utils.safe_hash(raw_overrides)
+			nested_template_overrides = Utils.safe_hash(override_hash['templates'])
+			overrides = {}
+
+			(template_setting_keys + legacy_template_alias_keys).each do |key|
+				if override_hash.key?(key)
+					overrides[key] = override_hash[key]
+					next
+				end
+
+				next unless nested_template_overrides.key?(key)
+
+				overrides[key] = nested_template_overrides[key]
+			end
+
+			overrides
 		end
 
 		# Normalises one template-default hash (used by site defaults and
 		# by per-template runtime config).
 		def normalise_template_defaults(template_defaults, raw_overrides:, split_delimiter:, keywords:)
-			config = Utils.safe_hash(template_defaults)
+			config = Jekyll::Utils.deep_merge_hashes(
+				template_setting_defaults,
+				Utils.safe_hash(template_defaults)
+			)
 			template_override_hash = extract_template_defaults_overrides(raw_overrides)
 			sort_explicitly_set = template_override_hash.key?('sort') && present_config_value?(template_override_hash['sort'])
+			config['sort_field'] = template_override_hash['sort_field'] if template_override_hash.key?('sort_field')
+			config['sort_reverse'] = template_override_hash['sort_reverse'] if template_override_hash.key?('sort_reverse')
+			config['indexpage'] = template_override_hash['indexpage'] if template_override_hash.key?('indexpage')
+			config['extension'] = template_override_hash['extension'] if template_override_hash.key?('extension')
 
 			config['items'] = normalise_items_value(config['items'])
 			config['collection'] = normalise_collection_targets(
@@ -256,8 +281,15 @@ class Normaliser
 				split_delimiter,
 				sort_explicitly_set: sort_explicitly_set
 			)
+			config['layouts'] = normalise_layout_overrides(config, split_delimiter: split_delimiter)
+			group_source = normalise_legacy_group_source(config, split_delimiter: split_delimiter)
+			config['group'] = normalise_group_entries(group_source, split_delimiter: split_delimiter)
+			config['slugify'] = normalise_slugify_config(config['slugify'])
 			config['page_templates'] = build_page_templates(config['title'], config['permalink'])
 
+			config.delete('layout')
+			config.delete('index')
+			config.delete('filter')
 			config.delete('sort_field')
 			config.delete('sort_reverse')
 			config.delete('indexpage')
@@ -266,9 +298,35 @@ class Normaliser
 			config
 		end
 
-			# Normalises index destination config accepted on
-			# `pagination.templates.collection` (site defaults) and
-			# `pagination.collection` (template-level override).
+		# Copies normalised template defaults back to the site-level config
+		# so downstream code can consume canonical keys directly.
+		def apply_template_defaults_to_site_config!(config, template_defaults)
+			template_setting_keys.each do |key|
+				config[key] = Utils.deep_copy(template_defaults[key])
+			end
+			config['page_templates'] = Utils.deep_copy(template_defaults['page_templates'])
+			legacy_template_alias_keys.each { |legacy_key| config.delete(legacy_key) }
+		end
+
+		# Returns canonical keys that are inherited by all templates.
+		def template_setting_keys
+			@template_setting_keys ||= %w[items collection filters sort per_page limit offset trail title permalink layout layouts group slugify].freeze
+		end
+
+		# Returns legacy aliases that still map into template defaults.
+		def legacy_template_alias_keys
+			@legacy_template_alias_keys ||= %w[sort_field sort_reverse indexpage extension].freeze
+		end
+
+		# Returns deep-copied defaults for all template settings.
+		def template_setting_defaults
+			template_setting_keys.each_with_object({}) do |key, defaults|
+				defaults[key] = Utils.deep_copy(DEFAULTS[key])
+			end
+		end
+
+		# Normalises index destination config accepted on
+		# `pagination.collection` (site defaults and template-level override).
 		#
 		# Accepts:
 		# - String values (`self`, `shadow`, `clone`, `pages`, collection label)
@@ -277,7 +335,7 @@ class Normaliser
 		#
 		# Returns an array with one or two canonical entries.
 		def normalise_collection_targets(raw_collection, split_delimiter:, keywords:)
-			default_targets = Utils.deep_copy(DEFAULTS.dig('templates', 'collection'))
+			default_targets = Utils.deep_copy(DEFAULTS['collection'])
 			entries = Utils.delimited_array(raw_collection, delimiter: split_delimiter)
 			entries = Utils.deep_copy(default_targets) if entries.empty?
 
@@ -286,9 +344,9 @@ class Normaliser
 			end.reject { |entry| entry.to_s.empty? }
 
 			normalised = Utils.deep_copy(default_targets) if normalised.empty?
-				if normalised.length > 2
-					raise ArgumentError, 'pagination.templates.collection may contain at most two values.'
-				end
+			if normalised.length > 2
+				raise ArgumentError, 'pagination.collection may contain at most two values.'
+			end
 
 			normalised
 		end
@@ -338,11 +396,11 @@ class Normaliser
 		# Params: `raw_items`.
 		# Returns: a value consumed by the next pipeline step.
 		def normalise_items_value(raw_items)
-			return DEFAULTS.dig('templates', 'items') if raw_items.nil?
+			return DEFAULTS['items'] if raw_items.nil?
 			return raw_items if raw_items.is_a?(Hash) || raw_items.is_a?(Array)
 
 			value = raw_items.to_s.strip
-			value.empty? ? DEFAULTS.dig('templates', 'items') : value
+			value.empty? ? DEFAULTS['items'] : value
 		end
 
 		# Purpose: Normalises trail into canonical form.
@@ -396,12 +454,138 @@ class Normaliser
 			return sort_entries unless sort_entries.empty?
 
 			if sort_field.empty?
-				fallback_sort = DEFAULTS.dig('templates', 'sort')
+				fallback_sort = DEFAULTS['sort']
 				return Utils.arrayify(fallback_sort, split_delimiter: split_delimiter).map(&:to_s).map(&:strip).reject(&:empty?)
 			end
 
 			direction = boolean_config_value(raw_sort_reverse) ? 'desc' : 'asc'
 			["#{sort_field} #{direction}"]
+		end
+
+		# Normalises `pagination.layout` / `pagination.layouts` into a
+		# canonical string array.
+		def normalise_layout_overrides(config, split_delimiter:)
+			Utils.normalise_layouts(config, split_delimiter: split_delimiter)
+		end
+
+		# Normalises template-level grouping definitions.
+		#
+		# Accepted forms:
+		# - `group: category`
+		# - `group: category,tag`
+		# - `group: [{ on: 'size', size: 100 }, { on: 'tag' }]`
+		# - `group: { on: 'size', size: { step: 100 } }`
+		def normalise_group_entries(raw_group, split_delimiter:)
+			return [] if raw_group.nil? || raw_group == false
+
+			raw_entries = if raw_group.is_a?(Array)
+								raw_group.flatten.compact
+							elsif raw_group.is_a?(String)
+								Utils.delimited_array(raw_group, delimiter: split_delimiter)
+							elsif raw_group.is_a?(Hash)
+								[raw_group]
+							else
+								[raw_group]
+							end
+
+			raw_entries.map do |raw_entry|
+				normalise_group_entry(raw_entry)
+			end.compact
+		end
+
+		# Normalises legacy `index` + `group` + `filter` config into modern
+		# `group` entry structures.
+		def normalise_legacy_group_source(config, split_delimiter:)
+			legacy_index_keys = Utils.delimited_array(config['index'], delimiter: split_delimiter).map { |entry| entry.to_s.strip }.reject(&:empty?)
+			return config['group'] if legacy_index_keys.empty?
+
+			legacy_group = config['group']
+			legacy_filter = config['filter']
+			legacy_group_hash = Utils.safe_hash(legacy_group)
+
+			legacy_index_keys.map do |index_key|
+				entry = { 'on' => index_key }
+				legacy_size = if legacy_group_hash.empty?
+									legacy_group
+								elsif legacy_group_hash.key?(index_key)
+									legacy_group_hash[index_key]
+								elsif legacy_index_keys.length == 1
+									legacy_group
+								end
+				entry['size'] = legacy_size if present_config_value?(legacy_size) && legacy_size != false
+				entry['filter'] = legacy_filter if present_config_value?(legacy_filter)
+				entry
+			end
+		end
+
+		# Normalises one grouping entry.
+		def normalise_group_entry(raw_entry)
+			if raw_entry.is_a?(Hash)
+				hash_entry = Utils.safe_hash(raw_entry)
+				return nil if hash_entry.empty?
+
+				if hash_entry.key?('on')
+					on_key = hash_entry['on'].to_s.strip
+					return nil if on_key.empty?
+
+					normalised = { 'on' => on_key }
+					raw_size = if hash_entry.key?('size')
+									hash_entry['size']
+								elsif hash_entry.key?('group')
+									hash_entry['group']
+								end
+					normalised['size'] = raw_size if present_config_value?(raw_size)
+					normalised['filter'] = hash_entry['filter'] if hash_entry.key?('filter')
+					return normalised
+				end
+
+				if hash_entry.length == 1
+					on_key = hash_entry.keys.first.to_s.strip
+					return nil if on_key.empty?
+
+					return {
+						'on' => on_key,
+						'size' => hash_entry.values.first
+					}
+				end
+
+				return nil
+			end
+
+			on_key = raw_entry.to_s.strip
+			return nil if on_key.empty?
+
+			{ 'on' => on_key }
+		end
+
+		# Normalises slugify config accepted on template pagination config.
+		# This supports `slugify.lowercase` semantics while also allowing
+		# string shorthand where the value maps directly to `mode`.
+		def normalise_slugify_config(raw_slugify)
+			if raw_slugify.is_a?(String)
+				mode = raw_slugify.to_s.strip
+				mode = 'default' if mode.empty?
+				return {
+					'mode' => mode,
+					'lowercase' => true
+				}
+			end
+
+			slugify = Utils.safe_hash(raw_slugify)
+			mode = slugify['mode'].to_s.strip
+			mode = 'default' if mode.empty?
+
+			{
+				'mode' => mode,
+				'lowercase' => boolean_config_value(slugify['lowercase'])
+			}
+		end
+
+		# Coerces loose truthy/falsey config values to a strict boolean.
+		def boolean_config_value(value)
+			return value if value == true || value == false
+
+			value.to_s.strip.casecmp('true').zero?
 		end
 
 		# Migrates old v2 shorthand config into canonical template fields.

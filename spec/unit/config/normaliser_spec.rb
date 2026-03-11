@@ -12,28 +12,26 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
 					},
 					'templates' => {
 						'location' => '',
+						'generate' => {
+							'items' => 'posts'
+						},
 						'per_page' => 0,
 						'offset' => -5,
-						'limit' => -3,
-						'generate' => {
-							'items' => 'posts',
-							'index' => 'tag',
-							'layout' => 'autopage_tags.html'
-						}
+						'limit' => -3
 					}
 				}
 			)
 
 			expect(config['enabled']).to eq(true)
-			expect(config.dig('templates', 'per_page')).to eq(1)
-			expect(config.dig('templates', 'offset')).to eq(0)
-			expect(config.dig('templates', 'limit')).to eq(0)
+			expect(config['per_page']).to eq(1)
+			expect(config['offset']).to eq(0)
+			expect(config['limit']).to eq(0)
 			expect(config.dig('syntax', 'split')).to eq(',')
 			expect(config.dig('syntax', 'separator')).to eq('.')
 			expect(config.dig('keywords', 'now')).to eq('now')
 			expect(config.dig('keywords', 'today')).to eq('today')
 			expect(config.dig('templates', 'location')).to eq('pages')
-			expect(config.dig('templates', 'collection')).to eq(%w[self shadow])
+			expect(config['collection']).to eq(%w[self shadow])
 			expect(config.dig('templates', 'generate')).to be_an(Array)
 			expect(config.dig('templates', 'generate').length).to eq(1)
 		end
@@ -55,28 +53,24 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
 			config = described_class.normalise_site_config(
 				'pagination' => {
 					'enabled' => true,
-					'templates' => {
-						'sort' => nil,
-						'sort_field' => 'title',
-						'sort_reverse' => true
-					}
+					'sort' => nil,
+					'sort_field' => 'title',
+					'sort_reverse' => true
 				}
 			)
 
-			expect(config.dig('templates', 'sort')).to eq(['title desc'])
+			expect(config['sort']).to eq(['title desc'])
 		end
 
 		it 'supports variable per-page definitions as arrays' do
 			config = described_class.normalise_site_config(
 				'pagination' => {
 					'enabled' => true,
-					'templates' => {
-						'per_page' => [3, 1, 0, -4]
-					}
+					'per_page' => [3, 1, 0, -4]
 				}
 			)
 
-			expect(config.dig('templates', 'per_page')).to eq([3, 1, 1, 1])
+			expect(config['per_page']).to eq([3, 1, 1, 1])
 		end
 
 		it 'supports variable per-page definitions as delimited strings' do
@@ -86,13 +80,11 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
 					'syntax' => {
 						'split' => '|'
 					},
-					'templates' => {
-						'per_page' => '4|2|1'
-					}
+					'per_page' => '4|2|1'
 				}
 			)
 
-			expect(config.dig('templates', 'per_page')).to eq([4, 2, 1])
+			expect(config['per_page']).to eq([4, 2, 1])
 		end
 
 		it 'normalises delimited equivalent groups with a custom split delimiter' do
@@ -119,7 +111,7 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
 			)
 
 			expect(config.dig('syntax', 'separator')).to eq(':')
-			expect(config.dig('templates', 'sort')).to eq(['author:name asc'])
+			expect(config['sort']).to eq(['author:name asc'])
 		end
 
 		it 'rejects keyword values that are not lowercase latin tokens' do
@@ -152,27 +144,25 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
 		it 'migrates v2 legacy filter shortcuts without overriding explicit filters' do
 			config = described_class.normalise_site_config(
 				'pagination' => {
-						'compatibility' => 'v2',
-						'items' => 'products',
-						'templates' => {
-							'collection' => 'pages'
-						},
-						'category' => 'featured',
-						'tag' => 'legacy-tag',
-						'filters' => {
+					'compatibility' => 'v2',
+					'items' => 'products',
+					'collection' => 'pages',
+					'category' => 'featured',
+					'tag' => 'legacy-tag',
+					'filters' => {
 						'category' => 'explicit-category'
 					}
 				}
 			)
 
-			expect(config.dig('templates', 'items')).to eq('products')
-			expect(config.dig('templates', 'collection')).to eq(['pages'])
-			expect(config.dig('templates', 'filters')).to include(
+			expect(config['items']).to eq('products')
+			expect(config['collection']).to eq(['pages'])
+			expect(config['filters']).to include(
 				'category' => 'explicit-category',
 				'tag' => 'legacy-tag'
 			)
-			expect(config.dig('templates')).not_to have_key('category')
-			expect(config.dig('templates')).not_to have_key('tag')
+			expect(config).not_to have_key('category')
+			expect(config).not_to have_key('tag')
 		end
 
 		it 'ignores the v2 legacy category shortcut when category is posts' do
@@ -183,7 +173,7 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
 				}
 			)
 
-			expect(config.dig('templates', 'filters')).not_to have_key('category')
+			expect(config['filters']).not_to have_key('category')
 		end
 
 		it 'migrates v2 autopages groups into templates.generate definitions' do
@@ -196,8 +186,7 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
 					'categories' => {
 						'enabled' => true,
 						'layouts' => 'category-a.html,category-b.html',
-						'title' => 'Category :cat',
-						'silent' => 'true'
+						'title' => 'Category :cat'
 					},
 					'collections' => {
 						'enabled' => true
@@ -205,71 +194,85 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
 				}
 			)
 
-			categories_definition = config.dig('templates', 'generate').find { |entry| entry['index'] == 'category' }
-			collections_definition = config.dig('templates', 'generate').find { |entry| entry['index'] == 'collection' }
+			categories_definition = config.dig('templates', 'generate').find { |entry| entry['group'] == 'category' }
+			collections_definition = config.dig('templates', 'generate').find { |entry| entry['group'] == 'collection' }
 
 			expect(categories_definition).not_to be_nil
 			expect(categories_definition['layouts']).to eq(%w[category-a.html category-b.html])
-			expect(categories_definition['title']).to eq('Category :cat')
-			expect(categories_definition['silent']).to eq(true)
+			expect(categories_definition.dig('frontmatter', 'title')).to eq('Category :cat')
+			expect(categories_definition).not_to have_key('silent')
 
 			expect(collections_definition).not_to be_nil
 			expect(collections_definition['layouts']).to eq(['autopage_collection.html'])
 			expect(collections_definition['items']).to eq('all')
 		end
 
-			it 'normalises template collection targets from delimited strings' do
-				config = described_class.normalise_site_config(
-					'pagination' => {
-						'enabled' => true,
-						'templates' => {
-							'collection' => 'pages,clone'
-						}
-					}
-				)
+		it 'normalises collection targets from delimited strings' do
+			config = described_class.normalise_site_config(
+				'pagination' => {
+					'enabled' => true,
+					'collection' => 'pages,clone'
+				}
+			)
 
-				expect(config.dig('templates', 'collection')).to eq(%w[pages clone])
-			end
-
-			it 'ignores top-level pagination.collection for site template defaults' do
-				config = described_class.normalise_site_config(
-					'pagination' => {
-						'enabled' => true,
-						'collection' => 'pages'
-					}
-				)
-
-				expect(config.dig('templates', 'collection')).to eq(%w[self shadow])
-			end
-
-			it 'rejects collection target lists longer than two entries' do
-				expect do
-					described_class.normalise_site_config(
-						'pagination' => {
-							'enabled' => true,
-							'templates' => {
-								'collection' => 'pages,self,shadow'
-							}
-						}
-					)
-				end.to raise_error(ArgumentError, /at most two values/)
+			expect(config['collection']).to eq(%w[pages clone])
 		end
 
-			it 'supports custom collection keywords through pagination.keywords' do
-				config = described_class.normalise_site_config(
+		it 'promotes legacy nested template defaults to top-level defaults' do
+			config = described_class.normalise_site_config(
+				'pagination' => {
+					'enabled' => true,
+					'templates' => {
+						'collection' => 'pages',
+						'per_page' => 4
+					}
+				}
+			)
+
+			expect(config['collection']).to eq(['pages'])
+			expect(config['per_page']).to eq(4)
+		end
+
+		it 'rejects collection target lists longer than two entries' do
+			expect do
+				described_class.normalise_site_config(
 					'pagination' => {
 						'enabled' => true,
-						'keywords' => {
-							'self' => 'same',
-							'shadow' => 'mask'
-						},
-						'templates' => {
-							'collection' => 'same,mask'
-						}
+						'collection' => 'pages,self,shadow'
 					}
 				)
+			end.to raise_error(ArgumentError, /at most two values/)
+		end
 
-			expect(config.dig('templates', 'collection')).to eq(%w[self shadow])
+		it 'supports custom collection keywords through pagination.keywords' do
+			config = described_class.normalise_site_config(
+				'pagination' => {
+					'enabled' => true,
+					'keywords' => {
+						'self' => 'same',
+						'shadow' => 'mask'
+					},
+					'collection' => 'same,mask'
+				}
+			)
+
+			expect(config['collection']).to eq(%w[self shadow])
+		end
+
+		it 'normalises group shorthand and slugify mode shorthand' do
+			config = described_class.normalise_site_config(
+				'pagination' => {
+					'enabled' => true,
+					'group' => 'category,author.name',
+					'slugify' => 'pretty'
+				}
+			)
+
+			expect(config['group']).to eq([
+				{ 'on' => 'category' },
+				{ 'on' => 'author.name' }
+			])
+			expect(config['slugify']).to eq({ 'mode' => 'pretty', 'case' => false })
 		end
 	end
 
@@ -296,6 +299,43 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
 			expect(config['separator']).to eq(':')
 			expect(config['collection']).to eq(%w[clone pages])
 			expect(config.dig('filters', 'author:name')).to eq('Alice')
+		end
+
+		it 'inherits site-level defaults and allows template overrides' do
+			site_config = described_class.normalise_site_config(
+				'pagination' => {
+					'enabled' => true,
+					'items' => 'products',
+					'per_page' => 3,
+					'collection' => 'pages',
+					'slugify' => {
+						'mode' => 'pretty',
+						'case' => true
+					}
+				}
+			)
+
+			config = described_class.normalise_template_config(
+				site_config,
+				{
+					'enabled' => true,
+					'items' => 'posts',
+					'group' => [
+						{ 'on' => 'size', 'size' => 100, 'filter' => { 'min' => 10 } },
+						'tag'
+					],
+					'slugify' => 'latin'
+				}
+			)
+
+			expect(config['items']).to eq('posts')
+			expect(config['per_page']).to eq(3)
+			expect(config['collection']).to eq(['pages'])
+			expect(config['group']).to eq([
+				{ 'on' => 'size', 'size' => 100, 'filter' => { 'min' => 10 } },
+				{ 'on' => 'tag' }
+			])
+			expect(config['slugify']).to eq({ 'mode' => 'latin', 'case' => false })
 		end
 	end
 end
