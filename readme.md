@@ -100,10 +100,7 @@ pagination:
   per_page: 10 # int or array of ints; see Items below
   limit: 0 # paginate no more than x items (after sorting)
   offset: 0 # skip first x items (after sorting)
-
-  trail: # pagination trail settings
-    before: 2 # X pages shown before current page
-    after: 2 # X pages shown after current page
+  trail: 5 # see Trail below
   
   title: ':title - :num' # title set on index pages
   permalink: :num # relative to the template's permalink
@@ -136,10 +133,10 @@ Where values are shown above, these are the defaults that will apply if you don'
 
 In general, the `pagination` configuration for a given template is determined by a series of overrides:
 
-1. Built-in defaults
-2. Global config (shown above) template defaults
+1. Built-in defaults (baseline)
+2. Template defaults set in _config.yml (example shown above)
 3. Layout config (`pagination` frontmatter in a layout used by a template)
-4. Template config (`pagination` frontmatter in the template page/doc)
+4. Template config (`pagination` frontmatter in the template page/doc itself)
 
 
 ## Pagination Templates
@@ -307,7 +304,19 @@ If within the `catalogue-rss` layout you were to set `layout: null` this could b
 
 ### Trail
 
-The pagination trail is the display of previous and next page numbers around the current page number. E.g. if the current page is 3, the trail might be "1, 2, **3**, 4, 5". You can control how many previous and next page numbers are shown with the `trail.before` and `trail.after` config keys.
+The pagination trail is the display of previous and next page numbers around the current page number. E.g. if the current page is 3, the trail might be "1, 2, **3**, 4, 5".
+
+You can control how many previous and next page numbers are shown with the `trail` config.
+
+* `trail: <integer>` will show that many pages before and after the current page.
+* Alternatively you can break `trail` down into `before` and `after`:
+  
+  ```yaml
+  pagination:
+    trail:
+      before: 3 # show 3 pages before current page
+      after: 7 # show 7 pages after current page
+  ```
 
 
 ## Generated Templates

@@ -416,6 +416,14 @@ class Normaliser
 		# Params: `raw_trail`.
 		# Returns: a value consumed by the next pipeline step.
 		def normalise_trail(raw_trail)
+			if raw_trail.is_a?(Numeric) || raw_trail.to_s.match?(/\A-?\d+\z/)
+				trail_size = [raw_trail.to_i, 0].max
+				return {
+					'before' => trail_size,
+					'after' => trail_size
+				}
+			end
+
 			trail = Utils.safe_hash(raw_trail)
 			{
 				'before' => [trail['before'].to_i, 0].max,

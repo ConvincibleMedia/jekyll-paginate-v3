@@ -47,10 +47,7 @@ module Config
 		'per_page' => 10,
 		'limit' => 0,
 		'offset' => 0,
-		'trail' => {
-			'before' => 2,
-			'after' => 2
-		},
+		'trail' => 5,
 		'title' => ':title - :num',
 		'permalink' => ':num',
 		'layout' => nil,
