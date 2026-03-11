@@ -291,11 +291,6 @@ pagination:
   * `latin`: accented characters are transliterated back to plain a-z
 * `lowercase`: set to `false` to allow uppercase characters.
 
-
-#### Different Formats
-
-The permalink can be used to create index pages at different filenames and with different extensions, e.g. `permalink: /api/feed-:num.json`. Note that for the non-HTML extension to be respected by Jekyll, you may need to set `layout: null` on that template.
-
 ### Layouts
 
 You can set one or more layouts for pagination templates using the config `layout` or `layouts` (either is allowed). This will override the `layout` key set on the template's normal frontmatter, if present.
@@ -382,6 +377,8 @@ The default `self, shadow` means that page 1 remains a true member of the origin
   * `distance`: Relative page number. 0 for current page, positive for pages after, negative for pages before.
 
 `page.pagination` also remains available, being a copy of the pagination settings from the template that generated this index (minus `enabled`). This allows you to read back settings like `per_page`, `limit`, etc., if needed.
+
+`paginator` gains additional properties if [Grouping](/docs/group.md#group-navigation) is active.
 
 
 ## Search Format
