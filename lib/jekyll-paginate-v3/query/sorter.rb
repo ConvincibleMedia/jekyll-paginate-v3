@@ -21,12 +21,16 @@ class Sorter
 		instructions = parse(raw_sort, split_delimiter: split_delimiter)
 		return items if instructions.empty?
 
-		equivalent_lookup = Utils.build_equivalent_lookup(equivalents)
+		frontmatter_path = Jekyll::Plugins::Support::FrontmatterPath.new(
+			separator: nested_separator,
+			arrays: :expand,
+			equivalents: equivalents
+		)
 
 		# Keep original index as final tiebreak so ordering remains predictable.
 		indexed_items = items.each_with_index.to_a
 		indexed_items.sort! do |(left_item, left_index), (right_item, right_index)|
-			comparison = compare_items(left_item, right_item, instructions, nested_separator, equivalent_lookup)
+			comparison = compare_items(left_item, right_item, instructions, frontmatter_path)
 			comparison.zero? ? left_index <=> right_index : comparison
 		end
 
@@ -75,9 +79,9 @@ class Sorter
 		# Connects to: the surrounding pagination flow in this file.
 		# Params: `left_item`, `right_item`, `instructions`, `nested_separator`, `equivalent_lookup`.
 		# Returns: a value consumed by the next pipeline step.
-		def compare_items(left_item, right_item, instructions, nested_separator, equivalent_lookup)
+		def compare_items(left_item, right_item, instructions, frontmatter_path)
 			instructions.each do |instruction|
-				comparison = compare_field(left_item, right_item, instruction, nested_separator, equivalent_lookup)
+				comparison = compare_field(left_item, right_item, instruction, frontmatter_path)
 				return comparison unless comparison.zero?
 			end
 
@@ -88,9 +92,9 @@ class Sorter
 		# Connects to: the surrounding pagination flow in this file.
 		# Params: `left_item`, `right_item`, `instruction`, `nested_separator`, `equivalent_lookup`.
 		# Returns: a value consumed by the next pipeline step.
-		def compare_field(left_item, right_item, instruction, nested_separator, equivalent_lookup)
-			left_value = first_field_value(left_item, instruction['field'], nested_separator, equivalent_lookup)
-			right_value = first_field_value(right_item, instruction['field'], nested_separator, equivalent_lookup)
+		def compare_field(left_item, right_item, instruction, frontmatter_path)
+			left_value = first_field_value(left_item, instruction['field'], frontmatter_path)
+			right_value = first_field_value(right_item, instruction['field'], frontmatter_path)
 
 			left_empty = empty_value?(left_value)
 			right_empty = empty_value?(right_value)
@@ -116,14 +120,13 @@ class Sorter
 		# Connects to: the surrounding pagination flow in this file.
 		# Params: `item`, `field`, `nested_separator`, `equivalent_lookup`.
 		# Returns: a value consumed by the next pipeline step.
-		def first_field_value(item, field, nested_separator, equivalent_lookup)
+		def first_field_value(item, field, frontmatter_path)
 			data = item.respond_to?(:data) && item.data.is_a?(Hash) ? item.data.dup : {}
 
 			collection_label = Utils.item_collection_label(item)
 			data['collection'] = collection_label unless collection_label.nil?
 
-			values = Utils.fetch_nested_values(data, field, nested_separator, equivalent_lookup)
-			values.first
+			Utils.scalar_values(frontmatter_path.traverse(data, field)).first
 		end
 
 		# Purpose: Implements empty value for this component.

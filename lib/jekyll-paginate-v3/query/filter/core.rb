@@ -53,7 +53,12 @@ class Filter
 		@now_keyword = 'now' if @now_keyword.empty?
 		@today_keyword = today_keyword.to_s.strip
 		@today_keyword = 'today' if @today_keyword.empty?
-		@equivalent_lookup = Utils.build_equivalent_lookup(equivalents)
+		@frontmatter_path = Jekyll::Plugins::Support::FrontmatterPath.new(
+			separator: @nested_separator,
+			arrays: :expand,
+			equivalents: equivalents
+		)
+		@string_array = Jekyll::Plugins::Support::StringArray.new(delimiter: @split_delimiter)
 		@log_lambda = log_lambda
 	end
 
@@ -78,18 +83,18 @@ class Filter
 			excluded_items = []
 
 			current_items.each do |item|
-				values = extract_item_values(item, key)
-				if values.empty?
+				value = extract_item_value(item, key)
+				if value.nil?
 					missing_value_items << item
 					next
 				end
 
-				if check_filter_definition(normalised, values)
+				if check_filter_definition(normalised, value)
 					filtered_items << item
 				else
 					excluded_items << {
 						'item' => item,
-						'values' => values
+						'values' => value
 					}
 				end
 			end

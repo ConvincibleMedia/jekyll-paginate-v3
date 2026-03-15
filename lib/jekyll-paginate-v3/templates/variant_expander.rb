@@ -26,10 +26,17 @@ class VariantExpander
 		@resolve_items_lambda = resolve_items_lambda
 		@log_lambda = log_lambda
 		@equivalents = site_config['equivalents']
-		@equivalent_lookup = Utils.build_equivalent_lookup(@equivalents)
 		@active_template_config = Utils.deep_copy(template_config)
 		@active_split_delimiter = @active_template_config.key?('split') ? @active_template_config['split'] : site_config.dig('syntax', 'split')
 		@active_nested_separator = @active_template_config['separator'] || site_config.dig('syntax', 'separator')
+		@site_frontmatter_path = Jekyll::Plugins::Support::FrontmatterPath.new(
+			separator: site_config.dig('syntax', 'separator'),
+			arrays: :expand,
+			equivalents: @equivalents
+		)
+		@site_string_array = Jekyll::Plugins::Support::StringArray.new(delimiter: site_config.dig('syntax', 'split'))
+		@active_frontmatter_path = @site_frontmatter_path.with(separator: @active_nested_separator)
+		@active_string_array = @site_string_array.with(delimiter: @active_split_delimiter)
 	end
 
 	# Expands one template into grouped/layout variants.
@@ -52,12 +59,16 @@ class VariantExpander
 		@active_template_config = Utils.deep_copy(template_config)
 		@active_split_delimiter = @active_template_config.key?('split') ? @active_template_config['split'] : @site_config.dig('syntax', 'split')
 		@active_nested_separator = @active_template_config['separator'] || @site_config.dig('syntax', 'separator')
+		@active_frontmatter_path = @site_frontmatter_path.with(separator: @active_nested_separator)
+		@active_string_array = @site_string_array.with(delimiter: @active_split_delimiter)
 
 		yield
 	ensure
 		@active_template_config = previous_template_config
 		@active_split_delimiter = previous_split_delimiter
 		@active_nested_separator = previous_nested_separator
+		@active_frontmatter_path = @site_frontmatter_path.with(separator: @active_nested_separator)
+		@active_string_array = @site_string_array.with(delimiter: @active_split_delimiter)
 	end
 
 	# Returns base items for grouped expansion after template-level filters.
@@ -259,12 +270,11 @@ class VariantExpander
 		collection_label = Utils.item_collection_label(item)
 		data['collection'] = collection_label unless collection_label.nil?
 
-		values = Utils.fetch_nested_values(data, key, @active_nested_separator, @equivalent_lookup)
-		values = values.flat_map do |value|
+		values = Utils.scalar_values(@active_frontmatter_path.traverse(data, key)).flat_map do |value|
 			if value.is_a?(String)
-				Utils.split_delimited_string(value, @active_split_delimiter)
+				@active_string_array.interpret(value, split: 0, flatten: true)
 			else
-				Utils.scalar_values(value)
+				[value]
 			end
 		end
 

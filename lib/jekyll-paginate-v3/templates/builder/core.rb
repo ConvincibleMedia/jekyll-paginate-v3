@@ -20,7 +20,15 @@ class Builder
 		@add_item_lambda = add_item_lambda
 		@resolve_items_lambda = resolve_items_lambda
 		@log_lambda = log_lambda
+		@nested_separator = site_config.dig('syntax', 'separator')
 		@split_delimiter = site_config.dig('syntax', 'split')
+		@equivalents = site_config['equivalents']
+		@frontmatter_path = Jekyll::Plugins::Support::FrontmatterPath.new(
+			separator: @nested_separator,
+			arrays: :expand,
+			equivalents: @equivalents
+		)
+		@string_array = Jekyll::Plugins::Support::StringArray.new(delimiter: @split_delimiter)
 		@compatibility_mode = site_config['compatibility']
 	end
 

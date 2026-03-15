@@ -139,11 +139,10 @@ class Builder
 
 	# Groups items by one frontmatter key (supports nested/equivalent keys).
 	def group_items_by_key(items, key, slugify_config:)
-		equivalent_lookup = Utils.build_equivalent_lookup(@equivalents)
 		grouped = {}
 
 		items.each do |item|
-			values = values_for_key(item, key, equivalent_lookup)
+			values = values_for_key(item, key)
 			values.each do |value|
 				token = slugify_value(value, slugify_config)
 				# Empty slugs are ignored so generated routes remain valid.
@@ -177,17 +176,16 @@ class Builder
 
 	# Extracts unique scalar values for a key, including delimiter-defined
 	# string lists.
-	def values_for_key(item, key, equivalent_lookup)
+	def values_for_key(item, key)
 		data = item.respond_to?(:data) && item.data.is_a?(Hash) ? item.data.dup : {}
 		collection_label = Utils.item_collection_label(item)
 		data['collection'] = collection_label unless collection_label.nil?
 
-		values = Utils.fetch_nested_values(data, key, @nested_separator, equivalent_lookup)
-		values = values.flat_map do |value|
+		values = Utils.scalar_values(@frontmatter_path.traverse(data, key)).flat_map do |value|
 			if value.is_a?(String)
-				Utils.split_delimited_string(value, @split_delimiter)
+				@string_array.interpret(value, split: 0, flatten: true)
 			else
-				Utils.scalar_values(value)
+				[value]
 			end
 		end
 

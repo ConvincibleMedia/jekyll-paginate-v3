@@ -176,13 +176,12 @@ class GroupedIndex
 		collection_label = Utils.item_collection_label(item)
 		data['collection'] = collection_label unless collection_label.nil?
 
-		values = Utils.fetch_nested_values(data, @key, @nested_separator, @equivalent_lookup)
-		values.flat_map do |value|
+		Utils.scalar_values(@frontmatter_path.traverse(data, @key)).flat_map do |value|
 			if value.is_a?(String)
-				split_values = Utils.split_delimited_string(value, @split_delimiter)
+				split_values = @string_array.interpret(value, split: 0, flatten: true)
 				split_values.empty? ? [value] : split_values
 			else
-				Utils.scalar_values(value)
+				[value]
 			end
 		end.reject do |value|
 			value.nil? || (value.respond_to?(:empty?) && value.empty?)

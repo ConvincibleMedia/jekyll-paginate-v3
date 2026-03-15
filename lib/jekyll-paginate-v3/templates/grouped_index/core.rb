@@ -39,7 +39,12 @@ class GroupedIndex
 		@nested_separator = nested_separator
 		@split_delimiter = split_delimiter
 		@equivalents = equivalents
-		@equivalent_lookup = Utils.build_equivalent_lookup(equivalents)
+		@frontmatter_path = Jekyll::Plugins::Support::FrontmatterPath.new(
+			separator: @nested_separator,
+			arrays: :expand,
+			equivalents: equivalents
+		)
+		@string_array = Jekyll::Plugins::Support::StringArray.new(delimiter: @split_delimiter)
 		@now_keyword = normalise_keyword(now_keyword, 'now')
 		@today_keyword = normalise_keyword(today_keyword, 'today')
 		@keywords = Utils.safe_hash(keywords)

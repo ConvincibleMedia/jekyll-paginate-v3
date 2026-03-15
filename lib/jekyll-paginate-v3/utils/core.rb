@@ -25,40 +25,17 @@ module Utils
 	#
 	# `false` disables delimited splitting globally.
 	def self.normalise_split_delimiter(raw_delimiter, default_delimiter = ',')
-		return false if raw_delimiter == false
-		return default_delimiter unless raw_delimiter.is_a?(String)
-
-		delimiter = raw_delimiter
-		return false if delimiter.strip.downcase == 'false'
-		delimiter.empty? ? default_delimiter : delimiter
+		Jekyll::Plugins::Support::StringArray.normalise_delimiter(raw_delimiter, default_delimiter)
 	end
 
 	# Splits one string using the configured delimiter, trims entries, and rejects blank strings.
 	def self.split_delimited_string(value, delimiter)
-		if delimiter == false
-			entry = value.to_s.strip
-			return [] if entry.empty?
-
-			return [entry]
-		end
-
-		split_pattern = Regexp.new(Regexp.escape(delimiter.to_s))
-		value.to_s.split(split_pattern, -1).map(&:strip).reject(&:empty?)
+		Jekyll::Plugins::Support::StringArray.new(delimiter: delimiter).interpret(value, split: 0, flatten: true)
 	end
 
 	# Converts scalars/arrays into a flat array and applies delimited-string expansion for all string entries.
 	def self.delimited_array(value, delimiter: ',')
-		if value.is_a?(Array)
-			value.flatten.compact.flat_map do |entry|
-				entry.is_a?(String) ? split_delimited_string(entry, delimiter) : entry
-			end
-		elsif value.is_a?(String)
-			split_delimited_string(value, delimiter)
-		elsif value.nil?
-			[]
-		else
-			[value]
-		end
+		Jekyll::Plugins::Support::StringArray.new(delimiter: delimiter).interpret(value, split: -1, flatten: true)
 	end
 
 	# Converts a value into an array. Strings can be treated as delimiter-defined lists.
@@ -66,15 +43,12 @@ module Utils
 		delimiter = split_delimiter
 		delimiter = ',' if delimiter.nil? && split_commas
 
-		if value.nil?
-			[]
-		elsif value.is_a?(Array)
-			value.flatten.compact
-		elsif !delimiter.nil? && value.is_a?(String)
-			split_delimited_string(value, delimiter)
-		else
-			[value]
-		end
+		Jekyll::Plugins::Support::StringArray.new(delimiter: delimiter || ',').interpret(
+			value,
+			split: delimiter.nil? ? false : 0,
+			flatten: true,
+			delimiter: delimiter.nil? ? Jekyll::Plugins::Support::StringArray::UNSET : delimiter
+		)
 	end
 
 	# Normalises hash keys recursively to strings.

@@ -84,6 +84,47 @@ RSpec.describe 'Pagination integration: filter semantics' do
 		end
 	end
 
+	it 'treats nested multi-value matches as array values for strict filters' do
+		files = post_files(3) do |index|
+			case index
+			when 1 then { 'authors' => [{ 'name' => 'ruby' }, { 'name' => 'jekyll' }] }
+			when 2 then { 'authors' => [{ 'name' => 'ruby' }] }
+			else { 'authors' => [{ 'name' => 'jekyll' }] }
+			end
+		end
+		files = jekyll_merge(
+			files,
+			jekyll_files do
+				file 'index.md' do
+					frontmatter(
+						pagination_template_frontmatter(
+							{
+								'pagination' => {
+									'enabled' => true,
+									'items' => 'posts',
+									'sort' => 'title asc',
+									'per_page' => 50,
+									'filters' => {
+										'authors.name' => {
+											'match' => 'ruby',
+											'mode' => 'strict',
+											'split' => false
+										}
+									}
+								}
+							}
+						)
+					)
+					contents('Template content')
+				end
+			end
+		)
+
+		jekyll_build(default_site, files: files) do |site,|
+			expect(paginator_item_titles(page_by_url(site, '/'))).to eq(['Post 02'])
+		end
+	end
+
 	it 'supports numeric range filters and swaps inverted bounds' do
 		files = jekyll_merge(
 			post_files(5) { |index| { 'rating' => index } },
@@ -481,4 +522,3 @@ RSpec.describe 'Pagination integration: filter semantics' do
 		end
 	end
 end
-

@@ -80,7 +80,7 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Query::Filter do
 			'debug'
 		)
 		expect(logger).to have_received(:call).with(
-			a_string_including("Filter key='category' excluded item sample: _posts/two.md=[\"blog\"]"),
+			a_string_including("Filter key='category' excluded item sample: _posts/two.md=\"blog\""),
 			'debug'
 		)
 	end
@@ -114,6 +114,49 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Query::Filter do
 
 		expect(strict_result).to eq([])
 		expect(auto_result).to eq([items.first])
+	end
+
+	it 'treats nested multi-value matches as array values for scalar modes' do
+		items = [
+			build_item({ 'title' => 'One', 'authors' => [{ 'name' => 'ruby' }, { 'name' => 'jekyll' }] }),
+			build_item({ 'title' => 'Two', 'authors' => [{ 'name' => 'ruby' }] }),
+			build_item({ 'title' => 'Three', 'authors' => [{ 'name' => 'jekyll' }] })
+		]
+
+		strict_result = apply_filters(
+			items,
+			{
+				'authors.name' => {
+					'match' => 'ruby',
+					'mode' => 'strict',
+					'split' => false
+				}
+			}
+		)
+		auto_result = apply_filters(
+			items,
+			{
+				'authors.name' => {
+					'match' => 'ruby',
+					'mode' => 'auto',
+					'split' => false
+				}
+			}
+		)
+		only_result = apply_filters(
+			items,
+			{
+				'authors.name' => {
+					'match' => 'ruby',
+					'mode' => 'only',
+					'split' => false
+				}
+			}
+		)
+
+		expect(strict_result).to eq([items[1]])
+		expect(auto_result).to eq([items[0], items[1]])
+		expect(only_result).to eq([items[1]])
 	end
 
 	it 'applies first-mode matching using the configured first count' do

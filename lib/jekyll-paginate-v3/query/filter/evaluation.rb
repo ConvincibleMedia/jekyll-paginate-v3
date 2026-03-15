@@ -12,39 +12,47 @@ class Filter
 
 	private
 
-	# Extracts candidate values from item frontmatter for one filter key.
+	# Extracts one resolved frontmatter value for one filter key.
 	# Includes synthetic `collection` for parity with query/sort behaviour.
-	def extract_item_values(item, key)
+	#
+	# Arrays are flattened so scalar modes no longer care whether a list
+	# originated from one array field or from several traversed matches.
+	def extract_item_value(item, key)
 		data = item.respond_to?(:data) && item.data.is_a?(Hash) ? item.data : {}
 		decorated_data = data.dup
 
 		collection_label = Utils.item_collection_label(item)
 		decorated_data['collection'] = collection_label unless collection_label.nil?
 
-		fetch_raw_item_values(decorated_data, key)
+		resolved_value = @frontmatter_path.traverse(decorated_data, key)
+		return nil if empty_filter_value?(resolved_value)
+
+		return resolved_value.flatten.compact.reject { |value| empty_filter_value?(value) } if resolved_value.is_a?(Array)
+
+		resolved_value
 	end
 
 	# Evaluates one normalised filter definition node.
-	def check_filter_definition(definition, item_values)
+	def check_filter_definition(definition, item_value)
 		if group_definition?(definition)
-			check_group_filter(definition, item_values)
+			check_group_filter(definition, item_value)
 		elsif scalar_definition?(definition)
-			check_scalar_filter(definition, item_values)
+			check_scalar_filter(definition, item_value)
 		elsif range_definition?(definition)
-			scalar_candidates_from_item_values(item_values).any? { |value| range_match?(value, definition['min'], definition['max'], definition['mode']) }
+			scalar_candidates_from_item_value(item_value).any? { |value| range_match?(value, definition['min'], definition['max'], definition['mode']) }
 		else
 			false
 		end
 	end
 
 	# Evaluates include/exclude group logic.
-	def check_group_filter(group_definition, item_values)
+	def check_group_filter(group_definition, item_value)
 		join_mode = group_definition['join'] || 'or'
 
-		include_results = group_definition['include'].map { |entry| check_filter_definition(entry, item_values) }
+		include_results = group_definition['include'].map { |entry| check_filter_definition(entry, item_value) }
 		include_pass = include_results.empty? ? true : combine_join_results(include_results, join_mode)
 
-		exclude_results = group_definition['exclude'].map { |entry| check_filter_definition(entry, item_values) }
+		exclude_results = group_definition['exclude'].map { |entry| check_filter_definition(entry, item_value) }
 		exclude_match = exclude_results.empty? ? false : combine_join_results(exclude_results, join_mode)
 
 		include_pass && !exclude_match
@@ -55,65 +63,25 @@ class Filter
 		join_mode == 'and' ? results.all? : results.any?
 	end
 
-	# Reads terminal key values while preserving array values as arrays.
-	# This allows scalar hash match modes to differentiate strict equality
-	# from array includes behaviour.
-	def fetch_raw_item_values(data, key)
-		return [] unless data.is_a?(Hash)
-
-		segments = Utils.split_nested_key(key, @nested_separator)
-		return [] if segments.empty?
-
-		nodes = [data]
-		segments.each_with_index do |_, segment_index|
-			next_nodes = []
-			requested_key_path = segments.first(segment_index + 1).join(@nested_separator.to_s)
-
-			nodes.each do |node|
-				if node.is_a?(Array)
-					next_nodes.concat(node)
-					next
-				end
-				next unless node.is_a?(Hash)
-
-				resolved_key = Utils.resolve_hash_key(node, requested_key_path, @equivalent_lookup, separator: @nested_separator)
-				next if resolved_key.nil?
-
-				next_nodes << Utils.read_hash(node, resolved_key)
-			end
-
-			nodes = if segment_index == segments.length - 1
-								next_nodes.compact
-							else
-								next_nodes.flatten(1).compact
-							end
-			break if nodes.empty?
-		end
-
-		nodes.reject { |value| value.nil? || (value.respond_to?(:empty?) && value.empty?) }
-	end
-
-	# Flattens extracted values to scalars for non-scalar-specific checks.
+	# Flattens the resolved value to scalars for non-scalar-specific checks.
 	# No automatic string splitting is applied.
-	def scalar_candidates_from_item_values(item_values)
-		item_values.flat_map { |value| Utils.scalar_values(value) }.reject { |value| value.nil? || (value.respond_to?(:empty?) && value.empty?) }
+	def scalar_candidates_from_item_value(item_value)
+		Utils.scalar_values(item_value).reject { |value| empty_filter_value?(value) }
 	end
 
-	# Evaluates scalar comparison rules against item values.
+	# Evaluates scalar comparison rules against one resolved item value.
 	# - strict: `==` only
 	# - auto: `==` and includes on arrays
 	# - only: includes only for single-item arrays
 	# - first: compares only against the first N array entries
-	def check_scalar_filter(filter_definition, item_values)
+	def check_scalar_filter(filter_definition, item_value)
 		match_value = filter_definition['match']
 		match_mode = filter_definition['mode'] || 'auto'
 		split_definition = filter_definition['split']
 		first_count = filter_definition['first']
 
-		item_values.any? do |item_value|
-			comparable_value = apply_scalar_split(item_value, split_definition)
-			scalar_value_matches?(comparable_value, match_value, match_mode, first_count)
-		end
+		comparable_value = apply_scalar_split(item_value, split_definition)
+		scalar_value_matches?(comparable_value, match_value, match_mode, first_count)
 	end
 
 	# Applies configured scalar split behaviour to one item value.
@@ -121,20 +89,7 @@ class Filter
 		return value if split_definition == false
 
 		delimiter = split_definition.is_a?(String) ? split_definition : @split_delimiter
-		split_scalar_value(value, delimiter)
-	end
-
-	# Splits scalar/array values by delimiter and returns a compact array.
-	def split_scalar_value(value, delimiter)
-		if value.is_a?(Array)
-			value.flat_map { |entry| split_scalar_value(entry, delimiter) }
-		elsif value.is_a?(String)
-			Utils.split_delimited_string(value, delimiter)
-		elsif value.nil? || (value.respond_to?(:empty?) && value.empty?)
-			[]
-		else
-			[value]
-		end
+		@string_array.interpret(value, split: -1, flatten: true, delimiter: delimiter)
 	end
 
 	# Evaluates one prepared item value against one scalar definition.
@@ -213,6 +168,11 @@ class Filter
 		!((left <=> right).nil?)
 	rescue ArgumentError, NoMethodError
 		false
+	end
+
+	# Detects whether one resolved filter value should be treated as absent.
+	def empty_filter_value?(value)
+		value.nil? || (value.respond_to?(:empty?) && value.empty?)
 	end
 
 	# Emits a warning message through the optional logger callback.

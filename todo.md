@@ -1,5 +1,8 @@
 # Roadmap
 
+* empty: false - delete empty pag temps
+
+
 * Num is I18n aware
 
 New config to allow us to control how page1 is handled.
@@ -22,5 +25,5 @@ asc:cyclic
 
 asc:frequency
 
-zigzag: min, max, next-min, next-max...
+asc:zigzag: min, max, next-min, next-max...
 
