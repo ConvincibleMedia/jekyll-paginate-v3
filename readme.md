@@ -499,7 +499,7 @@ In V1 compatibility mode:
 
 ## Notes
 
-This gem is in an alpha release. It has not been fully tested. If you encounter any issues please report them or submit a pull request.
+**This gem is in an alpha release.** Breaking changes may occur between 0.x minor versions, and the gem overall has not been fully tested. If you encounter any issues please report them or submit a pull request.
 
 Other behavioural notes:
 
