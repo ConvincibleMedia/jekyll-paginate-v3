@@ -262,6 +262,7 @@ class Normaliser
 			config['extension'] = template_override_hash['extension'] if template_override_hash.key?('extension')
 
 			config['items'] = normalise_items_value(config['items'])
+			config['debug'] = !!config['debug']
 			config['collection'] = normalise_collection_targets(
 				config['collection'],
 				split_delimiter: split_delimiter,
@@ -310,13 +311,13 @@ class Normaliser
 
 		# Returns canonical keys that are inherited by all templates.
 		def template_setting_keys
-			@template_setting_keys ||= %w[items filters group sort per_page limit offset trail title permalink slugify collection layout].freeze
+			@template_setting_keys ||= %w[items filters group sort debug per_page limit offset trail title permalink slugify collection layout].freeze
 		end
 
 		# Returns template-default keys that have v3 built-in defaults when
 		# not configured globally.
 		def template_setting_built_in_default_keys
-			@template_setting_built_in_default_keys ||= %w[sort per_page limit offset trail title permalink slugify collection].freeze
+			@template_setting_built_in_default_keys ||= %w[sort debug per_page limit offset trail title permalink slugify collection].freeze
 		end
 
 		# Returns legacy aliases that still map into template defaults.

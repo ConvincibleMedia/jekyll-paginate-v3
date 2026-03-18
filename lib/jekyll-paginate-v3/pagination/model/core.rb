@@ -17,10 +17,12 @@ module Pagination
 # coordinator for the pagination pipeline.
 class Model
 
-	def initialize(site:, site_config:, log_lambda:, add_item_lambda:, remove_item_lambda:)
+	def initialize(site:, site_config:, log_lambda:, scoped_log_lambda_builder:, add_item_lambda:, remove_item_lambda:)
 		@site = site
 		@site_config = site_config
 		@log_lambda = log_lambda
+		@active_log_lambda = log_lambda
+		@scoped_log_lambda_builder = scoped_log_lambda_builder
 		@add_item_lambda = add_item_lambda
 		@remove_item_lambda = remove_item_lambda
 		@nested_separator = site_config.dig('syntax', 'separator')
@@ -31,23 +33,26 @@ class Model
 		@clone_collection_cache = {}
 		@template_search_reports = []
 		@template_search_report_lookup = {}
+		@template_search_duration_seconds = 0.0
 	end
 
 	# Runs the full pagination pipeline for the current site build.
 	def run
-		@log_lambda.call("Pagination pipeline start: compatibility=#{@site_config['compatibility'] || 'none'} templates.location=#{@site_config.dig('templates', 'location')} generate.count=#{@site_config.dig('templates', 'generate')&.length || 0}", 'debug')
+		log("Pagination pipeline start: compatibility=#{@site_config['compatibility'] || 'none'} templates.location=#{@site_config.dig('templates', 'location')} generate.count=#{@site_config.dig('templates', 'generate')&.length || 0}", 'debug')
 
 		generated_template_report = build_generated_templates
 		generated_template_count = generated_template_report['total'].to_i
-		@log_lambda.call("Generated #{generated_template_count} template(s).", 'debug')
+		log("Generated #{generated_template_count} template(s).", 'debug')
 
+		search_started_at = monotonic_seconds
 		templates = discover_templates
+		@template_search_duration_seconds = monotonic_seconds - search_started_at
 		if templates.empty?
-			@log_lambda.call('Enabled, but no pagination templates were discovered.', 'warn')
+			log('Enabled, but no pagination templates were discovered.', 'warn')
 			return build_run_report(processed_templates: 0, generated_template_report: generated_template_report)
 		end
 
-		@log_lambda.call("Discovered #{templates.length} pagination template(s).", 'debug')
+		log("Discovered #{templates.length} pagination template(s).", 'debug')
 		enabled_templates = []
 		disabled_templates = 0
 		templates.each do |template|
@@ -56,49 +61,78 @@ class Model
 			template_pagination_source = Utils.safe_hash(template.data['pagination'])
 			template_pagination = merged_template_pagination_config(template, template_pagination_source)
 			template_config = Config::Normaliser.normalise_template_config(@site_config, template_pagination)
+			template_log_lambda = scoped_log_lambda(template_config['debug'])
 			unless template_config['enabled']
 				disabled_templates += 1
-				@log_lambda.call("Skipping template '#{Utils.relative_item_path(template)}' because merged `pagination.enabled` is false.", 'debug')
+				with_log_lambda(template_log_lambda) do
+					log("Skipping template '#{Utils.relative_item_path(template)}' because merged `pagination.enabled` is false.", 'debug')
+				end
 				next
 			end
 			validate_required_template_config!(template, template_config)
 
-			enabled_templates << [template, template_config, template_pagination_source]
+			enabled_templates << [template, template_config, template_pagination_source, template_log_lambda]
 		end
 
 		if enabled_templates.empty?
-			@log_lambda.call('Discovered pagination templates, but all resolved to `pagination.enabled: false` after config merge.', 'warn')
+			log('Discovered pagination templates, but all resolved to `pagination.enabled: false` after config merge.', 'warn')
 			return build_run_report(processed_templates: 0, generated_template_report: generated_template_report)
 		end
 
 		processed = 0
-		enabled_templates.each do |template, template_config, template_pagination_source|
-			@log_lambda.call("Paginating template '#{Utils.relative_item_path(template)}' with items=#{template_config['items']} filters=#{template_config['filters']}.", 'debug')
-			begin
-				template_pagination_report = paginate_template(template, template_config, template_pagination_source)
-				record_template_search_report_totals(template, template_pagination_report)
-			rescue StandardError => error
-				@log_lambda.call("Template '#{Utils.relative_item_path(template)}' failed: #{error.class}: #{error.message}", 'error')
-				raise
+		enabled_templates.each do |template, template_config, template_pagination_source, template_log_lambda|
+			with_log_lambda(template_log_lambda) do
+				log("Paginating template '#{Utils.relative_item_path(template)}' with items=#{template_config['items']} filters=#{template_config['filters']}.", 'debug')
+				begin
+					template_pagination_report = paginate_template(template, template_config, template_pagination_source)
+					record_template_search_report_totals(template, template_pagination_report)
+				rescue StandardError => error
+					log("Template '#{Utils.relative_item_path(template)}' failed: #{error.class}: #{error.message}", 'error')
+					raise
+				end
 			end
 			processed += 1
 		end
 
 		apply_grouped_set_navigation!
-		@log_lambda.call("Skipped #{disabled_templates} discovered template(s) because merged `pagination.enabled` is false.", 'debug') if disabled_templates.positive?
+		log("Skipped #{disabled_templates} discovered template(s) because merged `pagination.enabled` is false.", 'debug') if disabled_templates.positive?
 
-		@log_lambda.call("Pagination pipeline complete: processed #{processed} template(s).", 'debug')
+		log("Pagination pipeline complete: processed #{processed} template(s).", 'debug')
 		build_run_report(processed_templates: processed, generated_template_report: generated_template_report)
 	end
 
 	private
+
+	# Writes one message through the currently active pagination logger.
+	def log(message, level = 'info')
+		@active_log_lambda.call(message, level)
+	end
+
+	# Runs one block with a temporary logger callback, restoring the
+	# previous logger afterwards.
+	def with_log_lambda(log_lambda)
+		previous_log_lambda = @active_log_lambda
+		@active_log_lambda = log_lambda || @log_lambda
+		yield
+	ensure
+		@active_log_lambda = previous_log_lambda
+	end
+
+	# Builds a logger callback that can override debug output for one
+	# template while leaving info/warn/error handling shared.
+	def scoped_log_lambda(debug_enabled)
+		return @log_lambda if @scoped_log_lambda_builder.nil?
+
+		@scoped_log_lambda_builder.call(debug_enabled: debug_enabled)
+	end
 
 	# Builds the public run report consumed by the generator logger.
 	def build_run_report(processed_templates:, generated_template_report:)
 		{
 			'processed_templates' => processed_templates,
 			'generated_template_report' => generated_template_report,
-			'search_location_report' => @template_search_reports
+			'search_location_report' => @template_search_reports,
+			'search_duration_seconds' => @template_search_duration_seconds
 		}
 	end
 
@@ -109,7 +143,7 @@ class Model
 			site_config: @site_config,
 			add_item_lambda: @add_item_lambda,
 			resolve_items_lambda: method(:resolve_items),
-			log_lambda: @log_lambda
+			log_lambda: @active_log_lambda
 		)
 		report = builder.build
 		return report if report.is_a?(Hash)
@@ -154,7 +188,7 @@ class Model
 			state == 'enabled'
 		end
 
-		@log_lambda.call(
+		log(
 			"Template discovery summary: candidates=#{candidates.length} enabled=#{discovery_counts['enabled']} disabled=#{discovery_counts['disabled']} missing_pagination=#{discovery_counts['missing_pagination']} invalid_data=#{discovery_counts['invalid_data']}.",
 			'debug'
 		)
@@ -166,7 +200,7 @@ class Model
 
 			template_discovery_state(item) == 'enabled'
 		end
-		@log_lambda.call("Template discovery: added #{generated_templates.length} generated template(s) outside configured search location.", 'debug') if generated_templates.any?
+		log("Template discovery: added #{generated_templates.length} generated template(s) outside configured search location.", 'debug') if generated_templates.any?
 
 		templates.concat(generated_templates)
 		templates.uniq!
@@ -193,6 +227,12 @@ class Model
 			report_entry['paginated_items'] += template_pagination_report['paginated_items'].to_i
 			report_entry['indexes'] += template_pagination_report['indexes'].to_i
 		end
+	end
+
+	# Returns a monotonic timestamp suitable for elapsed-duration
+	# measurements that should not be affected by wall-clock changes.
+	def monotonic_seconds
+		Process.clock_gettime(Process::CLOCK_MONOTONIC)
 	end
 
 	# Merges pagination settings from the template and its layout hierarchy.
@@ -317,7 +357,7 @@ class Model
 
 		template = legacy_v1_template_candidate(candidates)
 		if template.nil?
-			@log_lambda.call("v1 compatibility: no implicit template candidate matched paginate path '#{@site_config['permalink']}'.", 'warn')
+			log("v1 compatibility: no implicit template candidate matched paginate path '#{@site_config['permalink']}'.", 'warn')
 			return templates
 		end
 
@@ -325,7 +365,7 @@ class Model
 		template.data['pagination']['enabled'] = true
 		template.data['pagination']['template'] = true
 
-		@log_lambda.call("v1 compatibility: no explicit templates found; selected implicit template '#{Utils.relative_item_path(template)}'.", 'debug')
+		log("v1 compatibility: no explicit templates found; selected implicit template '#{Utils.relative_item_path(template)}'.", 'debug')
 		[template]
 	end
 
@@ -377,11 +417,11 @@ class Model
 	def resolve_items(raw_search, include_templates: false, include_generated_indexes: false, include_hidden: false)
 		entries = Query::Parser.parse(raw_search, @site_config['keywords'], split_delimiter: @split_delimiter)
 		if entries.empty?
-			@log_lambda.call("Resolving items from search=#{raw_search.inspect} produced no parsed entries.", 'debug')
+			log("Resolving items from search=#{raw_search.inspect} produced no parsed entries.", 'debug')
 			return []
 		end
 
-		@log_lambda.call("Resolving items from search=#{raw_search.inspect} (entries=#{entries.length}, include_templates=#{include_templates}, include_generated_indexes=#{include_generated_indexes}, include_hidden=#{include_hidden}).", 'debug')
+		log("Resolving items from search=#{raw_search.inspect} (entries=#{entries.length}, include_templates=#{include_templates}, include_generated_indexes=#{include_generated_indexes}, include_hidden=#{include_hidden}).", 'debug')
 		resolved = []
 		entries.each do |entry|
 			resolved.concat(resolve_entry(entry))
@@ -389,7 +429,7 @@ class Model
 
 		resolved.uniq!
 		resolved.sort_by! { |item| Utils.relative_item_path(item) }
-		@log_lambda.call("Resolved #{resolved.length} unique item(s) before exclusion filters.", 'debug')
+		log("Resolved #{resolved.length} unique item(s) before exclusion filters.", 'debug')
 		log_item_path_sample('Resolved item sample before exclusions', resolved)
 
 		excluded_generated_indexes = include_generated_indexes ? 0 : resolved.count { |item| Utils.generated_index?(item) }
@@ -401,9 +441,9 @@ class Model
 		resolved.select! { |item| !item['hidden'] } unless include_hidden
 
 		if excluded_generated_indexes.positive? || excluded_templates.positive? || excluded_hidden.positive?
-			@log_lambda.call("Excluded generated_indexes=#{excluded_generated_indexes} templates=#{excluded_templates} hidden=#{excluded_hidden} from resolved items.", 'debug')
+			log("Excluded generated_indexes=#{excluded_generated_indexes} templates=#{excluded_templates} hidden=#{excluded_hidden} from resolved items.", 'debug')
 		end
-		@log_lambda.call("Resolved #{resolved.length} item(s) after exclusion filters.", 'debug')
+		log("Resolved #{resolved.length} item(s) after exclusion filters.", 'debug')
 		log_item_path_sample('Resolved item sample after exclusions', resolved)
 		resolved
 	end
@@ -414,15 +454,15 @@ class Model
 		paths = entry['paths']
 		source_items = source_items_for_entry_type(type)
 		if source_items.nil?
-			@log_lambda.call("Search entry type='#{type}' did not match pages/all/everything or a known collection; resolved 0 items.", 'warn')
+			log("Search entry type='#{type}' did not match pages/all/everything or a known collection; resolved 0 items.", 'warn')
 			return []
 		end
 
-		@log_lambda.call("Resolving entry type='#{type}' paths=#{paths.inspect} from #{source_items.length} source item(s).", 'debug')
+		log("Resolving entry type='#{type}' paths=#{paths.inspect} from #{source_items.length} source item(s).", 'debug')
 		matched_items = source_items.select do |item|
 			Query::Parser.path_allowed?(Utils.relative_item_path(item), paths)
 		end
-		@log_lambda.call("Entry type='#{type}' matched #{matched_items.length}/#{source_items.length} item(s) after path filtering.", 'debug')
+		log("Entry type='#{type}' matched #{matched_items.length}/#{source_items.length} item(s) after path filtering.", 'debug')
 		log_item_path_sample("Entry type='#{type}' matched item sample", matched_items)
 		matched_items
 	end
@@ -452,7 +492,7 @@ class Model
 		sample_paths = items.first(maximum).map { |item| Utils.relative_item_path(item) }
 		extra_count = items.length - sample_paths.length
 		extra_suffix = extra_count.positive? ? " (+#{extra_count} more)" : ''
-		@log_lambda.call("#{label}: #{sample_paths.join(', ')}#{extra_suffix}.", 'debug')
+		log("#{label}: #{sample_paths.join(', ')}#{extra_suffix}.", 'debug')
 	end
 
 	# Purpose: Implements all collection documents for this component.

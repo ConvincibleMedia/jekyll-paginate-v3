@@ -14,10 +14,11 @@ class Model
 
 	def apply_grouped_set_navigation!
 		if @generated_index_sets.empty?
-			@log_lambda.call('Grouped navigation: no grouped index sets were registered.', 'debug')
+			log('Grouped navigation: no grouped index sets were registered.', 'debug')
 			return
 		end
 
+		navigation_log_lambda = nil
 		page_group_payloads = {}
 		page_objects = {}
 
@@ -26,7 +27,11 @@ class Model
 
 			ordered_entries = ordered_grouped_set_entries(set_entries)
 			next if ordered_entries.empty?
-			@log_lambda.call("Grouped navigation: set='#{set_id}' entries=#{ordered_entries.length}.", 'debug')
+			set_log_lambda = ordered_entries.first['log_lambda']
+			navigation_log_lambda = set_log_lambda if navigation_log_lambda.nil? || ordered_entries.first['debug_enabled']
+			with_log_lambda(set_log_lambda) do
+				log("Grouped navigation: set='#{set_id}' entries=#{ordered_entries.length}.", 'debug')
+			end
 
 			ordered_entries.each_with_index do |entry, index|
 				current_number = index + 1
@@ -62,7 +67,9 @@ class Model
 			page.pager.groups = ordered_payloads
 		end
 
-		@log_lambda.call("Grouped navigation: assigned payloads to #{page_group_payloads.length} page(s).", 'debug')
+		with_log_lambda(navigation_log_lambda) do
+			log("Grouped navigation: assigned payloads to #{page_group_payloads.length} page(s).", 'debug')
+		end
 	end
 
 	# Orders grouped-set entries according to configured sort direction.

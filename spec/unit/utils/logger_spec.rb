@@ -25,6 +25,15 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Utils::Logger do
 		expect(jekyll_logger).to have_received(:info).with('Pagination:', '[debug] debug details')
 	end
 
+	it 'allows scoped log lambdas to override debug emission' do
+		logger = described_class.new(debug_enabled: false)
+		scoped_logger = logger.scoped_log_lambda(debug_enabled: true)
+
+		scoped_logger.call('scoped debug details', 'debug')
+
+		expect(jekyll_logger).to have_received(:info).with('Pagination:', '[debug] scoped debug details')
+	end
+
 	it 'routes warn and error levels to matching logger methods' do
 		logger = described_class.new(debug_enabled: true)
 

@@ -20,6 +20,7 @@ class PaginationGenerator < Jekyll::Generator
 	# content, then delegates all pagination behaviour to Pagination::Model.
 	def generate(site)
 		logger = nil
+		overall_started_at = monotonic_seconds
 		config = Config::Normaliser.normalise_site_config(site.config)
 		config = enable_implicit_v1_compatibility(config, site)
 
@@ -30,11 +31,11 @@ class PaginationGenerator < Jekyll::Generator
 			logger.info('Disabled in site config.')
 			return
 		end
-		logger.info("Enabled. Will look for templates in: #{template_location_summary(config)}")
 
 		# Shared logger callback so deeper layers do not depend directly on
 		# Jekyll logger globals.
 		log_lambda = logger.method(:call)
+		scoped_log_lambda_builder = logger.method(:scoped_log_lambda)
 
 		# Abstract site mutation so the model can add pages or documents
 		# without knowing where Jekyll stores each item type.
@@ -61,13 +62,20 @@ class PaginationGenerator < Jekyll::Generator
 			site: site,
 			site_config: config,
 			log_lambda: log_lambda,
+			scoped_log_lambda_builder: scoped_log_lambda_builder,
 			add_item_lambda: add_item_lambda,
 			remove_item_lambda: remove_item_lambda
 		)
 
 		run_report = model.run
 		log_generate_report(logger, run_report['generated_template_report'])
-		log_search_location_report(logger, run_report['search_location_report'], processed_templates: run_report['processed_templates'])
+		log_search_location_report(
+			logger,
+			run_report['search_location_report'],
+			processed_templates: run_report['processed_templates'],
+			search_duration_seconds: run_report['search_duration_seconds']
+		)
+		logger.info("Done in #{format_duration(monotonic_seconds - overall_started_at)}.")
 	rescue StandardError => error
 		if logger.nil?
 			Jekyll.logger.error('Pagination:', "Failed with #{error.class}: #{error.message}")
@@ -78,18 +86,6 @@ class PaginationGenerator < Jekyll::Generator
 	end
 
 	private
-
-	# Formats the configured template search locations for info-level logs.
-	def template_location_summary(config)
-		search_entries = Query::Parser.parse(
-			config.dig('templates', 'location'),
-			config['keywords'],
-			split_delimiter: config.dig('syntax', 'split')
-		)
-		return '(none)' if search_entries.empty?
-
-		search_entries.map { |entry| Query::Parser.entry_label(entry) }.join(', ')
-	end
 
 	# Logs one info-level summary line for each configured generate entry.
 	def log_generate_report(logger, generated_template_report)
@@ -121,22 +117,54 @@ class PaginationGenerator < Jekyll::Generator
 		"collection '#{target}'"
 	end
 
-	# Logs one info-level summary line for search-location discovery and totals.
-	def log_search_location_report(logger, search_location_report, processed_templates:)
+	# Logs the search summary as a readable multi-line block, including the
+	# time spent locating pagination templates.
+	def log_search_location_report(logger, search_location_report, processed_templates:, search_duration_seconds:)
 		report_entries = Utils.arrayify(search_location_report)
+		logger.info("Found #{processed_templates} #{pluralise('pagination template', processed_templates)} in #{format_duration(search_duration_seconds)}.")
+
 		if report_entries.empty?
-			logger.info("Search report: no location entries were resolved. processed=#{processed_templates} template(s).")
+			logger.info('- No template search locations were resolved.')
 			return
 		end
 
-		segments = report_entries.map do |entry|
-			"#{entry['label']}: templates=#{entry['templates_found']} items=#{entry['paginated_items']} indexes=#{entry['indexes']}"
-		end
+		location_width = report_entries.map { |entry| entry['label'].to_s.length }.max || 0
+		template_count_width = report_entries.map { |entry| entry['templates_found'].to_i.to_s.length }.max || 1
+		index_count_width = report_entries.map { |entry| entry['indexes'].to_i.to_s.length }.max || 1
+		item_count_width = report_entries.map { |entry| entry['paginated_items'].to_i.to_s.length }.max || 1
 
-		total_templates_found = report_entries.inject(0) { |sum, entry| sum + entry['templates_found'].to_i }
-		total_paginated_items = report_entries.inject(0) { |sum, entry| sum + entry['paginated_items'].to_i }
-		total_indexes = report_entries.inject(0) { |sum, entry| sum + entry['indexes'].to_i }
-		logger.info("Search report: #{segments.join('; ')}. totals: templates=#{total_templates_found} items=#{total_paginated_items} indexes=#{total_indexes} processed=#{processed_templates}.")
+		report_entries.each do |entry|
+			logger.info(
+				format(
+					"- %-#{location_width}s: | %#{template_count_width}d | templates became %#{index_count_width}d | indices with %#{item_count_width}d | total items",
+					entry['label'],
+					entry['templates_found'].to_i,
+					entry['indexes'].to_i,
+					entry['paginated_items'].to_i
+				)
+			)
+		end
+	end
+
+	# Formats elapsed seconds for human-readable logs without excessive
+	# precision noise on short runs.
+	def format_duration(duration_seconds)
+		seconds = duration_seconds.to_f
+		return format('%.3f seconds', seconds) if seconds < 1
+		return format('%.2f seconds', seconds) if seconds < 10
+
+		format('%.1f seconds', seconds)
+	end
+
+	# Returns the singular or plural noun phrase for one count.
+	def pluralise(noun, count)
+		count.to_i == 1 ? noun : "#{noun}s"
+	end
+
+	# Returns a monotonic timestamp suitable for elapsed-duration
+	# measurements that should not be affected by wall-clock changes.
+	def monotonic_seconds
+		Process.clock_gettime(Process::CLOCK_MONOTONIC)
 	end
 
 	# Convenience bridge for old jekyll-paginate sites that still define

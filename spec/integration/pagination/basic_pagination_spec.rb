@@ -170,6 +170,66 @@ RSpec.describe 'Pagination integration: core behaviour' do
 		end
 	end
 
+	it 'allows debug logging to be enabled for one template without enabling it for others' do
+		files = jekyll_merge(
+			post_files(3),
+			jekyll_files do
+				folder 'debug' do
+					file 'index.md' do
+						frontmatter(
+							pagination_template_frontmatter(
+								{
+									'title' => 'Debug Template',
+									'pagination' => {
+										'enabled' => true,
+										'items' => 'posts',
+										'per_page' => 2,
+										'sort' => 'title asc',
+										'debug' => true
+									}
+								}
+							)
+						)
+						contents('Debug template content')
+					end
+				end
+
+				folder 'quiet' do
+					file 'index.md' do
+						frontmatter(
+							pagination_template_frontmatter(
+								{
+									'title' => 'Quiet Template',
+									'pagination' => {
+										'enabled' => true,
+										'items' => 'posts',
+										'per_page' => 2,
+										'sort' => 'title asc'
+									}
+								}
+							)
+						)
+						contents('Quiet template content')
+					end
+				end
+			end
+		)
+
+		logger = Jekyll.logger
+		allow(Jekyll).to receive(:logger).and_return(logger)
+		allow(logger).to receive(:info)
+		allow(logger).to receive(:warn)
+		allow(logger).to receive(:error)
+
+		jekyll_build(default_site, files: files) do |_site,|
+		end
+
+		expect(logger).to have_received(:info).with('Pagination:', a_string_including("[debug] Paginating template 'debug/index.md'"))
+		expect(logger).to have_received(:info).with('Pagination:', a_string_including("[debug] Template 'debug/index.md': resolved"))
+		expect(logger).not_to have_received(:info).with('Pagination:', a_string_including("[debug] Paginating template 'quiet/index.md'"))
+		expect(logger).not_to have_received(:info).with('Pagination:', a_string_including("[debug] Template 'quiet/index.md': resolved"))
+	end
+
 	it 'merges template pagination with layout pagination and gives layout precedence in v2 mode' do
 		files = jekyll_merge(
 			post_files(3),

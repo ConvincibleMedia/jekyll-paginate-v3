@@ -301,6 +301,46 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
 			expect(config.dig('filters', 'author:name')).to eq('Alice')
 		end
 
+		it 'inherits site-level debug defaults' do
+			site_config = described_class.normalise_site_config(
+				'pagination' => {
+					'enabled' => true,
+					'debug' => true
+				}
+			)
+
+			config = described_class.normalise_template_config(
+				site_config,
+				{
+					'enabled' => true,
+					'items' => 'posts'
+				}
+			)
+
+			expect(site_config['debug']).to eq(true)
+			expect(config['debug']).to eq(true)
+		end
+
+		it 'allows template-level debug to override the inherited default' do
+			site_config = described_class.normalise_site_config(
+				'pagination' => {
+					'enabled' => true,
+					'debug' => true
+				}
+			)
+
+			config = described_class.normalise_template_config(
+				site_config,
+				{
+					'enabled' => true,
+					'items' => 'posts',
+					'debug' => false
+				}
+			)
+
+			expect(config['debug']).to eq(false)
+		end
+
 		it 'inherits site-level defaults and allows template overrides' do
 			site_config = described_class.normalise_site_config(
 				'pagination' => {

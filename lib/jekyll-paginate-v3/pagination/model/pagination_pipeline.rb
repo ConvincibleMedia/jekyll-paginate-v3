@@ -15,7 +15,7 @@ class Model
 	def paginate_template(template, config, template_pagination_source)
 		variants = expand_template_variants(template, config, template_pagination_source: template_pagination_source)
 		if variants.empty?
-			@log_lambda.call("Template '#{Utils.relative_item_path(template)}': grouping/layout expansion produced no variants.", 'debug')
+			log("Template '#{Utils.relative_item_path(template)}': grouping/layout expansion produced no variants.", 'debug')
 			return {
 				'paginated_items' => 0,
 				'indexes' => 0
@@ -54,7 +54,7 @@ class Model
 			merge_template_pagination_lambda: method(:merged_template_pagination_config),
 			normalise_template_config_lambda: lambda { |pagination| Config::Normaliser.normalise_template_config(@site_config, pagination) },
 			resolve_items_lambda: method(:resolve_items),
-			log_lambda: @log_lambda
+			log_lambda: @active_log_lambda
 		)
 		variants = expander.expand
 		return variants unless variants.empty?
@@ -75,7 +75,7 @@ class Model
 		split_delimiter = config.key?('split') ? config['split'] : @split_delimiter
 		nested_separator = config['separator'] || @nested_separator
 		all_items = resolve_items(config['items'])
-		@log_lambda.call("Template '#{template_path}': resolved #{all_items.length} candidate item(s).", 'debug')
+		log("Template '#{template_path}': resolved #{all_items.length} candidate item(s).", 'debug')
 		log_item_path_sample("Template '#{template_path}': candidate item sample", all_items)
 		filtered_items = Query::Filter.filter_items(
 			all_items,
@@ -85,10 +85,10 @@ class Model
 			split_delimiter: split_delimiter,
 			now_keyword: config.dig('keywords', 'now') || @site_config.dig('keywords', 'now'),
 			today_keyword: config.dig('keywords', 'today') || @site_config.dig('keywords', 'today'),
-			log_lambda: @log_lambda,
+			log_lambda: @active_log_lambda,
 			context_label: "Template '#{template_path}'"
 		)
-		@log_lambda.call("Template '#{template_path}': #{filtered_items.length} item(s) after filters=#{config['filters']}.", 'debug')
+		log("Template '#{template_path}': #{filtered_items.length} item(s) after filters=#{config['filters']}.", 'debug')
 		log_item_path_sample("Template '#{template_path}': filtered item sample", filtered_items)
 
 		sorted_items = Query::Sorter.apply(
@@ -98,26 +98,26 @@ class Model
 			equivalents: @equivalents,
 			split_delimiter: split_delimiter
 		)
-		@log_lambda.call("Template '#{template_path}': sorted #{sorted_items.length} item(s) by #{config['sort']} before offset.", 'debug')
+		log("Template '#{template_path}': sorted #{sorted_items.length} item(s) by #{config['sort']} before offset.", 'debug')
 		log_item_path_sample("Template '#{template_path}': sorted item sample", sorted_items)
 
 		offset = [config['offset'].to_i, 0].max
 		sorted_items = sorted_items.drop(offset)
-		@log_lambda.call("Template '#{template_path}': #{sorted_items.length} item(s) after offset=#{offset}.", 'debug')
+		log("Template '#{template_path}': #{sorted_items.length} item(s) after offset=#{offset}.", 'debug')
 		log_item_path_sample("Template '#{template_path}': offset item sample", sorted_items)
 
 		limit = [config['limit'].to_i, 0].max
 		if limit.positive?
 			original_item_count = sorted_items.length
 			sorted_items = sorted_items.first(limit)
-			@log_lambda.call("Template '#{template_path}': items limited from #{original_item_count} to #{sorted_items.length} by limit=#{limit}.", 'debug')
+			log("Template '#{template_path}': items limited from #{original_item_count} to #{sorted_items.length} by limit=#{limit}.", 'debug')
 		end
 
 		page_windows = Utils.build_pagination_windows(sorted_items.length, config['per_page'])
 		total_pages = page_windows.length
 		validate_numbered_permalink_template!(template, config, total_pages)
 
-		@log_lambda.call("Template '#{template_path}': generating #{total_pages} page(s) with per_page=#{config['per_page']} limit=#{config['limit']}.", 'debug')
+		log("Template '#{template_path}': generating #{total_pages} page(s) with per_page=#{config['per_page']} limit=#{config['limit']}.", 'debug')
 		generated_pages = emit_paginated_pages(
 			template,
 			config,
@@ -183,7 +183,7 @@ class Model
 			assign_generated_page_permalink!(generated, template, config, current_page, total_pages)
 
 			@add_item_lambda.call(generated)
-			@log_lambda.call("Emitted pagination page #{current_page}/#{total_pages} at '#{generated.url}' for template '#{Utils.relative_item_path(template)}'.", 'debug')
+			log("Emitted pagination page #{current_page}/#{total_pages} at '#{generated.url}' for template '#{Utils.relative_item_path(template)}'.", 'debug')
 			new_pages << generated
 		end
 
@@ -324,7 +324,7 @@ class Model
 		return if before.zero? && after.zero?
 
 		trail_size = before + after + 1
-		@log_lambda.call("Applying page trail with before=#{before} after=#{after} size=#{trail_size} across #{generated_pages.length} generated page(s).", 'debug')
+		log("Applying page trail with before=#{before} after=#{after} size=#{trail_size} across #{generated_pages.length} generated page(s).", 'debug')
 
 		generated_pages.each do |page|
 			current_page_number = page.pager.current.num
@@ -347,7 +347,7 @@ class Model
 					distance: trail_number - current_page_number
 				)
 			end
-			@log_lambda.call("Assigned trail to page #{current_page_number}: range_start=#{range_start + 1} range_end=#{range_end}.", 'debug')
+			log("Assigned trail to page #{current_page_number}: range_start=#{range_start + 1} range_end=#{range_end}.", 'debug')
 		end
 	end
 
@@ -389,7 +389,9 @@ class Model
 				'other' => !!metadata['other'],
 				'depth' => metadata['depth'].to_i,
 				'index_key' => metadata['key'].to_s,
-				'sort_direction' => grouped_set_sort_direction(config, metadata['key'].to_s)
+				'sort_direction' => grouped_set_sort_direction(config, metadata['key'].to_s),
+				'log_lambda' => @active_log_lambda,
+				'debug_enabled' => !!config['debug']
 			}
 		end
 	end
