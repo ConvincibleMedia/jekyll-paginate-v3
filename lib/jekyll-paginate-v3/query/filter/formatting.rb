@@ -30,17 +30,22 @@ class Filter
 	def filter_definition_to_s(definition)
 		if group_definition?(definition)
 			"(#{filter_to_s_internal(definition)})"
+		elsif exists_definition?(definition)
+			split_text = definition['split'] == false ? 'split:false' : "split:'#{definition['split']}'"
+			description = definition['type'].nil? ? definition['exists'].to_s : "#{definition['exists']} #{definition['type']}"
+			"exists #{description} (#{split_text})"
 		elsif scalar_definition?(definition)
 			split_text = definition['split'] == false ? 'split:false' : "split:'#{definition['split']}'"
 			mode_text = definition['mode'] == 'first' ? "first:#{definition['first']}" : definition['mode']
 			"match #{definition['match']} (#{mode_text}, #{split_text})"
 		elsif range_definition?(definition)
+			target_suffix = definition['target'] == 'length' ? ' length' : ''
 			if definition.key?('min') && definition.key?('max')
-				"#{definition['min']} to #{definition['max']} (#{definition['mode']})"
+				"#{definition['min']} to #{definition['max']}#{target_suffix} (#{definition['mode']})"
 			elsif definition.key?('min')
-				"#{definition['min']} or more (#{definition['mode']})"
+				"#{definition['min']} or more#{target_suffix} (#{definition['mode']})"
 			else
-				"#{definition['max']} or less (#{definition['mode']})"
+				"#{definition['max']} or less#{target_suffix} (#{definition['mode']})"
 			end
 		else
 			'[invalid]'
@@ -57,9 +62,14 @@ class Filter
 		definition.is_a?(Hash) && definition.key?('match') && definition.key?('mode') && definition.key?('split')
 	end
 
+	# Detects normalised exists nodes.
+	def exists_definition?(definition)
+		definition.is_a?(Hash) && definition.key?('exists') && definition.key?('type') && definition.key?('split')
+	end
+
 	# Detects normalised range nodes.
 	def range_definition?(definition)
-		definition.is_a?(Hash) && (definition.key?('min') || definition.key?('max'))
+		definition.is_a?(Hash) && definition.key?('target') && definition.key?('split') && (definition.key?('min') || definition.key?('max'))
 	end
 end
 

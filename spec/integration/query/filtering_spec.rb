@@ -521,4 +521,229 @@ RSpec.describe 'Pagination integration: filter semantics' do
 			expect(paginator_item_titles(page_by_url(site, '/'))).to eq(['Post 01'])
 		end
 	end
+
+	it 'treats exists true and false as strict negations after value processing' do
+		files = post_files(6) do |index|
+			case index
+			when 1 then {}
+			when 2 then { 'meta' => { 'links' => { 'projects' => [] } } }
+			when 3 then { 'meta' => { 'links' => { 'projects' => '' } } }
+			when 4 then { 'meta' => { 'links' => { 'projects' => '   ' } } }
+			when 5 then { 'meta' => { 'links' => { 'projects' => 'solo' } } }
+			else { 'meta' => { 'links' => { 'projects' => 'one,two' } } }
+			end
+		end
+
+		present_files = jekyll_merge(
+			files,
+			jekyll_files do
+				file 'present.md' do
+					frontmatter(
+						pagination_template_frontmatter(
+							{
+								'permalink' => '/present/',
+								'pagination' => {
+									'enabled' => true,
+									'items' => 'posts',
+									'sort' => 'title asc',
+									'per_page' => 50,
+									'filters' => {
+										'meta.links.projects' => {
+											'exists' => true
+										}
+									}
+								}
+							}
+						)
+					)
+					contents('Template content')
+				end
+
+				file 'missing.md' do
+					frontmatter(
+						pagination_template_frontmatter(
+							{
+								'permalink' => '/missing/',
+								'pagination' => {
+									'enabled' => true,
+									'items' => 'posts',
+									'sort' => 'title asc',
+									'per_page' => 50,
+									'filters' => {
+										'meta.links.projects' => {
+											'exists' => false
+										}
+									}
+								}
+							}
+						)
+					)
+					contents('Template content')
+				end
+			end
+		)
+
+		jekyll_build(default_site, files: present_files) do |site,|
+			expect(paginator_item_titles(page_by_url(site, '/present/'))).to eq(['Post 05', 'Post 06'])
+			expect(paginator_item_titles(page_by_url(site, '/missing/'))).to eq(['Post 01', 'Post 02', 'Post 03', 'Post 04'])
+		end
+	end
+
+	it 'supports exists type checks and length-aware ranges' do
+		files = post_files(4) do |index|
+			case index
+			when 1 then { 'meta' => { 'links' => { 'projects' => 'one,two,three' } }, 'label' => 'Alpha', 'flag' => 'false', 'published_at' => '2026-01-01' }
+			when 2 then { 'meta' => { 'links' => { 'projects' => 'one' } }, 'label' => 'Go', 'flag' => 'maybe', 'published_at' => 'not-a-date' }
+			when 3 then { 'meta' => { 'links' => { 'projects' => [] } }, 'label' => 'Bravo', 'flag' => true, 'published_at' => Date.new(2026, 1, 2) }
+			else { 'meta' => { 'links' => { 'projects' => 'solo' } }, 'label' => 'Echo', 'flag' => 'TRUE', 'published_at' => nil }
+			end
+		end
+
+		files = jekyll_merge(
+			files,
+			jekyll_files do
+				file 'array.md' do
+					frontmatter(
+						pagination_template_frontmatter(
+							{
+								'permalink' => '/array/',
+								'pagination' => {
+									'enabled' => true,
+									'items' => 'posts',
+									'sort' => 'title asc',
+									'per_page' => 50,
+									'filters' => {
+										'meta.links.projects' => {
+											'exists' => 'array',
+											'min' => 2
+										}
+									}
+								}
+							}
+						)
+					)
+					contents('Template content')
+				end
+
+				file 'string.md' do
+					frontmatter(
+						pagination_template_frontmatter(
+							{
+								'permalink' => '/string/',
+								'pagination' => {
+									'enabled' => true,
+									'items' => 'posts',
+									'sort' => 'title asc',
+									'per_page' => 50,
+									'filters' => {
+										'label' => {
+											'exists' => 'string',
+											'min' => 4,
+											'split' => false
+										}
+									}
+								}
+							}
+						)
+					)
+					contents('Template content')
+				end
+
+				file 'boolean.md' do
+					frontmatter(
+						pagination_template_frontmatter(
+							{
+								'permalink' => '/boolean/',
+								'pagination' => {
+									'enabled' => true,
+									'items' => 'posts',
+									'sort' => 'title asc',
+									'per_page' => 50,
+									'filters' => {
+										'flag' => {
+											'exists' => 'boolean',
+											'split' => false
+										}
+									}
+								}
+							}
+						)
+					)
+					contents('Template content')
+				end
+
+				file 'date.md' do
+					frontmatter(
+						pagination_template_frontmatter(
+							{
+								'permalink' => '/date/',
+								'pagination' => {
+									'enabled' => true,
+									'items' => 'posts',
+									'sort' => 'title asc',
+									'per_page' => 50,
+									'filters' => {
+										'published_at' => {
+											'exists' => 'datetime',
+											'split' => false
+										}
+									}
+								}
+							}
+						)
+					)
+					contents('Template content')
+				end
+			end
+		)
+
+		jekyll_build(default_site, files: files) do |site,|
+			expect(paginator_item_titles(page_by_url(site, '/array/'))).to eq(['Post 01'])
+			expect(paginator_item_titles(page_by_url(site, '/string/'))).to eq(['Post 01', 'Post 03', 'Post 04'])
+			expect(paginator_item_titles(page_by_url(site, '/boolean/'))).to eq(['Post 01', 'Post 03', 'Post 04'])
+			expect(paginator_item_titles(page_by_url(site, '/date/'))).to eq(['Post 01', 'Post 03'])
+		end
+	end
+
+	it 'supports shared mode tokens across match and range behaviour in one hash' do
+		files = post_files(3) do |index|
+			case index
+			when 1 then { 'audience' => 'news,alerts' }
+			when 2 then { 'audience' => 'alerts' }
+			else { 'audience' => 'news,updates' }
+			end
+		end
+		files = jekyll_merge(
+			files,
+			jekyll_files do
+				file 'index.md' do
+					frontmatter(
+						pagination_template_frontmatter(
+							{
+								'pagination' => {
+									'enabled' => true,
+									'items' => 'posts',
+									'sort' => 'title asc',
+									'per_page' => 50,
+									'filters' => {
+										'audience' => {
+											'exists' => 'array',
+											'match' => 'alerts',
+											'min' => 1,
+											'mode' => 'auto min-exclusive'
+										}
+									}
+								}
+							}
+						)
+					)
+					contents('Template content')
+				end
+			end
+		)
+
+		jekyll_build(default_site, files: files) do |site,|
+			expect(paginator_item_titles(page_by_url(site, '/'))).to eq(['Post 01'])
+		end
+	end
 end

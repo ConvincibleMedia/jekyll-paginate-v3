@@ -15,8 +15,8 @@ class Filter
 	# Extracts one resolved frontmatter value for one filter key.
 	# Includes synthetic `collection` for parity with query/sort behaviour.
 	#
-	# Arrays are flattened so scalar modes no longer care whether a list
-	# originated from one array field or from several traversed matches.
+	# Arrays are flattened so prepared-value logic sees one consistent
+	# container shape regardless of where the list originated.
 	def extract_item_value(item, key)
 		data = item.respond_to?(:data) && item.data.is_a?(Hash) ? item.data : {}
 		decorated_data = data.dup
@@ -25,9 +25,9 @@ class Filter
 		decorated_data['collection'] = collection_label unless collection_label.nil?
 
 		resolved_value = @frontmatter_path.traverse(decorated_data, key)
-		return nil if empty_filter_value?(resolved_value)
+		return nil if resolved_value.nil?
 
-		return resolved_value.flatten.compact.reject { |value| empty_filter_value?(value) } if resolved_value.is_a?(Array)
+		return resolved_value.flatten.compact if resolved_value.is_a?(Array)
 
 		resolved_value
 	end
@@ -36,10 +36,12 @@ class Filter
 	def check_filter_definition(definition, item_value)
 		if group_definition?(definition)
 			check_group_filter(definition, item_value)
+		elsif exists_definition?(definition)
+			check_exists_filter(definition, item_value)
 		elsif scalar_definition?(definition)
 			check_scalar_filter(definition, item_value)
 		elsif range_definition?(definition)
-			scalar_candidates_from_item_value(item_value).any? { |value| range_match?(value, definition['min'], definition['max'], definition['mode']) }
+			check_range_filter(definition, item_value)
 		else
 			false
 		end
@@ -63,33 +65,31 @@ class Filter
 		join_mode == 'and' ? results.all? : results.any?
 	end
 
-	# Flattens the resolved value to scalars for non-scalar-specific checks.
-	# No automatic string splitting is applied.
-	def scalar_candidates_from_item_value(item_value)
-		Utils.scalar_values(item_value).reject { |value| empty_filter_value?(value) }
-	end
-
 	# Evaluates scalar comparison rules against one resolved item value.
 	# - strict: `==` only
 	# - auto: `==` and includes on arrays
 	# - only: includes only for single-item arrays
 	# - first: compares only against the first N array entries
 	def check_scalar_filter(filter_definition, item_value)
+		processed_value = processed_value_for_definition(item_value, filter_definition)
 		match_value = filter_definition['match']
 		match_mode = filter_definition['mode'] || 'auto'
-		split_definition = filter_definition['split']
 		first_count = filter_definition['first']
 
-		comparable_value = apply_scalar_split(item_value, split_definition)
-		scalar_value_matches?(comparable_value, match_value, match_mode, first_count)
+		scalar_value_matches?(processed_value.value, match_value, match_mode, first_count)
 	end
 
-	# Applies configured scalar split behaviour to one item value.
-	def apply_scalar_split(value, split_definition)
-		return value if split_definition == false
+	# Evaluates the shared existence predicate, optionally with one type.
+	def check_exists_filter(filter_definition, item_value)
+		processed_value = processed_value_for_definition(item_value, filter_definition)
+		present = processed_value.present?
+		positive_match = if filter_definition['type'].nil?
+											 present
+										 else
+											 present && processed_value.type?(filter_definition['type'])
+										 end
 
-		delimiter = split_definition.is_a?(String) ? split_definition : @split_delimiter
-		@string_array.interpret(value, split: -1, flatten: true, delimiter: delimiter)
+		filter_definition['exists'] ? positive_match : !positive_match
 	end
 
 	# Evaluates one prepared item value against one scalar definition.
@@ -120,6 +120,32 @@ class Filter
 
 		comparable_value = normalise_comparable_scalar(value)
 		comparable_value == match_value
+	end
+
+	# Evaluates range predicates against either scalar candidates or the
+	# prepared container length.
+	def check_range_filter(filter_definition, item_value)
+		processed_value = processed_value_for_definition(item_value, filter_definition)
+
+		if filter_definition['target'] == 'length'
+			length_value = processed_value.length
+			return false if length_value.nil?
+
+			return range_match?(length_value, filter_definition['min'], filter_definition['max'], filter_definition['mode'])
+		end
+
+		processed_value.scalar_candidates.any? do |value|
+			range_match?(value, filter_definition['min'], filter_definition['max'], filter_definition['mode'])
+		end
+	end
+
+	# Builds one processed-value helper for one definition's split rules.
+	def processed_value_for_definition(item_value, definition)
+		Jekyll::Plugins::Support::ProcessedValue.build(
+			item_value,
+			string_array: @string_array,
+			split: definition['split']
+		)
 	end
 
 	# Checks one item value against an optional min/max range.
@@ -162,17 +188,7 @@ class Filter
 
 	# Safe comparability check for mixed scalar types.
 	def values_comparable?(left, right)
-		return true if left.class == right.class
-		return true if (left.is_a?(Integer) || left.is_a?(Float)) && (right.is_a?(Integer) || right.is_a?(Float))
-
-		!((left <=> right).nil?)
-	rescue ArgumentError, NoMethodError
-		false
-	end
-
-	# Detects whether one resolved filter value should be treated as absent.
-	def empty_filter_value?(value)
-		value.nil? || (value.respond_to?(:empty?) && value.empty?)
+		Jekyll::Plugins::Support::LooseScalar.comparable_values?(left, right)
 	end
 
 	# Emits a warning message through the optional logger callback.

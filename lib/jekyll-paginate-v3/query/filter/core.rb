@@ -84,13 +84,10 @@ class Filter
 
 			current_items.each do |item|
 				value = extract_item_value(item, key)
-				if value.nil?
-					missing_value_items << item
-					next
-				end
-
 				if check_filter_definition(normalised, value)
 					filtered_items << item
+				elsif value.nil?
+					missing_value_items << item
 				else
 					excluded_items << {
 						'item' => item,

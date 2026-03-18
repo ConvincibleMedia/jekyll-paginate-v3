@@ -200,25 +200,35 @@ That is:
 
 * String: simple match
 * Regex: specified by a string starting/ending with `/` followed by optional regex flag
-* Hash with:
+* Hash with (all are optional):
+  * `exists`: does the value exist and is it of some type?
+    * `true`: the value is present and has any type, or `false` for the value is not present or blank.
+    * `array`, `string`, `int`, `float`, `boolean` and `date` specify that value must be of a specific type.
+  * `min`/`max` to define boundaries for values.
+    * Boundaries can be:
+      * Numeric e.g. `3`, `0.4`.
+        * If `exists: string`/`array` is used in combination with `min`/`max`, these become boundaries on the length of that string/array.
+      * Date/time e.g. `2026-01-01`, `2026-01-01 12:00:00`
+      * Keyword `today` or `now`
+        * `today` means current day, and supports optional whole-day offsets (e.g. `today`, `today+1`, `today-2`).
+        * `now` means current time, and supports optional whole-second offsets (e.g. `now`, `now+60`, `now-120`).
   * `match`: string/regex to match on
-  * `mode`: optional, can be:
-    * `auto` (default): frontmatter value either matches exactly, or is an array, and contains the match
-    * `strict` frontmatter value must match exactly
-    * `only`: like `auto` but if array, must be the only array item
-    * `first`/`first(N)` (e.g. `first(3)`): like `auto` but if array, only the first (N) array elements are considered.
+  * `mode`:
+    * Control behaviour of `match` with:
+      * `auto` (default): frontmatter value either matches exactly, or is an array, and contains the match
+      * `strict` frontmatter value must match exactly
+      * `only`: like `auto` but if array, must be the only array item
+      * `first`/`first(N)` (e.g. `first(3)`): like `auto` but if array, only the first (N) array elements are considered.
+    * Control behaviour of `min`/`max` with:
+
+      * `inclusive`/`exclusive`
+      * `min-exclusive`
+      * `max-exclusive`
+      * `min-exclusive max-exclusive`
+
+      The default is that min and max are inclusive.
+    * Combine modes by separating multiple strings with spaces e.g. `auto min-exclusive`.
   * `split`: overrides `split` from global config, for this filter only. Set this to `false` to disable splitting of the frontmatter value. Defaults to true: frontmatter values will be treated as arrays if they can be split.
-* Range with `min` and/or `max` for numeric values.
-  * `min`/`max` are inclusive by default, and can be:
-    * Numeric e.g. `3`, `0.4`
-    * Date/time e.g. `2026-01-01`, `2026-01-01 12:00:00`
-    * Keyword `today` or `now`
-      * `today` means current day, and supports optional whole-day offsets (e.g. `today`, `today+1`, `today-2`).
-      * `now` means current time, and supports optional whole-second offsets (e.g. `now`, `now+60`, `now-120`).
-  * `mode` (optional) controls inclusivity:
-    * `min-exclusive`
-    * `max-exclusive`
-    * `min-exclusive max-exclusive`
 * Array (or delimited string): combine several filters with an OR operation
 * Hash with:
 

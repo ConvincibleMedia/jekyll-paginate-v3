@@ -38,25 +38,79 @@ class Filter
 		end
 	end
 
-	# Routes hash definitions to group/scalar/range handlers.
+	# Routes hash definitions to grouped or local predicate handlers.
 	def normalise_filter_hash(definition)
 		hash_definition = Utils.stringify_keys(definition)
+		return false if hash_definition.empty?
 
-		# Route by intent: longhand group, scalar match, then range.
 		if group_hash?(hash_definition)
-			normalise_group_hash(hash_definition)
-		elsif hash_definition.key?('match')
-			normalise_scalar_hash(hash_definition)
-		elsif hash_definition.key?('min') || hash_definition.key?('max')
-			normalise_range_hash(hash_definition)
-		else
-			false
+			return false unless (hash_definition.keys - %w[include exclude join]).empty?
+
+			return normalise_group_hash(hash_definition)
 		end
+
+		normalise_local_filter_hash(hash_definition)
 	end
 
 	# Detects group definitions by longhand keys.
 	def group_hash?(hash_definition)
 		hash_definition.key?('include') || hash_definition.key?('exclude')
+	end
+
+	# Normalises one local per-key filter hash into one implicit `and`
+	# group when more than one predicate is present.
+	def normalise_local_filter_hash(hash_definition)
+		return false unless (hash_definition.keys - %w[exists match min max mode split]).empty?
+
+		has_exists = hash_definition.key?('exists')
+		has_match = hash_definition.key?('match')
+		has_range = hash_definition.key?('min') || hash_definition.key?('max')
+		return false unless has_exists || has_match || has_range
+
+		filter_split = normalise_scalar_split(hash_definition['split'])
+		return false if filter_split == :invalid
+
+		mode_flags = normalise_mode_flags(
+			hash_definition['mode'],
+			has_match: has_match,
+			has_min: hash_definition.key?('min'),
+			has_max: hash_definition.key?('max')
+		)
+		return false if mode_flags == :invalid
+
+		entries = []
+		exists_type = nil
+
+		if has_exists
+			exists_definition = normalise_exists_definition(hash_definition['exists'], split: filter_split)
+			return false if exists_definition == false
+
+			exists_type = exists_definition['type']
+			entries << exists_definition
+		end
+
+		if has_match
+			scalar_definition = normalise_local_scalar_definition(hash_definition['match'], split: filter_split, mode_flags: mode_flags)
+			return false if scalar_definition == false
+
+			entries << scalar_definition
+		end
+
+		if has_range
+			range_definition = normalise_local_range_definition(hash_definition, split: filter_split, mode_flags: mode_flags, exists_type: exists_type)
+			return false if range_definition == false
+
+			entries << range_definition
+		end
+
+		return false if entries.empty?
+		return entries.first if entries.length == 1
+
+		{
+			'include' => entries,
+			'exclude' => [],
+			'join' => 'and'
+		}
 	end
 
 	# Normalises longhand grouped definitions.
@@ -139,29 +193,51 @@ class Filter
 		}
 	end
 
-	# Normalises scalar hash filters (`match`, `mode`, `split`, `first`).
-	def normalise_scalar_hash(hash_definition)
-		scalar_match = normalise_scalar_match_value(hash_definition['match'])
+	# Normalises one explicit exists predicate.
+	def normalise_exists_definition(raw_exists, split:)
+		if raw_exists == true || raw_exists == false
+			return {
+				'exists' => raw_exists,
+				'type' => nil,
+				'split' => split
+			}
+		end
+
+		type = raw_exists.to_s.strip.downcase
+		type = 'date' if type == 'datetime'
+		type = type == 'true' ? true : type
+		type = false if type == 'false'
+
+		if type == true || type == false
+			return {
+				'exists' => type,
+				'type' => nil,
+				'split' => split
+			}
+		end
+
+		return false unless %w[array string boolean int float date].include?(type)
+
+		{
+			'exists' => true,
+			'type' => type,
+			'split' => split
+		}
+	end
+
+	# Normalises one scalar predicate from a local filter hash.
+	def normalise_local_scalar_definition(raw_match, split:, mode_flags:)
+		scalar_match = normalise_scalar_match_value(raw_match)
 		return false if scalar_match == false
-
-		raw_mode = hash_definition.key?('mode') ? hash_definition['mode'] : hash_definition['type']
-		scalar_mode, embedded_first_count = normalise_scalar_match_mode(raw_mode)
-		return false if scalar_mode == false
-
-		scalar_split = normalise_scalar_split(hash_definition['split'])
-		return false if scalar_split == :invalid
 
 		normalised = {
 			'match' => scalar_match,
-			'mode' => scalar_mode,
-			'split' => scalar_split
+			'mode' => mode_flags['scalar_mode'],
+			'split' => split
 		}
 
-		if scalar_mode == 'first'
-			scalar_first_count = normalise_scalar_first_count(hash_definition['first'], embedded_first_count)
-			return false if scalar_first_count == :invalid
-
-			normalised['first'] = scalar_first_count
+		if mode_flags['scalar_mode'] == 'first'
+			normalised['first'] = mode_flags['first']
 		end
 
 		normalised
@@ -178,23 +254,101 @@ class Filter
 		end
 	end
 
-	# Normalises scalar hash match mode (`strict`, `auto`, `only`,
-	# `first`, `first(N)`).
-	#
-	# Returns:
-	# - `[mode, embedded_first_count]`
-	# - `false` when invalid.
-	def normalise_scalar_match_mode(raw_mode)
-		mode_value = raw_mode.to_s.strip.downcase
-		mode_value = 'auto' if mode_value.empty?
+	# Normalises one shared mode token string into scalar/range fragments.
+	def normalise_mode_flags(raw_mode, has_match:, has_min:, has_max:)
+		scalar_mode = nil
+		embedded_first_count = nil
+		min_inclusive = nil
+		max_inclusive = nil
 
-		return [mode_value, nil] if %w[strict auto only].include?(mode_value)
-		return ['first', nil] if mode_value == 'first'
+		mode_tokens = raw_mode.to_s.strip.downcase.split(/\s+/).reject(&:empty?)
+		mode_tokens.each do |token|
+			case token
+			when 'auto', 'strict', 'only'
+				return :invalid unless has_match
+				return :invalid unless scalar_mode.nil?
 
-		bracket_first_match = mode_value.match(/\Afirst\(\s*(\d+)\s*\)\z/)
-		return ['first', bracket_first_match[1].to_i] unless bracket_first_match.nil?
+				scalar_mode = token
+			when 'first'
+				return :invalid unless has_match
+				return :invalid unless scalar_mode.nil?
 
-		false
+				scalar_mode = 'first'
+			when /\Afirst\(\s*(\d+)\s*\)\z/
+				return :invalid unless has_match
+				return :invalid unless scalar_mode.nil?
+
+				scalar_mode = 'first'
+				embedded_first_count = Regexp.last_match(1).to_i
+			when 'inclusive'
+				return :invalid unless has_min || has_max
+				return :invalid if (has_min && !min_inclusive.nil?) || (has_max && !max_inclusive.nil?)
+
+				min_inclusive = true if has_min
+				max_inclusive = true if has_max
+			when 'exclusive'
+				return :invalid unless has_min || has_max
+				return :invalid if (has_min && !min_inclusive.nil?) || (has_max && !max_inclusive.nil?)
+
+				min_inclusive = false if has_min
+				max_inclusive = false if has_max
+			when 'min-inclusive'
+				return :invalid unless has_min
+				return :invalid unless min_inclusive.nil?
+
+				min_inclusive = true
+			when 'min-exclusive'
+				return :invalid unless has_min
+				return :invalid unless min_inclusive.nil?
+
+				min_inclusive = false
+			when 'max-inclusive'
+				return :invalid unless has_max
+				return :invalid unless max_inclusive.nil?
+
+				max_inclusive = true
+			when 'max-exclusive'
+				return :invalid unless has_max
+				return :invalid unless max_inclusive.nil?
+
+				max_inclusive = false
+			else
+				return :invalid
+			end
+		end
+
+		scalar_mode = 'auto' if has_match && scalar_mode.nil?
+		first_count = nil
+		if scalar_mode == 'first'
+			first_count = normalise_scalar_first_count(nil, embedded_first_count)
+			return :invalid if first_count == :invalid
+		end
+
+		if has_min
+			min_inclusive = true if min_inclusive.nil?
+		elsif !min_inclusive.nil?
+			return :invalid
+		end
+
+		if has_max
+			max_inclusive = true if max_inclusive.nil?
+		elsif !max_inclusive.nil?
+			return :invalid
+		end
+
+		range_mode = nil
+		if has_min || has_max
+			range_fragments = []
+			range_fragments << (min_inclusive ? 'min-inclusive' : 'min-exclusive') if has_min
+			range_fragments << (max_inclusive ? 'max-inclusive' : 'max-exclusive') if has_max
+			range_mode = range_fragments.join(' ')
+		end
+
+		{
+			'scalar_mode' => scalar_mode,
+			'first' => first_count,
+			'range_mode' => range_mode
+		}
 	end
 
 	# Normalises the `first` count used by `mode: first`.
@@ -246,15 +400,27 @@ class Filter
 		raw_split
 	end
 
-	# Normalises range hash filters (`min`, `max`).
-	def normalise_range_hash(hash_definition)
-		range_hash = hash_definition.select { |key, _| %w[min max mode].include?(key) }
-		return false unless range_hash.key?('min') || range_hash.key?('max')
+	# Normalises one range predicate from a local filter hash.
+	def normalise_local_range_definition(hash_definition, split:, mode_flags:, exists_type:)
+		target = %w[array string].include?(exists_type) ? 'length' : 'value'
+		normalise_range_hash(hash_definition, split: split, mode_flags: mode_flags, target: target)
+	end
+
+	# Builds one canonical range node from the configured min/max options.
+	def normalise_range_hash(hash_definition, split:, mode_flags:, target:)
+		range_hash = {
+			'split' => split,
+			'target' => target
+		}
 
 		%w[min max].each do |range_key|
-			next unless range_hash.key?(range_key)
+			next unless hash_definition.key?(range_key)
 
-			parsed_value = interpret_numeric_or_date_keyword(range_hash[range_key], range_key: range_key)
+			parsed_value = if target == 'length'
+										 interpret_length_boundary(hash_definition[range_key])
+									 else
+										 interpret_numeric_or_date_keyword(hash_definition[range_key], range_key: range_key)
+									 end
 			return false if parsed_value == false
 
 			range_hash[range_key] = parsed_value
@@ -267,7 +433,12 @@ class Filter
 			max_value = range_hash['max']
 
 			# Coerce comparable types before we validate ordering.
-			if numeric?(min_value) && numeric?(max_value)
+			if target == 'length'
+				return false unless numeric?(min_value) && numeric?(max_value)
+
+				min_value = min_value.to_f
+				max_value = max_value.to_f
+			elsif numeric?(min_value) && numeric?(max_value)
 				min_value = min_value.to_f
 				max_value = max_value.to_f
 			elsif date_like?(min_value) && date_like?(max_value)
@@ -286,79 +457,15 @@ class Filter
 			range_hash['max'] = max_value
 		end
 
-		normalised_mode = normalise_range_mode(
-			range_hash['mode'],
-			has_min: !range_hash['min'].nil?,
-			has_max: !range_hash['max'].nil?
-		)
-		return false if normalised_mode == :invalid
-
-		range_hash['mode'] = normalised_mode
+		range_hash['mode'] = mode_flags['range_mode']
 
 		range_hash
 	end
 
-	# Normalises range match mode while preserving inclusive defaults.
-	#
-	# Supported mode fragments:
-	# - `min-inclusive` / `min-exclusive`
-	# - `max-inclusive` / `max-exclusive`
-	# - `inclusive` (both inclusive)
-	# - `exclusive` (both exclusive)
-	#
-	# Modes can be combined as whitespace-separated fragments.
-	def normalise_range_mode(raw_mode, has_min:, has_max:)
-		if raw_mode.nil? || raw_mode.to_s.strip.empty?
-			return default_range_mode(has_min: has_min, has_max: has_max)
-		end
-
-		min_inclusive = true
-		max_inclusive = true
-		mode_tokens = raw_mode.to_s.strip.downcase.split(/\s+/)
-		return :invalid if mode_tokens.empty?
-
-		mode_tokens.each do |token|
-			# Later tokens may intentionally override earlier inclusivity flags.
-			case token
-			when 'inclusive'
-				min_inclusive = true
-				max_inclusive = true
-			when 'exclusive'
-				min_inclusive = false
-				max_inclusive = false
-			when 'min-inclusive'
-				return :invalid unless has_min
-
-				min_inclusive = true
-			when 'min-exclusive'
-				return :invalid unless has_min
-
-				min_inclusive = false
-			when 'max-inclusive'
-				return :invalid unless has_max
-
-				max_inclusive = true
-			when 'max-exclusive'
-				return :invalid unless has_max
-
-				max_inclusive = false
-			else
-				return :invalid
-			end
-		end
-
-		range_mode_fragments = []
-		range_mode_fragments << (min_inclusive ? 'min-inclusive' : 'min-exclusive') if has_min
-		range_mode_fragments << (max_inclusive ? 'max-inclusive' : 'max-exclusive') if has_max
-		range_mode_fragments.join(' ')
-	end
-
-	# Builds the canonical default mode for present range endpoints.
-	def default_range_mode(has_min:, has_max:)
-		mode_fragments = []
-		mode_fragments << 'min-inclusive' if has_min
-		mode_fragments << 'max-inclusive' if has_max
-		mode_fragments.join(' ')
+	# Parses one numeric-only boundary used for array/string length checks.
+	def interpret_length_boundary(value)
+		numeric_value = Jekyll::Plugins::Support::LooseScalar.number(value)
+		numeric_value.nil? ? false : numeric_value
 	end
 
 	# Converts grouped entry inputs into an array without blank items.
@@ -468,38 +575,15 @@ class Filter
 	# Casts string values to Integer, Float, or DateTime when possible.
 	# Returns the original string unless strict casting is requested.
 	def interpret_numeric(value, must_cast: false)
-		return value if value.is_a?(Integer) || value.is_a?(Float)
-		return value if value.is_a?(DateTime)
-		return value.to_datetime if value.is_a?(Time)
-		return value.to_datetime if value.is_a?(Date)
+		comparable_value = Jekyll::Plugins::Support::LooseScalar.comparable(value, must_cast: must_cast)
+		return false if comparable_value.nil? && must_cast
 
-		unless value.is_a?(String)
-			return false if must_cast
-
-			return value
-		end
-
-		stripped = value.strip
-		# In strict mode (`must_cast`), unparseable strings are invalid.
-		return stripped.to_i if stripped.match?(/\A[+-]?\d+\z/)
-		return stripped.to_f if stripped.match?(/\A[+-]?\d+\.\d+\z/)
-
-		begin
-			DateTime.parse(stripped)
-		rescue ArgumentError
-			return false if must_cast
-
-			stripped
-		end
+		comparable_value
 	end
 
 	# Normalises values to a comparable scalar form.
 	def normalise_comparable_scalar(value)
-		return interpret_numeric(value) if value.is_a?(String)
-		return value.to_datetime if value.is_a?(Time)
-		return value.to_datetime if value.is_a?(Date) && !value.is_a?(DateTime)
-
-		value
+		Jekyll::Plugins::Support::LooseScalar.comparable(value)
 	end
 
 	# Numeric type check used by range coercion.

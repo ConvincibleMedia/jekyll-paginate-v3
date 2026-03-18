@@ -599,9 +599,7 @@ class Normaliser
 
 		# Coerces loose truthy/falsey config values to a strict boolean.
 		def boolean_config_value(value)
-			return value if value == true || value == false
-
-			value.to_s.strip.casecmp('true').zero?
+			Jekyll::Plugins::Support::LooseScalar.boolean(value) == true
 		end
 
 		# Migrates old v2 shorthand config into canonical template fields.

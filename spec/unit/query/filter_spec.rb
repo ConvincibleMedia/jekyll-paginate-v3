@@ -171,8 +171,7 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Query::Filter do
 			{
 				'contributors' => {
 					'match' => 'alice',
-					'mode' => 'first',
-					'first' => 1,
+					'mode' => 'first(1)',
 					'split' => false
 				}
 			}
@@ -407,5 +406,127 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Query::Filter do
 
 		filtered = apply_filters(items, { 'collection' => 'products' })
 		expect(filtered).to eq([items[1]])
+	end
+
+	it 'treats exists true and false as strict negations after value processing' do
+		items = [
+			build_item({ 'title' => 'Missing' }),
+			build_item({ 'title' => 'Empty Array', 'links' => [] }),
+			build_item({ 'title' => 'Blank String', 'links' => '' }),
+			build_item({ 'title' => 'Whitespace String', 'links' => '   ' }),
+			build_item({ 'title' => 'Present String', 'links' => 'project' }),
+			build_item({ 'title' => 'Split Array', 'links' => 'one,two' })
+		]
+
+		exists_result = apply_filters(items, { 'links' => { 'exists' => true } })
+		missing_result = apply_filters(items, { 'links' => { 'exists' => false } })
+
+		expect(exists_result).to eq([items[4], items[5]])
+		expect(missing_result).to eq([items[0], items[1], items[2], items[3]])
+		expect(exists_result | missing_result).to match_array(items)
+		expect(exists_result & missing_result).to eq([])
+	end
+
+	it 'treats blank strings as absent even when split is disabled' do
+		items = [
+			build_item({ 'title' => 'Blank', 'summary' => '   ' }),
+			build_item({ 'title' => 'Present', 'summary' => ' hello ' })
+		]
+
+		exists_result = apply_filters(items, { 'summary' => { 'exists' => true, 'split' => false } })
+		missing_result = apply_filters(items, { 'summary' => { 'exists' => false, 'split' => false } })
+
+		expect(exists_result).to eq([items[1]])
+		expect(missing_result).to eq([items[0]])
+	end
+
+	it 'supports exists type checks including datetime alias and forgiving booleans and numerics' do
+		items = [
+			build_item({ 'title' => 'Array', 'value' => 'one,two' }),
+			build_item({ 'title' => 'String', 'value' => 'one' }),
+			build_item({ 'title' => 'Boolean', 'value' => ' false ' }),
+			build_item({ 'title' => 'Integer Like', 'value' => '1.0' }),
+			build_item({ 'title' => 'Float Like', 'value' => '1.5' }),
+			build_item({ 'title' => 'Date Like', 'value' => '2026-01-01' })
+		]
+
+		expect(apply_filters(items, { 'value' => { 'exists' => 'array' } })).to eq([items[0]])
+		expect(apply_filters(items, { 'value' => { 'exists' => 'string' } })).to eq([items[1], items[2], items[3], items[4], items[5]])
+		expect(apply_filters(items, { 'value' => { 'exists' => 'boolean', 'split' => false } })).to eq([items[2]])
+		expect(apply_filters(items, { 'value' => { 'exists' => 'int', 'split' => false } })).to eq([items[3]])
+		expect(apply_filters(items, { 'value' => { 'exists' => 'float', 'split' => false } })).to eq([items[3], items[4]])
+		expect(apply_filters(items, { 'value' => { 'exists' => 'datetime', 'split' => false } })).to eq([items[5]])
+	end
+
+	it 'supports length-aware min and max when exists specifies array or string' do
+		items = [
+			build_item({ 'title' => 'Array Long', 'tags' => 'one,two,three', 'name' => 'Alpha' }),
+			build_item({ 'title' => 'Array Short', 'tags' => 'one', 'name' => 'Go' }),
+			build_item({ 'title' => 'String Long', 'tags' => 'solo', 'name' => 'Bravo' })
+		]
+
+		array_filtered = apply_filters(
+			items,
+			{
+				'tags' => {
+					'exists' => 'array',
+					'min' => 2
+				}
+			}
+		)
+		string_filtered = apply_filters(
+			items,
+			{
+				'name' => {
+					'exists' => 'string',
+					'min' => 4,
+					'split' => false
+				}
+			}
+		)
+
+		expect(array_filtered).to eq([items[0]])
+		expect(string_filtered).to eq([items[0], items[2]])
+	end
+
+	it 'combines exists, match, and range rules from one hash using shared mode tokens' do
+		items = [
+			build_item({ 'title' => 'Long Match', 'audience' => 'news,alerts' }),
+			build_item({ 'title' => 'Short Match', 'audience' => 'alerts' }),
+			build_item({ 'title' => 'Long Miss', 'audience' => 'news,updates' })
+		]
+
+		filtered = apply_filters(
+			items,
+			{
+				'audience' => {
+					'exists' => 'array',
+					'match' => 'alerts',
+					'min' => 1,
+					'mode' => 'auto min-exclusive'
+				}
+			}
+		)
+
+		expect(filtered).to eq([items[0]])
+	end
+
+	it 'treats conflicting shared mode tokens as an invalid filter' do
+		items = [
+			build_item({ 'title' => 'One', 'tags' => %w[ruby jekyll] }),
+			build_item({ 'title' => 'Two', 'tags' => ['ruby'] })
+		]
+
+		filtered = apply_filters(
+			items,
+			{
+				'tags' => {
+					'match' => 'ruby',
+					'mode' => 'auto strict'
+				}
+			}
+		)
+
+		expect(filtered).to eq(items)
 	end
 end
