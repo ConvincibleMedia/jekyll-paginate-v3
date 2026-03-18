@@ -128,21 +128,31 @@ class PaginationGenerator < Jekyll::Generator
 			return
 		end
 
-		location_width = report_entries.map { |entry| entry['label'].to_s.length }.max || 0
-		template_count_width = report_entries.map { |entry| entry['templates_found'].to_i.to_s.length }.max || 1
-		index_count_width = report_entries.map { |entry| entry['indexes'].to_i.to_s.length }.max || 1
-		item_count_width = report_entries.map { |entry| entry['paginated_items'].to_i.to_s.length }.max || 1
+		location_width = report_entries.map { |entry| "#{entry['label']}:".length }.max || 0
+		template_number_width = report_entries.map { |entry| entry['templates_found'].to_i.to_s.length }.max || 1
+		index_number_width = report_entries.map { |entry| entry['indexes'].to_i.to_s.length }.max || 1
+		item_number_width = report_entries.map { |entry| entry['paginated_items'].to_i.to_s.length }.max || 1
+		template_noun_width = report_entries.map { |entry| count_noun(entry['templates_found'], singular: 'template', plural: 'templates').length }.max || 0
+		index_noun_width = report_entries.map { |entry| count_noun(entry['indexes'], singular: 'index', plural: 'indices').length }.max || 0
+		item_noun_width = report_entries.map { |entry| count_noun(entry['paginated_items'], singular: 'total item', plural: 'total items').length }.max || 0
 
-		report_entries.each do |entry|
-			logger.info(
-				format(
-					"- %-#{location_width}s: | %#{template_count_width}d | templates became %#{index_count_width}d | indices with %#{item_count_width}d | total items",
-					entry['label'],
-					entry['templates_found'].to_i,
-					entry['indexes'].to_i,
-					entry['paginated_items'].to_i
-				)
-			)
+		entry_strings = report_entries.map do |entry|
+			{
+				'location' => "#{entry['label']}:",
+				'template_count' => count_label(entry['templates_found'], singular: 'template', plural: 'templates', count_width: template_number_width, noun_width: template_noun_width),
+				'index_count' => count_label(entry['indexes'], singular: 'index', plural: 'indices', count_width: index_number_width, noun_width: index_noun_width),
+				'item_count' => count_label(entry['paginated_items'], singular: 'total item', plural: 'total items', count_width: item_number_width, noun_width: item_noun_width)
+			}
+		end
+
+		entry_strings.each do |entry|
+			logger.info(search_report_line(
+				location: entry['location'],
+				template_count: entry['template_count'],
+				index_count: entry['index_count'],
+				item_count: entry['item_count'],
+				location_width: location_width
+			))
 		end
 	end
 
@@ -159,6 +169,50 @@ class PaginationGenerator < Jekyll::Generator
 	# Returns the singular or plural noun phrase for one count.
 	def pluralise(noun, count)
 		count.to_i == 1 ? noun : "#{noun}s"
+	end
+
+	# Builds one count phrase using the singular or plural noun provided.
+	def count_label(count, singular:, plural:, count_width:, noun_width:)
+		count = count.to_i
+		number_text = pad_left_for_logger(count.to_s, count_width)
+		noun_text = pad_for_logger(count_noun(count, singular: singular, plural: plural), noun_width)
+		"#{number_text} #{noun_text}"
+	end
+
+	# Resolves the singular or plural noun for one count label.
+	def count_noun(count, singular:, plural:)
+		count.to_i == 1 ? singular : plural
+	end
+
+	# Builds one aligned search-report line. Jekyll collapses ordinary
+	# whitespace inside log messages, so alignment padding uses
+	# non-breaking spaces generated at runtime.
+	def search_report_line(location:, template_count:, index_count:, item_count:, location_width:)
+		"- #{pad_for_logger(location, location_width)} #{template_count} became #{index_count} with #{item_count}"
+	end
+
+	# Pads one visible segment with non-breaking spaces so Jekyll's logger
+	# preserves report alignment.
+	def pad_for_logger(text, width)
+		text = text.to_s
+		return text if text.length >= width
+
+		text + (non_breaking_space * (width - text.length))
+	end
+
+	# Left-pads one visible segment with non-breaking spaces so numbers can
+	# be right-aligned in Jekyll logger output.
+	def pad_left_for_logger(text, width)
+		text = text.to_s
+		return text if text.length >= width
+
+		(non_breaking_space * (width - text.length)) + text
+	end
+
+	# Returns one non-breaking space character without embedding
+	# non-ASCII text directly into the source file.
+	def non_breaking_space
+		@non_breaking_space ||= [160].pack('U')
 	end
 
 	# Returns a monotonic timestamp suitable for elapsed-duration
