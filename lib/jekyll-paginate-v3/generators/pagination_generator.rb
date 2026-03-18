@@ -124,7 +124,7 @@ class PaginationGenerator < Jekyll::Generator
 		logger.info("Found #{processed_templates} #{pluralise('pagination template', processed_templates)} in #{format_duration(search_duration_seconds)}.")
 
 		if report_entries.empty?
-			logger.info('- No template search locations were resolved.')
+			logger.info("#{tree_branch(last_entry: true)} No template search locations were resolved.")
 			return
 		end
 
@@ -133,25 +133,26 @@ class PaginationGenerator < Jekyll::Generator
 		index_number_width = report_entries.map { |entry| entry['indexes'].to_i.to_s.length }.max || 1
 		item_number_width = report_entries.map { |entry| entry['paginated_items'].to_i.to_s.length }.max || 1
 		template_noun_width = report_entries.map { |entry| count_noun(entry['templates_found'], singular: 'template', plural: 'templates').length }.max || 0
-		index_noun_width = report_entries.map { |entry| count_noun(entry['indexes'], singular: 'index', plural: 'indices').length }.max || 0
+		index_noun_width = report_entries.map { |entry| count_noun(entry['indexes'], singular: 'index', plural: 'indexes').length }.max || 0
 		item_noun_width = report_entries.map { |entry| count_noun(entry['paginated_items'], singular: 'total item', plural: 'total items').length }.max || 0
 
 		entry_strings = report_entries.map do |entry|
 			{
 				'location' => "#{entry['label']}:",
 				'template_count' => count_label(entry['templates_found'], singular: 'template', plural: 'templates', count_width: template_number_width, noun_width: template_noun_width),
-				'index_count' => count_label(entry['indexes'], singular: 'index', plural: 'indices', count_width: index_number_width, noun_width: index_noun_width),
+				'index_count' => count_label(entry['indexes'], singular: 'index', plural: 'indexes', count_width: index_number_width, noun_width: index_noun_width),
 				'item_count' => count_label(entry['paginated_items'], singular: 'total item', plural: 'total items', count_width: item_number_width, noun_width: item_noun_width)
 			}
 		end
 
-		entry_strings.each do |entry|
+		entry_strings.each_with_index do |entry, index|
 			logger.info(search_report_line(
 				location: entry['location'],
 				template_count: entry['template_count'],
 				index_count: entry['index_count'],
 				item_count: entry['item_count'],
-				location_width: location_width
+				location_width: location_width,
+				last_entry: index == entry_strings.length - 1
 			))
 		end
 	end
@@ -187,8 +188,13 @@ class PaginationGenerator < Jekyll::Generator
 	# Builds one aligned search-report line. Jekyll collapses ordinary
 	# whitespace inside log messages, so alignment padding uses
 	# non-breaking spaces generated at runtime.
-	def search_report_line(location:, template_count:, index_count:, item_count:, location_width:)
-		"- #{pad_for_logger(location, location_width)} #{template_count} became #{index_count} with #{item_count}"
+	def search_report_line(location:, template_count:, index_count:, item_count:, location_width:, last_entry:)
+		"#{tree_branch(last_entry: last_entry)} #{pad_for_logger(location, location_width)} #{template_count} became #{index_count} with #{item_count}"
+	end
+
+	# Returns the tree glyph prefix for one report line.
+	def tree_branch(last_entry:)
+		last_entry ? '└─' : '├─'
 	end
 
 	# Pads one visible segment with non-breaking spaces so Jekyll's logger
