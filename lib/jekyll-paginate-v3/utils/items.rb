@@ -109,7 +109,10 @@ module Utils
 		return false unless item.respond_to?(:data)
 		return false unless item.data.is_a?(Hash)
 
-		item.data['pagination'].is_a?(Hash)
+		pagination = safe_hash(item.data['pagination'])
+		return false if pagination.empty?
+
+		pagination['template'] || pagination['enabled']
 	end
 
 	# Safe relative path for pages and documents.

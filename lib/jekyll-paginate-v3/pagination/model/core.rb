@@ -34,6 +34,8 @@ class Model
 		@template_search_reports = []
 		@template_search_report_lookup = {}
 		@template_search_duration_seconds = 0.0
+		@item_resolution_pages = nil
+		@item_resolution_documents_by_collection = nil
 	end
 
 	# Runs the full pagination pipeline for the current site build.
@@ -43,6 +45,7 @@ class Model
 		generated_template_report = build_generated_templates
 		generated_template_count = generated_template_report['total'].to_i
 		log("Generated #{generated_template_count} template(s).", 'debug')
+		capture_item_resolution_sources!
 
 		search_started_at = monotonic_seconds
 		templates = discover_templates
@@ -152,6 +155,23 @@ class Model
 			'total' => report.to_i,
 			'entries' => []
 		}
+	end
+
+	# Captures the source items used by later `items` searches so
+	# pagination item resolution remains stable even after templates are
+	# removed and replaced by generated index pages.
+	def capture_item_resolution_sources!
+		@item_resolution_pages = @site.pages.dup
+		@item_resolution_documents_by_collection = {}
+
+		@site.collections.each do |label, collection|
+			@item_resolution_documents_by_collection[label] = collection.docs.dup
+		end
+
+		log(
+			"Captured item-resolution sources: pages=#{@item_resolution_pages.length} collections=#{@item_resolution_documents_by_collection.length} documents=#{all_collection_documents.length}.",
+			'debug'
+		)
 	end
 
 	# Discovers all pages/documents configured as pagination templates.
@@ -414,14 +434,19 @@ class Model
 
 	# Resolves the shared search format into concrete site items and then
 	# applies generic inclusion/exclusion flags.
-	def resolve_items(raw_search, include_templates: false, include_generated_indexes: false, include_hidden: false)
+	#
+	# `exclude_items` is used by the pagination pipeline to remove the
+	# active source template from its own item set without also excluding
+	# other templates that the user may legitimately want to paginate over.
+	def resolve_items(raw_search, include_templates: false, include_generated_indexes: false, include_hidden: false, exclude_items: nil)
 		entries = Query::Parser.parse(raw_search, @site_config['keywords'], split_delimiter: @split_delimiter)
 		if entries.empty?
 			log("Resolving items from search=#{raw_search.inspect} produced no parsed entries.", 'debug')
 			return []
 		end
 
-		log("Resolving items from search=#{raw_search.inspect} (entries=#{entries.length}, include_templates=#{include_templates}, include_generated_indexes=#{include_generated_indexes}, include_hidden=#{include_hidden}).", 'debug')
+		excluded_item_keys = excluded_item_identity_keys(exclude_items)
+		log("Resolving items from search=#{raw_search.inspect} (entries=#{entries.length}, include_templates=#{include_templates}, include_generated_indexes=#{include_generated_indexes}, include_hidden=#{include_hidden}, exclude_items=#{excluded_item_keys.length}).", 'debug')
 		resolved = []
 		entries.each do |entry|
 			resolved.concat(resolve_entry(entry))
@@ -435,17 +460,32 @@ class Model
 		excluded_generated_indexes = include_generated_indexes ? 0 : resolved.count { |item| Utils.generated_index?(item) }
 		excluded_templates = include_templates ? 0 : resolved.count { |item| Utils.pagination_template?(item) }
 		excluded_hidden = include_hidden ? 0 : resolved.count { |item| item['hidden'] }
+		excluded_explicit_items = excluded_item_keys.empty? ? 0 : resolved.count { |item| excluded_item_keys.include?(item_identity_key(item)) }
 
 		resolved.select! { |item| !Utils.generated_index?(item) } unless include_generated_indexes
 		resolved.select! { |item| !Utils.pagination_template?(item) } unless include_templates
 		resolved.select! { |item| !item['hidden'] } unless include_hidden
+		resolved.select! { |item| !excluded_item_keys.include?(item_identity_key(item)) } unless excluded_item_keys.empty?
 
-		if excluded_generated_indexes.positive? || excluded_templates.positive? || excluded_hidden.positive?
-			log("Excluded generated_indexes=#{excluded_generated_indexes} templates=#{excluded_templates} hidden=#{excluded_hidden} from resolved items.", 'debug')
+		if excluded_generated_indexes.positive? || excluded_templates.positive? || excluded_hidden.positive? || excluded_explicit_items.positive?
+			log("Excluded generated_indexes=#{excluded_generated_indexes} templates=#{excluded_templates} hidden=#{excluded_hidden} explicit=#{excluded_explicit_items} from resolved items.", 'debug')
 		end
 		log("Resolved #{resolved.length} item(s) after exclusion filters.", 'debug')
 		log_item_path_sample('Resolved item sample after exclusions', resolved)
 		resolved
+	end
+
+	# Builds stable identity keys for explicit item exclusions.
+	#
+	# The key uses collection label plus relative path so cloned template
+	# objects still match their source item when we need to exclude self.
+	def excluded_item_identity_keys(items)
+		Utils.arrayify(items).map { |item| item_identity_key(item) }.uniq
+	end
+
+	# Returns one stable item identity key for item-resolution exclusions.
+	def item_identity_key(item)
+		[Utils.item_collection_label(item).to_s, Utils.relative_item_path(item)]
 	end
 
 	# Resolves one parsed search entry (`pages`, collection label, etc).
@@ -471,12 +511,14 @@ class Model
 	def source_items_for_entry_type(type)
 		case type
 		when 'pages'
-			@site.pages
+			@item_resolution_pages || @site.pages
 		when 'all'
 			all_collection_documents
 		when 'everything'
-			@site.pages + all_collection_documents
+			(@item_resolution_pages || @site.pages) + all_collection_documents
 		else
+			return @item_resolution_documents_by_collection[type] if @item_resolution_documents_by_collection&.key?(type)
+
 			collection = @site.collections[type]
 			return nil if collection.nil?
 
@@ -500,6 +542,8 @@ class Model
 	# Params: none.
 	# Returns: a value consumed by the next pipeline step.
 	def all_collection_documents
+		return @item_resolution_documents_by_collection.values.flatten if @item_resolution_documents_by_collection
+
 		@site.collections.values.flat_map(&:docs)
 	end
 end

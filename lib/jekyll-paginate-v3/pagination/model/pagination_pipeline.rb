@@ -13,7 +13,8 @@ class Model
 	private
 	
 	def paginate_template(template, config, template_pagination_source)
-		variants = expand_template_variants(template, config, template_pagination_source: template_pagination_source)
+		item_exclusions = pagination_item_exclusions_for_template(template)
+		variants = expand_template_variants(template, config, template_pagination_source: template_pagination_source, item_exclusions: item_exclusions)
 		if variants.empty?
 			log("Template '#{Utils.relative_item_path(template)}': grouping/layout expansion produced no variants.", 'debug')
 			return {
@@ -31,7 +32,8 @@ class Model
 			variant_report = paginate_template_variant(
 				variant_template,
 				variant_config,
-				remove_source_template: variant_index.zero?
+				remove_source_template: variant_index.zero?,
+				item_exclusions: item_exclusions
 			)
 			total_paginated_items += variant_report['paginated_items'].to_i
 			total_indexes += variant_report['indexes'].to_i
@@ -43,8 +45,15 @@ class Model
 		}
 	end
 
+	# Returns the per-template item exclusions required to prevent a
+	# template from paginating over itself while still allowing other
+	# template items to remain eligible.
+	def pagination_item_exclusions_for_template(template)
+		[template]
+	end
+
 	# Expands one template into grouped/layout variants before pagination.
-	def expand_template_variants(template, config, template_pagination_source:)
+	def expand_template_variants(template, config, template_pagination_source:, item_exclusions:)
 		expander = Templates::VariantExpander.new(
 			site: @site,
 			site_config: @site_config,
@@ -53,7 +62,7 @@ class Model
 			template_pagination_source: template_pagination_source,
 			merge_template_pagination_lambda: method(:merged_template_pagination_config),
 			normalise_template_config_lambda: lambda { |pagination| Config::Normaliser.normalise_template_config(@site_config, pagination) },
-			resolve_items_lambda: method(:resolve_items),
+			resolve_items_lambda: lambda { |raw_search| resolve_items(raw_search, include_templates: true, exclude_items: item_exclusions) },
 			log_lambda: @active_log_lambda
 		)
 		variants = expander.expand
@@ -70,11 +79,11 @@ class Model
 	end
 
 	# Runs pagination for one already-expanded template variant.
-	def paginate_template_variant(template, config, remove_source_template:)
+	def paginate_template_variant(template, config, remove_source_template:, item_exclusions:)
 		template_path = Utils.relative_item_path(template)
 		split_delimiter = config.key?('split') ? config['split'] : @split_delimiter
 		nested_separator = config['separator'] || @nested_separator
-		all_items = resolve_items(config['items'])
+		all_items = resolve_items(config['items'], include_templates: true, exclude_items: item_exclusions)
 		log("Template '#{template_path}': resolved #{all_items.length} candidate item(s).", 'debug')
 		log_item_path_sample("Template '#{template_path}': candidate item sample", all_items)
 		filtered_items = Query::Filter.filter_items(
