@@ -548,6 +548,8 @@ class Normaliser
 					normalised = { 'on' => on_key }
 					raw_size = if hash_entry.key?('size')
 									hash_entry['size']
+								elsif hash_entry.key?('bunch')
+									hash_entry['bunch']
 								elsif hash_entry.key?('group')
 									hash_entry['group']
 								end
