@@ -336,7 +336,7 @@ Rather than creating actual files for your pagination templates, you can (additi
 See [Generated Templates](/docs/generate.md) for detailed readme about this feature.
 
 
-### Index Pages
+## Index Pages
 
 When a **pagination template** is processed, one or more **index pages** are generated. The index page is the page that actually lists the items, and which has a [`paginator` object](#paginator).
 
@@ -504,7 +504,6 @@ In V1 compatibility mode:
 Other behavioural notes:
 
 * Hidden content (`hidden: true`) is always excluded from pagination items.
-* Index pages are never included in paginated item sets.
 * Indexes generated from generated templates are marked with `page.pagination.generated: true`.
 
 
