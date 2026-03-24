@@ -1,8 +1,6 @@
 # Changelog
 
-## V3
-
-### 0.1.0
+## 0.1.0.alpha
 
 * Replaced v2’s `collection`-centric model with an `items` search model (pages, collections, all/everything, optional globs).
 * Broadened template discovery via `pagination.templates.location` (not just v2-style page templates).
@@ -16,11 +14,9 @@
 * Explicit compatibility modes (`compatibility: v1` / `v2`) to interpret legacy configuration.
 
 
-## V2
+## V2 1.9.4
 
 Historical record of key features from the prior gem.
-
-### 1.9.4
 
 * Primary config lived under `pagination` in `_config.yml` (`enabled`, `collection`, `per_page`, `permalink`, `title`, `limit`, `offset`, `sort_field`, `sort_reverse`, `trail`, `indexpage`, `extension`), with page-level frontmatter overrides.
 * Paginated `posts` by default, but could paginate a named collection, multiple collections, or special `all`.
@@ -32,11 +28,9 @@ Historical record of key features from the prior gem.
 * Included legacy compatibility mode for old `paginate`/`paginate_path` config (mutually exclusive with new `pagination` mode).
 
 
-## V1
+## V1 1.1.0
 
 Historical record of key features from the prior gem.
-
-### 1.1.0
 
 * Enabled only when `site.config['paginate']` was set; read configuration from `paginate` (per-page size) and `paginate_path`.
 * Paginated only `site.site_payload['site']['posts']`, always excluding posts with `hidden: true`.
