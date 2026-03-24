@@ -2,15 +2,14 @@
 
 ## 0.1.0.alpha
 
-* Replaced v2’s `collection`-centric model with an `items` search model (pages, collections, all/everything, optional globs).
-* Broadened template discovery via `pagination.templates.location` (not just v2-style page templates).
-* Replaced fixed v2 filters (`category`/`tag`/`locale`) with generic frontmatter filters (`match`, `include`/`exclude`, `min`/`max`, regex, join modes).
-* Folded AutoPages-style generation into `pagination.templates.generate` (driven by `items` + indexed keys) rather than separate v2 `autopages` config. Includes multi-level indexing and grouped range indexing by numeric, date or alphabetic.
-* Replaced `sort_field` + `sort_reverse` with a unified multi-level `sort` syntax and explicit empty-value handling.
-* Removed `indexpage`/`extension` config; filename/extension control now comes from `permalink` alone.
-* Configurable nested-key access (default `.`), equivalent keys (for example `tag`/`tags`), and delimiter-driven array parsing.
+* Templates can be pages or documents, and are found at `pagination.templates.location`.
+* Pagination can look for `items` in pages or collections with optional globs.
+* Generic frontmatter filters (`match`, `include`/`exclude`, `min`/`max`, regex, join modes).
+* Generate templates from config at `pagination.templates.generate` or with `group` config for multi-level/bunched grouping by numeric, date or alphabetic values.
+* Multi-level `sort` options.
+* Nested-key access (default `.`), equivalent keys (for example `tag`/`tags`), and delimiter-driven array parsing.
 * New structured format for `page.paginator` (with v2 compatibility mode).
-* Paginate *between indexes* with `paginator.group`.
+* Paginate between index sets with `paginator.group`.
 * Explicit compatibility modes (`compatibility: v1` / `v2`) to interpret legacy configuration.
 
 
