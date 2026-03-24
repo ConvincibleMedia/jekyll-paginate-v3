@@ -19,6 +19,7 @@
 coverage
 .rspec_status
 spec/reports
+/prior
 
 # Settings
 .vscode

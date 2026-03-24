@@ -1,0 +1,37 @@
+# frozen_string_literal: true
+
+require 'jekyll'
+require 'jekyll-paginate-v3/version'
+require 'jekyll-paginate-v3/config/defaults'
+require 'jekyll-paginate-v3/config/normaliser'
+require 'jekyll-paginate-v3/support/string_array'
+require 'jekyll-paginate-v3/support/frontmatter_path'
+require 'jekyll-paginate-v3/support/loose_scalar'
+require 'jekyll-paginate-v3/support/processed_value'
+require 'jekyll-paginate-v3/utils/core'
+require 'jekyll-paginate-v3/utils/logger'
+require 'jekyll-paginate-v3/utils/paths'
+require 'jekyll-paginate-v3/utils/formatting'
+require 'jekyll-paginate-v3/utils/nested_data'
+require 'jekyll-paginate-v3/utils/items'
+require 'jekyll-paginate-v3/query/parser'
+require 'jekyll-paginate-v3/query/filter'
+require 'jekyll-paginate-v3/query/sorter'
+require 'jekyll-paginate-v3/pagination/paginator'
+require 'jekyll-paginate-v3/pagination/pages/page'
+require 'jekyll-paginate-v3/pagination/pages/document'
+require 'jekyll-paginate-v3/pagination/pages/shadow_page'
+require 'jekyll-paginate-v3/templates/page_template'
+require 'jekyll-paginate-v3/templates/document_template'
+require 'jekyll-paginate-v3/templates/grouped_index'
+require 'jekyll-paginate-v3/templates/variant_expander'
+require 'jekyll-paginate-v3/templates/builder'
+require 'jekyll-paginate-v3/pagination/model'
+require 'jekyll-paginate-v3/generators/pagination_generator'
+
+module Jekyll
+module Plugins
+	module PaginateV3
+	end
+end
+end
