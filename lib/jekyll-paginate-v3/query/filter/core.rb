@@ -53,12 +53,12 @@ class Filter
 		@now_keyword = 'now' if @now_keyword.empty?
 		@today_keyword = today_keyword.to_s.strip
 		@today_keyword = 'today' if @today_keyword.empty?
-		@frontmatter_path = Jekyll::Plugins::Support::FrontmatterPath.new(
+		@frontmatter_path = Jekyll::Plugins::PaginateV3::Support::FrontmatterPath.new(
 			separator: @nested_separator,
 			arrays: :expand,
 			equivalents: equivalents
 		)
-		@string_array = Jekyll::Plugins::Support::StringArray.new(delimiter: @split_delimiter)
+		@string_array = Jekyll::Plugins::PaginateV3::Support::StringArray.new(delimiter: @split_delimiter)
 		@log_lambda = log_lambda
 	end
 

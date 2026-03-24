@@ -141,7 +141,7 @@ class Filter
 
 	# Builds one processed-value helper for one definition's split rules.
 	def processed_value_for_definition(item_value, definition)
-		Jekyll::Plugins::Support::ProcessedValue.build(
+		Jekyll::Plugins::PaginateV3::Support::ProcessedValue.build(
 			item_value,
 			string_array: @string_array,
 			split: definition['split']
@@ -188,7 +188,7 @@ class Filter
 
 	# Safe comparability check for mixed scalar types.
 	def values_comparable?(left, right)
-		Jekyll::Plugins::Support::LooseScalar.comparable_values?(left, right)
+		Jekyll::Plugins::PaginateV3::Support::LooseScalar.comparable_values?(left, right)
 	end
 
 	# Emits a warning message through the optional logger callback.

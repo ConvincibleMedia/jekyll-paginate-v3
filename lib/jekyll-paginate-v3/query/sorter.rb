@@ -21,7 +21,7 @@ class Sorter
 		instructions = parse(raw_sort, split_delimiter: split_delimiter)
 		return items if instructions.empty?
 
-		frontmatter_path = Jekyll::Plugins::Support::FrontmatterPath.new(
+		frontmatter_path = Jekyll::Plugins::PaginateV3::Support::FrontmatterPath.new(
 			separator: nested_separator,
 			arrays: :expand,
 			equivalents: equivalents

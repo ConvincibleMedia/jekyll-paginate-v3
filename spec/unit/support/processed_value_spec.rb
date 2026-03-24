@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
-RSpec.describe Jekyll::Plugins::Support::ProcessedValue do
+RSpec.describe Jekyll::Plugins::PaginateV3::Support::ProcessedValue do
 	def build_value(raw_value, split: true, delimiter: ',')
 		described_class.build(
 			raw_value,
-			string_array: Jekyll::Plugins::Support::StringArray.new(delimiter: delimiter),
+			string_array: Jekyll::Plugins::PaginateV3::Support::StringArray.new(delimiter: delimiter),
 			split: split
 		)
 	end

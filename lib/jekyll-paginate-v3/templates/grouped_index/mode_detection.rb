@@ -191,14 +191,14 @@ class GroupedIndex
 	# Parses numeric candidates using the same integer/float rules as
 	# filter range parsing.
 	def interpret_numeric_value(value)
-		numeric_value = Jekyll::Plugins::Support::LooseScalar.number(value)
+		numeric_value = Jekyll::Plugins::PaginateV3::Support::LooseScalar.number(value)
 		numeric_value.nil? ? nil : numeric_value.to_f
 	end
 
 	# Parses datetime candidates from Date/Time values or parseable
 	# datetime strings.
 	def interpret_datetime_value(value)
-		Jekyll::Plugins::Support::LooseScalar.datetime(value)
+		Jekyll::Plugins::PaginateV3::Support::LooseScalar.datetime(value)
 	end
 
 	# Normalises one value for alphabetic comparison:

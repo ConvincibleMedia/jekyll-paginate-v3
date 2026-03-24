@@ -9,8 +9,8 @@ Gem::Specification.new do |spec|
 	spec.authors = ['Convincible']
 	spec.email = ['development@convincible.media']
 
-	spec.summary = 'Robust, flexible, configurable pagination for Jekyll websites.'
-	spec.description = 'Paginate any collection, and filter or index by any frontmatter key.'
+	spec.summary = "Flexible, configurable pagination for Jekyll websites."
+	spec.description = "Automatically creates pagination pages (page 1, page 2, etc.) for sets of pages or collection documents. Powerful configuration options include filtering or grouping by any frontmatter key."
 	spec.homepage = 'https://github.com/ConvincibleMedia/jekyll-paginate-v3'
 	spec.license = 'LGPL-3.0-or-later'
 

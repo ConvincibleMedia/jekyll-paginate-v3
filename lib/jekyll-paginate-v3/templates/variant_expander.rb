@@ -29,12 +29,12 @@ class VariantExpander
 		@active_template_config = Utils.deep_copy(template_config)
 		@active_split_delimiter = @active_template_config.key?('split') ? @active_template_config['split'] : site_config.dig('syntax', 'split')
 		@active_nested_separator = @active_template_config['separator'] || site_config.dig('syntax', 'separator')
-		@site_frontmatter_path = Jekyll::Plugins::Support::FrontmatterPath.new(
+		@site_frontmatter_path = Jekyll::Plugins::PaginateV3::Support::FrontmatterPath.new(
 			separator: site_config.dig('syntax', 'separator'),
 			arrays: :expand,
 			equivalents: @equivalents
 		)
-		@site_string_array = Jekyll::Plugins::Support::StringArray.new(delimiter: site_config.dig('syntax', 'split'))
+		@site_string_array = Jekyll::Plugins::PaginateV3::Support::StringArray.new(delimiter: site_config.dig('syntax', 'split'))
 		@active_frontmatter_path = @site_frontmatter_path.with(separator: @active_nested_separator)
 		@active_string_array = @site_string_array.with(delimiter: @active_split_delimiter)
 	end

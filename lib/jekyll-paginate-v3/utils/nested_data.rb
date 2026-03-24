@@ -11,7 +11,7 @@ module Utils
 	
 	# Splits a nested key according to configured separator.
 	def self.split_nested_key(key, separator)
-		Jekyll::Plugins::Support::FrontmatterPath.split_path(key, separator)
+		Jekyll::Plugins::PaginateV3::Support::FrontmatterPath.split_path(key, separator)
 	end
 
 	# Builds lookup table used for equivalent key resolution.
@@ -19,7 +19,7 @@ module Utils
 	# `product.tag`), which allows equivalent mappings to be scoped to one
 	# nested level only.
 	def self.build_equivalent_lookup(raw_equivalents, split_delimiter: ',')
-		Jekyll::Plugins::Support::FrontmatterPath.build_equivalent_lookup(raw_equivalents, split_delimiter: split_delimiter)
+		Jekyll::Plugins::PaginateV3::Support::FrontmatterPath.build_equivalent_lookup(raw_equivalents, split_delimiter: split_delimiter)
 	end
 
 	# Resolves the effective hash key for one requested nested key path.
@@ -27,17 +27,17 @@ module Utils
 	# terminal segments from that matched group are candidates for hash
 	# access at this level.
 	def self.resolve_hash_key(hash, requested_key_path, equivalent_lookup, separator: '.')
-		Jekyll::Plugins::Support::FrontmatterPath.resolve_hash_key(hash, requested_key_path, equivalent_lookup, separator: separator)
+		Jekyll::Plugins::PaginateV3::Support::FrontmatterPath.resolve_hash_key(hash, requested_key_path, equivalent_lookup, separator: separator)
 	end
 
 	# Reads a value from hash by either string or symbol key.
 	def self.read_hash(hash, key)
-		Jekyll::Plugins::Support::FrontmatterPath.read_hash(hash, key)
+		Jekyll::Plugins::PaginateV3::Support::FrontmatterPath.read_hash(hash, key)
 	end
 
 	# Retrieves all possible values from a nested key path.
 	def self.fetch_nested_values(data, key_path, separator, equivalent_lookup)
-		path_reader = Jekyll::Plugins::Support::FrontmatterPath.new(
+		path_reader = Jekyll::Plugins::PaginateV3::Support::FrontmatterPath.new(
 			separator: separator,
 			equivalent_lookup: equivalent_lookup
 		)

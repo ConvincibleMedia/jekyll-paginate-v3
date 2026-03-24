@@ -223,7 +223,7 @@ class GroupedIndex
 
 	# Parses loose boolean values.
 	def parse_boolean(raw_value)
-		Jekyll::Plugins::Support::LooseScalar.boolean(raw_value) == true
+		Jekyll::Plugins::PaginateV3::Support::LooseScalar.boolean(raw_value) == true
 	end
 
 	# Parses datetime start values including:

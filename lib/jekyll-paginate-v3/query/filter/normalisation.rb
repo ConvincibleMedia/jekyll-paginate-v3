@@ -464,7 +464,7 @@ class Filter
 
 	# Parses one numeric-only boundary used for array/string length checks.
 	def interpret_length_boundary(value)
-		numeric_value = Jekyll::Plugins::Support::LooseScalar.number(value)
+		numeric_value = Jekyll::Plugins::PaginateV3::Support::LooseScalar.number(value)
 		numeric_value.nil? ? false : numeric_value
 	end
 
@@ -575,7 +575,7 @@ class Filter
 	# Casts string values to Integer, Float, or DateTime when possible.
 	# Returns the original string unless strict casting is requested.
 	def interpret_numeric(value, must_cast: false)
-		comparable_value = Jekyll::Plugins::Support::LooseScalar.comparable(value, must_cast: must_cast)
+		comparable_value = Jekyll::Plugins::PaginateV3::Support::LooseScalar.comparable(value, must_cast: must_cast)
 		return false if comparable_value.nil? && must_cast
 
 		comparable_value
@@ -583,7 +583,7 @@ class Filter
 
 	# Normalises values to a comparable scalar form.
 	def normalise_comparable_scalar(value)
-		Jekyll::Plugins::Support::LooseScalar.comparable(value)
+		Jekyll::Plugins::PaginateV3::Support::LooseScalar.comparable(value)
 	end
 
 	# Numeric type check used by range coercion.

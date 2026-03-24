@@ -602,7 +602,7 @@ class Normaliser
 
 		# Coerces loose truthy/falsey config values to a strict boolean.
 		def boolean_config_value(value)
-			Jekyll::Plugins::Support::LooseScalar.boolean(value) == true
+			Jekyll::Plugins::PaginateV3::Support::LooseScalar.boolean(value) == true
 		end
 
 		# Migrates old v2 shorthand config into canonical template fields.

@@ -91,7 +91,7 @@ class Builder
 
 	# Coerces loose truthy/falsey config values to a strict boolean.
 	def normalise_boolean(value)
-		Jekyll::Plugins::Support::LooseScalar.boolean(value) == true
+		Jekyll::Plugins::PaginateV3::Support::LooseScalar.boolean(value) == true
 	end
 
 	# Captures generated-template metadata for compatibility and template use.

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe Jekyll::Plugins::Support::LooseScalar do
+RSpec.describe Jekyll::Plugins::PaginateV3::Support::LooseScalar do
 	it 'parses loose booleans from values and strings' do
 		expect(described_class.boolean(true)).to eq(true)
 		expect(described_class.boolean(false)).to eq(false)

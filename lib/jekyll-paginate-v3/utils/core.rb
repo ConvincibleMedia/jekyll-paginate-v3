@@ -25,17 +25,17 @@ module Utils
 	#
 	# `false` disables delimited splitting globally.
 	def self.normalise_split_delimiter(raw_delimiter, default_delimiter = ',')
-		Jekyll::Plugins::Support::StringArray.normalise_delimiter(raw_delimiter, default_delimiter)
+		Jekyll::Plugins::PaginateV3::Support::StringArray.normalise_delimiter(raw_delimiter, default_delimiter)
 	end
 
 	# Splits one string using the configured delimiter, trims entries, and rejects blank strings.
 	def self.split_delimited_string(value, delimiter)
-		Jekyll::Plugins::Support::StringArray.new(delimiter: delimiter).interpret(value, split: 0, flatten: true)
+		Jekyll::Plugins::PaginateV3::Support::StringArray.new(delimiter: delimiter).interpret(value, split: 0, flatten: true)
 	end
 
 	# Converts scalars/arrays into a flat array and applies delimited-string expansion for all string entries.
 	def self.delimited_array(value, delimiter: ',')
-		Jekyll::Plugins::Support::StringArray.new(delimiter: delimiter).interpret(value, split: -1, flatten: true)
+		Jekyll::Plugins::PaginateV3::Support::StringArray.new(delimiter: delimiter).interpret(value, split: -1, flatten: true)
 	end
 
 	# Converts a value into an array. Strings can be treated as delimiter-defined lists.
@@ -43,11 +43,11 @@ module Utils
 		delimiter = split_delimiter
 		delimiter = ',' if delimiter.nil? && split_commas
 
-		Jekyll::Plugins::Support::StringArray.new(delimiter: delimiter || ',').interpret(
+		Jekyll::Plugins::PaginateV3::Support::StringArray.new(delimiter: delimiter || ',').interpret(
 			value,
 			split: delimiter.nil? ? false : 0,
 			flatten: true,
-			delimiter: delimiter.nil? ? Jekyll::Plugins::Support::StringArray::UNSET : delimiter
+			delimiter: delimiter.nil? ? Jekyll::Plugins::PaginateV3::Support::StringArray::UNSET : delimiter
 		)
 	end
 

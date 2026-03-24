@@ -2,6 +2,7 @@
 
 module Jekyll
 module Plugins
+module PaginateV3
 
 module Support
 
@@ -152,5 +153,6 @@ end
 
 end
 
+end
 end
 end
