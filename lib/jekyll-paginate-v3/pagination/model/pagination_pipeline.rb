@@ -46,9 +46,8 @@ class Model
 	end
 
 	# Returns the per-template item exclusions required to prevent a
-	# template from paginating over itself when the active item object is
-	# still otherwise eligible during resolution. Other pagination
-	# templates remain excluded by normal item-resolution rules.
+	# template from paginating over itself when pagination templates are
+	# otherwise eligible during item resolution.
 	def pagination_item_exclusions_for_template(template)
 		[template]
 	end

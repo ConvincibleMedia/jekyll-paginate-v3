@@ -1,6 +1,65 @@
 # frozen_string_literal: true
 
 RSpec.describe 'Pagination integration: generated templates in pages' do
+	it 'keeps generated source templates eligible as items without leaking their emitted indexes back in' do
+		files = jekyll_merge(
+			post_files(2),
+			jekyll_files do
+				file 'mixed.md' do
+					frontmatter(
+						pagination_template_frontmatter(
+							{
+								'title' => 'Mixed Listing',
+								'permalink' => '/mixed/',
+								'pagination' => {
+									'enabled' => true,
+									'items' => 'everything',
+									'sort' => 'title asc',
+									'per_page' => 50
+								}
+							}
+						)
+					)
+					contents('Mixed template')
+				end
+			end
+		)
+
+		jekyll_build(
+			default_site,
+			config: {
+				'pagination' => {
+					'enabled' => true,
+					'templates' => {
+						'generate' => [
+							{
+								'items' => 'posts',
+								'sort' => 'title asc',
+								'per_page' => 1,
+								'frontmatter' => {
+									'layout' => 'listing',
+									'permalink' => '/generated/',
+									'title' => 'Generated Listing'
+								}
+							}
+						]
+					}
+				}
+			},
+			files: files
+		) do |site,|
+			mixed_page = page_by_url(site, '/mixed/')
+			items = paginator_payload(mixed_page).fetch('items')
+			generated_template_entry = items.find { |entry| entry.data.fetch('title') == 'Generated Listing' }
+
+			expect(items.map { |entry| entry.data.fetch('title') }).to eq(['Generated Listing', 'Post 01', 'Post 02'])
+			expect(items.map { |entry| entry.data.fetch('title') }).not_to include('Mixed Listing', 'Generated Listing - 2')
+			expect(generated_template_entry.data.dig('pagination', 'template')).to eq(true)
+			expect(generated_template_entry.data.dig('pagination', 'index')).not_to eq(true)
+			expect(generated_template_entry.data.dig('paginate_v3', 'generated_template')).to eq(true)
+		end
+	end
+
 	it 'builds generated templates from grouped values and paginates them' do
 		files = post_files(3) do |index|
 			case index

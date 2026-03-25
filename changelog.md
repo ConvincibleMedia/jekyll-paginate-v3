@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.0.alpha.1
+
+* Fix and refactor to ensure pagination *templates* can themselves be *items* that are paginated over. Index pages (generated from templates) remain excluded from pagination.
+
+
 ## 0.1.0.alpha
 
 * Templates can be pages or documents, and are found at `pagination.templates.location`.

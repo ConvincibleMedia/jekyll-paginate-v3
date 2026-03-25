@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 RSpec.describe 'Pagination integration: invariants and edge behaviour' do
-	it 'excludes previously generated index pages from later item resolution' do
+	it 'uses frozen source items so emitted pagination indexes never re-enter later item resolution' do
 		files = jekyll_merge(
 			post_files(2),
 			jekyll_files do
@@ -53,9 +53,12 @@ RSpec.describe 'Pagination integration: invariants and edge behaviour' do
 		jekyll_build(default_site, files: files) do |site,|
 			mixed_page = page_by_url(site, '/mixed/')
 			titles = paginator_item_titles(mixed_page)
+			alpha_entry = paginator_payload(mixed_page).fetch('items').find { |entry| entry.data.fetch('title') == 'Alpha Template' }
 
-			expect(titles).to eq(['Guide Page', 'Post 01', 'Post 02'])
-			expect(titles).not_to include('Alpha Template', 'Alpha Template - page 2')
+			expect(titles).to eq(['Alpha Template', 'Guide Page', 'Post 01', 'Post 02'])
+			expect(titles).not_to include('Mixed Listing', 'Alpha Template - page 2')
+			expect(alpha_entry.data.dig('pagination', 'template')).to eq(true)
+			expect(alpha_entry.data.dig('pagination', 'index')).not_to eq(true)
 		end
 	end
 

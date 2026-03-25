@@ -160,6 +160,9 @@ class Model
 	# Captures the source items used by later `items` searches so
 	# pagination item resolution remains stable even after templates are
 	# removed and replaced by generated index pages.
+	#
+	# This frozen snapshot is the invariant that stops emitted pagination
+	# pages from feeding back into later item searches.
 	def capture_item_resolution_sources!
 		@item_resolution_pages = @site.pages.dup
 		@item_resolution_documents_by_collection = {}
@@ -436,9 +439,12 @@ class Model
 	# applies generic inclusion/exclusion flags.
 	#
 	# `exclude_items` is used by the pagination pipeline to remove the
-	# active source template from its own item set without also excluding
-	# other templates that the user may legitimately want to paginate over.
-	def resolve_items(raw_search, include_templates: false, include_generated_indexes: false, include_hidden: false, exclude_items: nil)
+	# active source template from its own item set while leaving other
+	# pagination templates eligible for ordinary item searches.
+	#
+	# Emitted pagination indexes are kept out by the frozen source items
+	# captured earlier in the pipeline, rather than by ad hoc filtering.
+	def resolve_items(raw_search, include_hidden: false, exclude_items: nil)
 		entries = Query::Parser.parse(raw_search, @site_config['keywords'], split_delimiter: @split_delimiter)
 		if entries.empty?
 			log("Resolving items from search=#{raw_search.inspect} produced no parsed entries.", 'debug')
@@ -446,7 +452,7 @@ class Model
 		end
 
 		excluded_item_keys = excluded_item_identity_keys(exclude_items)
-		log("Resolving items from search=#{raw_search.inspect} (entries=#{entries.length}, include_templates=#{include_templates}, include_generated_indexes=#{include_generated_indexes}, include_hidden=#{include_hidden}, exclude_items=#{excluded_item_keys.length}).", 'debug')
+		log("Resolving items from search=#{raw_search.inspect} (entries=#{entries.length}, include_hidden=#{include_hidden}, exclude_items=#{excluded_item_keys.length}).", 'debug')
 		resolved = []
 		entries.each do |entry|
 			resolved.concat(resolve_entry(entry))
@@ -457,18 +463,14 @@ class Model
 		log("Resolved #{resolved.length} unique item(s) before exclusion filters.", 'debug')
 		log_item_path_sample('Resolved item sample before exclusions', resolved)
 
-		excluded_generated_indexes = include_generated_indexes ? 0 : resolved.count { |item| Utils.generated_index?(item) }
-		excluded_templates = include_templates ? 0 : resolved.count { |item| Utils.pagination_template?(item) }
 		excluded_hidden = include_hidden ? 0 : resolved.count { |item| item['hidden'] }
 		excluded_explicit_items = excluded_item_keys.empty? ? 0 : resolved.count { |item| excluded_item_keys.include?(item_identity_key(item)) }
 
-		resolved.select! { |item| !Utils.generated_index?(item) } unless include_generated_indexes
-		resolved.select! { |item| !Utils.pagination_template?(item) } unless include_templates
 		resolved.select! { |item| !item['hidden'] } unless include_hidden
 		resolved.select! { |item| !excluded_item_keys.include?(item_identity_key(item)) } unless excluded_item_keys.empty?
 
-		if excluded_generated_indexes.positive? || excluded_templates.positive? || excluded_hidden.positive? || excluded_explicit_items.positive?
-			log("Excluded generated_indexes=#{excluded_generated_indexes} templates=#{excluded_templates} hidden=#{excluded_hidden} explicit=#{excluded_explicit_items} from resolved items.", 'debug')
+		if excluded_hidden.positive? || excluded_explicit_items.positive?
+			log("Excluded hidden=#{excluded_hidden} explicit=#{excluded_explicit_items} from resolved items.", 'debug')
 		end
 		log("Resolved #{resolved.length} item(s) after exclusion filters.", 'debug')
 		log_item_path_sample('Resolved item sample after exclusions', resolved)

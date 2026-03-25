@@ -41,7 +41,7 @@ RSpec.describe 'Pagination integration: core behaviour' do
 		end
 	end
 
-	it 'excludes hidden content and pagination templates from resolved items' do
+	it 'includes other pagination templates while excluding hidden content and the active template' do
 		files = jekyll_merge(
 			post_files(3) do |index|
 				index == 2 ? { 'hidden' => true } : {}
@@ -64,6 +64,23 @@ RSpec.describe 'Pagination integration: core behaviour' do
 					contents('Template content')
 				end
 
+				file 'other.md' do
+					frontmatter(
+						pagination_template_frontmatter(
+							{
+								'title' => 'Other Template',
+								'pagination' => {
+									'enabled' => true,
+									'items' => 'posts',
+									'sort' => 'title asc',
+									'per_page' => 50
+								}
+							}
+						)
+					)
+					contents('Other template content')
+				end
+
 				folder 'docs' do
 					file 'visible.md' do
 						frontmatter('layout' => 'listing', 'title' => 'Visible Page')
@@ -82,10 +99,8 @@ RSpec.describe 'Pagination integration: core behaviour' do
 			first_page = page_by_url(site, '/')
 			titles = paginator_item_titles(first_page)
 
-			expect(titles).to include('Post 01', 'Post 03', 'Visible Page')
-			expect(titles).not_to include('Post 02')
-			expect(titles).not_to include('Hidden Page')
-			expect(titles).not_to include('Template')
+			expect(titles).to eq(['Other Template', 'Post 01', 'Post 03', 'Visible Page'])
+			expect(titles).not_to include('Post 02', 'Hidden Page', 'Template')
 		end
 	end
 
