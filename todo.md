@@ -10,3 +10,4 @@
   * `delete`: as `preserve` but as a final step, the original pagination template doc/page is deleted.
 * Auto-create an index at each level of a multi-level grouping.
 * New sorting styles: `asc:cyclic`, `asc:frequency`, `asc:zigzag` (min, max, next-min, next-max).
+* Multiple paginations per template.
