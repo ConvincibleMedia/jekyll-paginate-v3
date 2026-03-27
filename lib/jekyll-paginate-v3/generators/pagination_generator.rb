@@ -39,23 +39,14 @@ class PaginationGenerator < Jekyll::Generator
 
 		# Abstract site mutation so the model can add pages or documents
 		# without knowing where Jekyll stores each item type.
-		add_item_lambda = lambda do |item|
-			if item.is_a?(Jekyll::Document)
-				site.collections[item.collection.label].docs << item
-			else
-				site.pages << item
-			end
-			item
+		add_item_lambda = lambda do |item, collection_index: nil|
+			add_site_item(site, item, collection_index: collection_index)
 		end
 
 		# Mirror add_item_lambda for replacing template pages with generated
 		# paginated siblings.
 		remove_item_lambda = lambda do |item|
-			if item.is_a?(Jekyll::Document)
-				site.collections[item.collection.label].docs.delete_if { |doc| doc == item }
-			else
-				site.pages.delete_if { |page| page == item }
-			end
+			remove_site_item(site, item)
 		end
 
 		model = Pagination::Model.new(
@@ -86,6 +77,60 @@ class PaginationGenerator < Jekyll::Generator
 	end
 
 	private
+
+	# Adds one generated page/document to the appropriate site collection.
+	#
+	# `collection_index` is optional and is only used when pagination needs
+	# to replace a source collection document without disturbing the
+	# ordering of surrounding documents.
+	def add_site_item(site, item, collection_index: nil)
+		if item.is_a?(Jekyll::Document)
+			add_collection_document(site, item, collection_index: collection_index)
+		else
+			site.pages << item
+		end
+
+		item
+	end
+
+	# Inserts one generated collection document either at a precise source
+	# position or at the end of the collection when no preserved position
+	# is required.
+	def add_collection_document(site, item, collection_index: nil)
+		collection_docs = site.collections[item.collection.label].docs
+		if collection_index.nil?
+			collection_docs << item
+			return
+		end
+
+		safe_collection_index = [[collection_index.to_i, 0].max, collection_docs.length].min
+		collection_docs.insert(safe_collection_index, item)
+	end
+
+	# Removes one item from the site and returns collection position
+	# metadata when the removed item came from a collection.
+	def remove_site_item(site, item)
+		if item.is_a?(Jekyll::Document)
+			return remove_collection_document(site, item)
+		end
+
+		site.pages.delete_if { |page| page.equal?(item) }
+		nil
+	end
+
+	# Removes one collection document by exact array position so the
+	# generated replacement can later reuse the same slot.
+	def remove_collection_document(site, item)
+		collection_docs = site.collections[item.collection.label].docs
+		collection_index = collection_docs.index { |document| document.equal?(item) }
+		return nil if collection_index.nil?
+
+		collection_docs.delete_at(collection_index)
+		{
+			'collection_label' => item.collection.label.to_s,
+			'index' => collection_index
+		}
+	end
 
 	# Logs one info-level summary line for each configured generate entry.
 	def log_generate_report(logger, generated_template_report)

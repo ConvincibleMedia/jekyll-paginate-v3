@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.0.alpha.2
+
+* Ensure collection document order is preserved when operating on templates in collections.
+
 ## 0.1.0.alpha.1
 
 * Fix and refactor to ensure pagination *templates* can themselves be *items* that are paginated over. Index pages (generated from templates) remain excluded from pagination.

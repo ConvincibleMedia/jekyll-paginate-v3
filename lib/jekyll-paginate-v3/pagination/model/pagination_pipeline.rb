@@ -25,6 +25,7 @@ class Model
 
 		total_paginated_items = 0
 		total_indexes = 0
+		collection_replacement_state = nil
 
 		variants.each_with_index do |variant, variant_index|
 			variant_template = variant['template']
@@ -33,8 +34,10 @@ class Model
 				variant_template,
 				variant_config,
 				remove_source_template: variant_index.zero?,
-				item_exclusions: item_exclusions
+				item_exclusions: item_exclusions,
+				collection_replacement_state: collection_replacement_state
 			)
+			collection_replacement_state = variant_report['collection_replacement_state']
 			total_paginated_items += variant_report['paginated_items'].to_i
 			total_indexes += variant_report['indexes'].to_i
 		end
@@ -79,7 +82,7 @@ class Model
 	end
 
 	# Runs pagination for one already-expanded template variant.
-	def paginate_template_variant(template, config, remove_source_template:, item_exclusions:)
+	def paginate_template_variant(template, config, remove_source_template:, item_exclusions:, collection_replacement_state:)
 		template_path = Utils.relative_item_path(template)
 		split_delimiter = config.key?('split') ? config['split'] : @split_delimiter
 		nested_separator = config['separator'] || @nested_separator
@@ -127,23 +130,30 @@ class Model
 		validate_numbered_permalink_template!(template, config, total_pages)
 
 		log("Template '#{template_path}': generating #{total_pages} page(s) with per_page=#{config['per_page']} limit=#{config['limit']}.", 'debug')
-		generated_pages = emit_paginated_pages(
+		page_emission = emit_paginated_pages(
 			template,
 			config,
 			sorted_items,
 			page_windows,
-			remove_template: remove_source_template
+			remove_template: remove_source_template,
+			collection_replacement_state: collection_replacement_state
 		)
+		generated_pages = page_emission['pages']
+		collection_replacement_state = page_emission['collection_replacement_state']
 		register_grouped_set_if_applicable(template, config, generated_pages)
 		{
 			'paginated_items' => sorted_items.length,
-			'indexes' => generated_pages.length
+			'indexes' => generated_pages.length,
+			'collection_replacement_state' => collection_replacement_state
 		}
 	end
 
 	# Replaces a template with one synthetic page/document per page number.
-	def emit_paginated_pages(template, config, items, page_windows, remove_template: true)
-		@remove_item_lambda.call(template) if remove_template
+	def emit_paginated_pages(template, config, items, page_windows, remove_template: true, collection_replacement_state: nil)
+		if remove_template
+			removed_item_state = @remove_item_lambda.call(template)
+			collection_replacement_state = build_collection_replacement_state(template, removed_item_state)
+		end
 
 		new_pages = []
 		total_pages = page_windows.length
@@ -191,14 +201,50 @@ class Model
 			assign_generated_page_title!(generated, template, config, current_page, total_pages)
 			assign_generated_page_permalink!(generated, template, config, current_page, total_pages)
 
-			@add_item_lambda.call(generated)
+			@add_item_lambda.call(
+				generated,
+				collection_index: collection_insertion_index_for_generated_item(generated, collection_replacement_state)
+			)
 			log("Emitted pagination page #{current_page}/#{total_pages} at '#{generated.url}' for template '#{Utils.relative_item_path(template)}'.", 'debug')
 			new_pages << generated
 		end
 
 		bind_paginator_references(new_pages)
 		apply_page_trail(new_pages, config)
-		new_pages
+		{
+			'pages' => new_pages,
+			'collection_replacement_state' => collection_replacement_state
+		}
+	end
+
+	# Builds insertion state for collection-template replacement.
+	#
+	# The state stores a moving insertion cursor so any generated
+	# collection documents can occupy the template's original source slot
+	# and then continue immediately after it.
+	def build_collection_replacement_state(template, removed_item_state)
+		return nil unless collection_template?(template)
+
+		removed_item_state = Utils.safe_hash(removed_item_state)
+		return nil if removed_item_state.empty?
+		return nil if removed_item_state['collection_label'].to_s != template.collection.label.to_s
+
+		{
+			'source_collection_label' => template.collection.label.to_s,
+			'next_index' => removed_item_state['index'].to_i
+		}
+	end
+
+	# Returns the next insertion index for a generated document that
+	# belongs in the same collection as the template it replaced.
+	def collection_insertion_index_for_generated_item(generated, collection_replacement_state)
+		return nil if collection_replacement_state.nil?
+		return nil unless generated.is_a?(Jekyll::Document)
+		return nil if generated.collection.label.to_s != collection_replacement_state['source_collection_label'].to_s
+
+		insertion_index = collection_replacement_state['next_index'].to_i
+		collection_replacement_state['next_index'] = insertion_index + 1
+		insertion_index
 	end
 
 	# Builds one generated index object according to configured collection mode.
