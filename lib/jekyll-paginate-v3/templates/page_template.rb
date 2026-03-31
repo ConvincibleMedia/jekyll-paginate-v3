@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require 'digest'
-
 module Jekyll
 module Plugins
 module PaginateV3
@@ -20,7 +18,7 @@ class PageTemplate < Jekyll::Page
 		@dir = '/'
 		@name = 'index.html'
 		@url = '/'
-		@path = build_virtual_path(site, pagination_config, frontmatter)
+		@path = build_virtual_path(site, pagination_config, frontmatter, content)
 
 		process(@name)
 
@@ -42,9 +40,19 @@ class PageTemplate < Jekyll::Page
 	private
 
 	# Builds a deterministic virtual source path for this synthetic page.
-	def build_virtual_path(site, pagination_config, frontmatter)
-		signature = [pagination_config, frontmatter].inspect
-		File.join(site.source, "_paginate_v3_generated_#{Digest::MD5.hexdigest(signature)}.md")
+	def build_virtual_path(site, pagination_config, frontmatter, content)
+		Utils.build_synthetic_source_path(
+			site: site,
+			extension: '.md',
+			source_stem: Utils.derive_synthetic_source_stem_from_frontmatter(frontmatter, fallback: 'generated-template'),
+			role: 'template',
+			signature: {
+				'pagination' => Utils.safe_hash(pagination_config),
+				'frontmatter' => Utils.safe_hash(frontmatter),
+				'content' => content.to_s,
+				'content_type' => 'page-template'
+			}
+		)
 	end
 
 	# Adds legacy-friendly fields only when v2 compatibility is active.

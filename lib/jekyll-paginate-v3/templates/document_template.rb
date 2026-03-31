@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require 'digest'
-
 module Jekyll
 module Plugins
 module PaginateV3
@@ -18,7 +16,7 @@ class DocumentTemplate < Jekyll::Document
 	# Creates an in-memory collection document seeded from frontmatter and
 	# content supplied by generate config.
 	def initialize(site:, collection:, pagination_config:, frontmatter:, content:, generated_metadata:)
-		virtual_path = build_virtual_path(site, collection, pagination_config, frontmatter)
+		virtual_path = build_virtual_path(site, collection, pagination_config, frontmatter, content)
 		generated_metadata_hash = Utils.safe_hash(generated_metadata)
 
 		initialise_document(site, collection, virtual_path)
@@ -38,10 +36,21 @@ class DocumentTemplate < Jekyll::Document
 
 	# Builds a deterministic synthetic source path inside destination
 	# collection.
-	def build_virtual_path(site, collection, pagination_config, frontmatter)
-		signature = [collection.label, pagination_config, frontmatter].inspect
-		filename = "_paginate_v3_generated_#{Digest::MD5.hexdigest(signature)}.md"
-		File.join(site.source, collection.relative_directory, filename)
+	def build_virtual_path(site, collection, pagination_config, frontmatter, content)
+		Utils.build_synthetic_source_path(
+			site: site,
+			collection: collection,
+			extension: '.md',
+			source_stem: Utils.derive_synthetic_source_stem_from_frontmatter(frontmatter, fallback: collection.label),
+			role: 'template',
+			signature: {
+				'collection' => collection.label.to_s,
+				'pagination' => Utils.safe_hash(pagination_config),
+				'frontmatter' => Utils.safe_hash(frontmatter),
+				'content' => content.to_s,
+				'content_type' => 'document-template'
+			}
+		)
 	end
 
 	# Adds legacy-friendly fields only when v2 compatibility is active.

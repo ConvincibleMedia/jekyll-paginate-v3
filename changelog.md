@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0.alpha.3
+
+In progress.
+
+* Synethetic filenames are now more meaningful to aid with debugging.
+
 ## 0.1.0.alpha.2
 
 * Ensure collection document order is preserved when operating on templates in collections.

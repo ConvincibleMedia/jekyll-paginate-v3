@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require 'digest'
-
 module Jekyll
 module Plugins
 module PaginateV3
@@ -22,7 +20,8 @@ class Document < Jekyll::Document
 	def initialize(template_item, current_page, total_pages, _index_filename, collection:)
 		target_collection = collection
 		source_path = template_path(template_item)
-		virtual_path = build_virtual_path(template_item.site, target_collection, source_path, current_page)
+		extension = template_extname(template_item)
+		virtual_path = build_virtual_path(template_item, target_collection, source_path, current_page, extension)
 
 		initialise_document(template_item.site, target_collection, virtual_path)
 
@@ -32,7 +31,7 @@ class Document < Jekyll::Document
 			'curr_page' => current_page,
 			'total_pages' => total_pages
 		}
-		@extname = template_extname(template_item)
+		@extname = extension
 		self.data['path'] = source_path if current_page == 1 && !source_path.empty?
 
 		trigger_hooks(:post_init)
@@ -41,10 +40,22 @@ class Document < Jekyll::Document
 	private
 
 	# Builds a deterministic synthetic source path inside destination collection.
-	def build_virtual_path(site, collection, source_path, current_page)
-		signature = [source_path, collection.label, current_page].join(':')
-		filename = "_paginate_v3_#{Digest::MD5.hexdigest(signature)}.md"
-		File.join(site.source, collection.relative_directory, filename)
+	def build_virtual_path(template_item, collection, source_path, current_page, extension)
+		Utils.build_synthetic_source_path(
+			site: template_item.site,
+			collection: collection,
+			extension: extension,
+			source_path: source_path,
+			role: 'page',
+			page_number: current_page,
+			signature: {
+				'source_path' => source_path,
+				'collection' => collection.label.to_s,
+				'page_number' => current_page,
+				'template_data' => Utils.safe_hash(template_item.data),
+				'template_content' => template_item.content.to_s
+			}
+		)
 	end
 
 	# Resolves source path for compatibility metadata.
