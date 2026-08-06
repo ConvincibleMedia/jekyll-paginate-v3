@@ -13,15 +13,15 @@ module Pagination
 # Used by Pagination::Model for every generated page/document.
 class Paginator < ::Liquid::Drop
 
-	attr_reader :per_page, :items, :total_items, :total_indexes, :current, :next, :previous, :first, :last, :trail, :groups
+	attr_reader :per_page, :total_item_count, :total_indexes, :current, :next, :previous, :first, :last, :trail, :groups
 
 	def initialize(per_page:, items:, current_page:, total_pages:, item_keyword:, compatibility: nil, page_windows: nil)
 		@per_page_pattern = Utils.normalise_per_page_pattern(per_page)
 		@current_index_number = current_page.to_i
 		@item_keyword = normalise_item_keyword(item_keyword)
 		@compatibility_mode = normalise_compatibility_mode(compatibility)
-		@total_items = items.size
-		@page_windows = normalise_page_windows(page_windows, @total_items)
+		@total_item_count = items.size
+		@page_windows = normalise_page_windows(page_windows, @total_item_count)
 		requested_total_indexes = [total_pages.to_i, 1].max
 
 		if @current_index_number > requested_total_indexes
@@ -35,7 +35,7 @@ class Paginator < ::Liquid::Drop
 
 		current_window = window_for_page_number(@current_index_number)
 		@per_page = current_window['page_size']
-		@items = items[current_window['offset_start']...current_window['offset_end']] || []
+		@page_items = items[current_window['offset_start']...current_window['offset_end']] || []
 		@trail = nil
 		@groups = []
 
@@ -184,11 +184,12 @@ class Paginator < ::Liquid::Drop
 	#
 	# Liquid rendering uses this Drop instance directly.
 	def to_h
-		payload = canonical_payload_hash
-		payload[@item_keyword] = items
-		payload["total_#{@item_keyword}"] = total_items
+		payload = standard_payload_hash
+		payload[@item_keyword] = @page_items
+		payload["total_#{@item_keyword}"] = @total_item_count
 
 		if compatibility_mode?
+			add_compatibility_item_keys!(payload)
 			payload.merge!(
 				'per_page' => per_page,
 				'page' => page,
@@ -212,19 +213,28 @@ class Paginator < ::Liquid::Drop
 	# Handles dynamic alias keys that are not explicit methods.
 	def liquid_method_missing(method_name)
 		method_key = method_name.to_s
-		return items if method_key == @item_keyword
-		return total_items if method_key == "total_#{@item_keyword}"
+		return @page_items if method_key == @item_keyword
+		return @total_item_count if method_key == "total_#{@item_keyword}"
 
 		super
 	end
 
 	private
 
-	# Canonical v3 paginator payload hash.
-	def canonical_payload_hash
+	# Restores canonical item keys only for explicitly selected v1/v2
+	# compatibility profiles, whose historical paginator APIs require them.
+	def add_compatibility_item_keys!(payload)
+		canonical_keyword = Config::KEYWORD_DEFAULTS.fetch('items')
+		return if @item_keyword == canonical_keyword
+
+		payload[canonical_keyword] = @page_items
+		payload["total_#{canonical_keyword}"] = @total_item_count
+	end
+
+	# Builds the paginator payload shared by every configured item keyword.
+	# Item keys themselves are added by `to_h` using the active keyword only.
+	def standard_payload_hash
 		{
-			'items' => items,
-			'total_items' => total_items,
 			'total_indexes' => total_indexes,
 			'current' => current,
 			'next' => self.next,
@@ -275,8 +285,8 @@ class Paginator < ::Liquid::Drop
 			'num' => page_number.to_i,
 			'page_size' => fallback_size,
 			'count' => 0,
-			'offset_start' => total_items,
-			'offset_end' => total_items,
+			'offset_start' => total_item_count,
+			'offset_end' => total_item_count,
 			'start' => nil,
 			'end' => nil
 		}
@@ -310,10 +320,10 @@ class Paginator < ::Liquid::Drop
 		@page_windows_by_number.values
 	end
 
-	# Normalises item alias keyword; falls back to canonical `items`.
+	# Normalises the configured item keyword for direct Paginator callers.
 	def normalise_item_keyword(raw_keyword)
 		keyword = raw_keyword.to_s.strip
-		keyword.empty? ? 'items' : keyword
+		keyword.empty? ? Config::KEYWORD_DEFAULTS.fetch('items') : keyword
 	end
 
 	# Normalises compatibility mode to one supported legacy profile.

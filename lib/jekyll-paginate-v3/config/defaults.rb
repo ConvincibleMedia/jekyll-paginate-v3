@@ -27,6 +27,20 @@ module Config
 		'items' => 'items'
 	}.freeze
 
+	# Internal collection-mode identifiers. These never appear in user
+	# configuration, which lets a renamed keyword release its original word for
+	# use as a real Jekyll collection label.
+	COLLECTION_TARGET_PAGES = '__paginate_v3_collection_target_pages__'.freeze
+	COLLECTION_TARGET_SELF = '__paginate_v3_collection_target_self__'.freeze
+	COLLECTION_TARGET_SHADOW = '__paginate_v3_collection_target_shadow__'.freeze
+	COLLECTION_TARGET_CLONE = '__paginate_v3_collection_target_clone__'.freeze
+	COLLECTION_TARGET_BY_KEY = {
+		'pages' => COLLECTION_TARGET_PAGES,
+		'self' => COLLECTION_TARGET_SELF,
+		'shadow' => COLLECTION_TARGET_SHADOW,
+		'clone' => COLLECTION_TARGET_CLONE
+	}.freeze
+
 	DEFAULTS = {
 		'enabled' => true,
 		'compatibility' => nil,
@@ -41,7 +55,7 @@ module Config
 			['category', 'categories']
 		],
 		'items' => nil,
-		'collection' => ['self', 'shadow'],
+		'collection' => [COLLECTION_TARGET_SELF, COLLECTION_TARGET_SHADOW],
 		'filters' => nil,
 		'sort' => 'date desc',
 		'per_page' => 10,
@@ -58,7 +72,7 @@ module Config
 			'lowercase' => true
 		},
 		'templates' => {
-			'location' => 'pages',
+			'location' => nil,
 			'generate' => []
 		}
 	}.freeze
@@ -95,7 +109,6 @@ module Config
 			},
 			'items' => 'posts',
 			'templates' => {
-				'location' => 'pages',
 				'generate' => []
 			}
 		}

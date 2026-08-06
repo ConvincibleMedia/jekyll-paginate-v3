@@ -253,9 +253,9 @@ class Model
 		target_collection = collection_target_for_page(template, target_mode)
 
 		case target_mode
-		when 'pages'
+		when Config::COLLECTION_TARGET_PAGES
 			Pages::Page.new(template, current_page, total_pages, index_file)
-		when 'shadow'
+		when Config::COLLECTION_TARGET_SHADOW
 			Pages::ShadowPage.new(
 				template,
 				current_page,
@@ -281,7 +281,7 @@ class Model
 	# Resolves one normalised collection mode for a generated page number.
 	def collection_target_mode_for_page(template, config, current_page)
 		targets = Utils.arrayify(config['collection']).map(&:to_s).map(&:strip).reject(&:empty?)
-		targets = ['self', 'shadow'] if targets.empty?
+		targets = [Config::COLLECTION_TARGET_SELF, Config::COLLECTION_TARGET_SHADOW] if targets.empty?
 		target = current_page == 1 ? targets.first : targets.last
 
 		normalise_collection_target_for_template(template, target)
@@ -290,11 +290,11 @@ class Model
 	# Resolves one collection object for collection-targeted modes.
 	def collection_target_for_page(template, target_mode)
 		case target_mode
-		when 'self'
+		when Config::COLLECTION_TARGET_SELF
 			return template.collection if collection_template?(template)
-		when 'clone'
+		when Config::COLLECTION_TARGET_CLONE
 			return clone_collection_for(template.collection) if collection_template?(template)
-		when 'pages', 'shadow'
+		when Config::COLLECTION_TARGET_PAGES, Config::COLLECTION_TARGET_SHADOW
 			return nil
 		end
 
@@ -304,13 +304,13 @@ class Model
 	# Converts abstract target modes to executable runtime modes.
 	def normalise_collection_target_for_template(template, target_mode)
 		value = target_mode.to_s.strip
-		value = 'pages' if value.empty?
-		return value unless %w[self shadow clone].include?(value)
-		return 'pages' unless collection_template?(template)
-		return value if value == 'self'
-		return value if value == 'clone'
+		value = Config::COLLECTION_TARGET_PAGES if value.empty?
+		return value unless [Config::COLLECTION_TARGET_SELF, Config::COLLECTION_TARGET_SHADOW, Config::COLLECTION_TARGET_CLONE].include?(value)
+		return Config::COLLECTION_TARGET_PAGES unless collection_template?(template)
+		return value if value == Config::COLLECTION_TARGET_SELF
+		return value if value == Config::COLLECTION_TARGET_CLONE
 
-		'shadow'
+		Config::COLLECTION_TARGET_SHADOW
 	end
 
 	# Returns true when a template is a collection document.
@@ -365,7 +365,8 @@ class Model
 			@site.config['defaults'] << clone_entry
 		end
 
-		@site.frontmatter_defaults.reset if @site.respond_to?(:frontmatter_defaults)
+		frontmatter_defaults = @site.frontmatter_defaults if @site.respond_to?(:frontmatter_defaults)
+		frontmatter_defaults.reset if frontmatter_defaults.respond_to?(:reset)
 	end
 
 	# Attaches a compact neighbourhood of page links around each generated
@@ -437,7 +438,7 @@ class Model
 			@generated_index_sets[set_id] ||= []
 			@generated_index_sets[set_id] << {
 				'pages' => generated_pages,
-				'count' => generated_pages.first.pager.total_items,
+				'count' => generated_pages.first.pager.total_item_count,
 				'start' => metadata['start'],
 				'end' => metadata['end'],
 				'order' => metadata['order'].to_i,

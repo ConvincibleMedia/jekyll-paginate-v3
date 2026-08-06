@@ -149,7 +149,7 @@ class PaginationGenerator < Jekyll::Generator
 	# Converts a generated-template destination location into readable text.
 	def generated_template_location_label(collection_targets)
 		targets = Utils.arrayify(collection_targets).map(&:to_s).map(&:strip).reject(&:empty?)
-		targets = ['pages'] if targets.empty?
+		targets = [Config::COLLECTION_TARGET_PAGES] if targets.empty?
 		return target_label(targets.first) if targets.length == 1
 
 		"page1=#{target_label(targets.first)} page2+=#{target_label(targets[1])}"
@@ -157,7 +157,7 @@ class PaginationGenerator < Jekyll::Generator
 
 	# Converts one collection target token to a readable log label.
 	def target_label(target)
-		return 'pages (site root)' if target == 'pages'
+		return 'pages (site root)' if target == Config::COLLECTION_TARGET_PAGES
 
 		"collection '#{target}'"
 	end

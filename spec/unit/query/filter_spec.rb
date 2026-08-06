@@ -274,6 +274,25 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Query::Filter do
 		expect(filtered).to eq([items[1], items[2]])
 	end
 
+	it 'uses only renamed now and today keywords for range filters' do
+		current_time = DateTime.now
+		start_of_today = DateTime.new(current_time.year, current_time.month, current_time.day, 0, 0, 0, current_time.offset)
+		items = [
+			build_item({ 'title' => 'Today', 'published_at' => (start_of_today + Rational(43_200, 86_400)).iso8601 }),
+			build_item({ 'title' => 'Tomorrow', 'published_at' => (start_of_today + 1 + Rational(43_200, 86_400)).iso8601 })
+		]
+
+		aliased_today = apply_filters(items, { 'published_at' => { 'max' => 'daystart' } }, today_keyword: 'daystart')
+		released_today = apply_filters(items, { 'published_at' => { 'max' => 'today' } }, today_keyword: 'daystart')
+		aliased_now = apply_filters(items, { 'published_at' => { 'max' => 'currenttime + 86400' } }, now_keyword: 'currenttime')
+		released_now = apply_filters(items, { 'published_at' => { 'max' => 'now + 86400' } }, now_keyword: 'currenttime')
+
+		expect(aliased_today).to eq([items.first])
+		expect(released_today).to eq(items)
+		expect(aliased_now).to eq([items.first])
+		expect(released_now).to eq(items)
+	end
+
 	it 'supports now keyword offsets in whole seconds' do
 		current_time = DateTime.now
 		items = [

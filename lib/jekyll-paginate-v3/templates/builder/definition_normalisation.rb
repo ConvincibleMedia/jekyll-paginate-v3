@@ -45,32 +45,29 @@ class Builder
 		entries
 	end
 
-	# Normalises one collection target and coerces template-relative keywords.
+	# Normalises one generated-template collection target. Generated templates
+	# have no source collection, so all collection-mode keywords become pages.
 	def normalise_collection_entry(raw_entry)
 		entry = raw_entry.to_s.strip
 		return '' if entry.empty?
 
-		pages_keyword = @site_config.dig('keywords', 'pages').to_s
-		self_keyword = @site_config.dig('keywords', 'self').to_s
-		shadow_keyword = @site_config.dig('keywords', 'shadow').to_s
-		clone_keyword = @site_config.dig('keywords', 'clone').to_s
+		return Config::COLLECTION_TARGET_PAGES if Config::COLLECTION_TARGET_BY_KEY.value?(entry)
 
-		return 'pages' if entry == pages_keyword || entry.casecmp('pages').zero?
-		return 'pages' if entry == self_keyword || entry.casecmp('self').zero?
-		return 'pages' if entry == shadow_keyword || entry.casecmp('shadow').zero?
-		return 'pages' if entry == clone_keyword || entry.casecmp('clone').zero?
+		Config::COLLECTION_TARGET_BY_KEY.each do |key, _internal_target|
+			return Config::COLLECTION_TARGET_PAGES if entry == @site_config.dig('keywords', key).to_s
+		end
 
 		entry
 	end
 
 	# Resolves default generated-template collection targets from site defaults.
 	#
-	# `self`, `shadow`, and `clone` are template-relative modes and therefore
-	# become `pages` during template generation.
+	# Template-relative modes become the internal pages target during template
+	# generation because a generated template has no source collection.
 	def default_generation_collection
 		raw_collection = @site_config['collection']
 		entries = Utils.arrayify(raw_collection).map { |entry| entry.to_s.strip }.reject(&:empty?)
-		entries = ['pages'] if entries.empty?
+		entries = [Config::COLLECTION_TARGET_PAGES] if entries.empty?
 		if entries.length > 2
 			raise ArgumentError, 'pagination.collection may contain at most two values.'
 		end

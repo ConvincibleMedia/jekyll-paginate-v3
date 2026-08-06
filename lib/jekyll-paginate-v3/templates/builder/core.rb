@@ -100,7 +100,7 @@ class Builder
 		pagination_config['enabled'] = true
 
 		first_target = definition['template_collection'].first
-		if first_target == 'pages'
+		if first_target == Config::COLLECTION_TARGET_PAGES
 			Templates::PageTemplate.new(
 				site: @site,
 				pagination_config: pagination_config,

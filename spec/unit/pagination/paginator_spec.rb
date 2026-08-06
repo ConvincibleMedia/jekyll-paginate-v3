@@ -40,7 +40,9 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Pagination::Paginator do
 		]
 		payload = paginator.to_h
 
-		expect(paginator.items).to eq([3, 4])
+		expect(payload['posts']).to eq([3, 4])
+		expect(payload).not_to have_key('items')
+		expect(payload).not_to have_key('total_items')
 		expect(payload['total_indexes']).to eq(3)
 		expect(payload['current'].num).to eq(2)
 		expect(payload['current'].page).to be_nil

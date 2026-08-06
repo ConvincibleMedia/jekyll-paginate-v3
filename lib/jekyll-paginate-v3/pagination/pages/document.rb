@@ -88,7 +88,10 @@ class Document < Jekyll::Document
 		end
 
 		data.default_proc = proc do |_, key|
-			site.frontmatter_defaults.find(relative_path, type, key)
+			# Jekyll 3 does not expose `type` as a public Document method, while
+			# Jekyll 4 does. The internal type is set immediately above and works
+			# consistently with both supported Jekyll versions.
+			site.frontmatter_defaults.find(relative_path, @type, key)
 		end
 	end
 end

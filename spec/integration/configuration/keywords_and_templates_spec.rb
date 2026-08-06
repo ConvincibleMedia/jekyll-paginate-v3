@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 RSpec.describe 'Pagination integration: configuration options' do
-	it 'adds custom paginator item aliases from keywords.items' do
+	it 'replaces paginator item keys from keywords.items' do
 		files = jekyll_merge(
 			post_files(2),
 			jekyll_files do
@@ -37,7 +37,8 @@ RSpec.describe 'Pagination integration: configuration options' do
 		) do |site,|
 			payload = paginator_payload(page_by_url(site, '/'))
 
-			expect(payload).to include('items', 'entries', 'total_items', 'total_entries')
+			expect(payload).to include('entries', 'total_entries')
+			expect(payload).not_to include('items', 'total_items')
 			expect(payload.fetch('entries').map { |item| item.data.fetch('title') }).to eq(['Post 01', 'Post 02'])
 		end
 	end
@@ -108,6 +109,50 @@ RSpec.describe 'Pagination integration: configuration options' do
 			expect(blog_page.data['paginator']).not_to be_nil
 			expect(docs_page.data['paginator']).to be_nil
 			expect(page_by_url(site, '/docs/page/2/')).to be_nil
+		end
+	end
+
+	it 'finds templates in a collection released by a renamed pages keyword' do
+		files = jekyll_merge(
+			post_files(1),
+			collection_document(
+				'pages',
+				'listing.md',
+				pagination_template_frontmatter(
+					'permalink' => '/collection-listing/',
+					'pagination' => {
+						'enabled' => true,
+						'items' => 'posts',
+						'per_page' => 50,
+						'sort' => 'title asc'
+					}
+				),
+				'Template content'
+			)
+		)
+
+		jekyll_build(
+			default_site,
+			config: {
+				'collections' => {
+					'pages' => { 'output' => true }
+				},
+				'pagination' => {
+					'enabled' => true,
+					'keywords' => {
+						'pages' => 'sitepages'
+					},
+					'templates' => {
+						'location' => 'pages'
+					}
+				}
+			},
+			files: files
+		) do |site,|
+			template = document_by_url(site, 'pages', '/collection-listing/')
+
+			expect(template).not_to be_nil
+			expect(paginator_item_titles(template)).to eq(['Post 01'])
 		end
 	end
 
@@ -196,4 +241,3 @@ RSpec.describe 'Pagination integration: configuration options' do
 		end
 	end
 end
-

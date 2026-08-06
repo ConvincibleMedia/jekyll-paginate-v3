@@ -28,7 +28,7 @@ class Model
 		@nested_separator = site_config.dig('syntax', 'separator')
 		@split_delimiter = site_config.dig('syntax', 'split')
 		@equivalents = site_config['equivalents']
-		@item_keyword = site_config.dig('keywords', 'items') || 'items'
+		@item_keyword = site_config.dig('keywords', 'items') || Config::KEYWORD_DEFAULTS.fetch('items')
 		@generated_index_sets = {}
 		@clone_collection_cache = {}
 		@template_search_reports = []
@@ -490,13 +490,13 @@ class Model
 		[Utils.item_collection_label(item).to_s, Utils.relative_item_path(item)]
 	end
 
-	# Resolves one parsed search entry (`pages`, collection label, etc).
+	# Resolves one parsed search entry (a private source type or collection label).
 	def resolve_entry(entry)
 		type = entry['type']
 		paths = entry['paths']
 		source_items = source_items_for_entry_type(type)
 		if source_items.nil?
-			log("Search entry type='#{type}' did not match pages/all/everything or a known collection; resolved 0 items.", 'warn')
+			log("Search entry type='#{type}' did not match a configured search keyword or known collection; resolved 0 items.", 'warn')
 			return []
 		end
 
@@ -512,11 +512,11 @@ class Model
 	# Resolves source items for one parsed search entry type.
 	def source_items_for_entry_type(type)
 		case type
-		when 'pages'
+		when Query::Parser::SEARCH_TYPE_PAGES
 			@item_resolution_pages || @site.pages
-		when 'all'
+		when Query::Parser::SEARCH_TYPE_ALL
 			all_collection_documents
-		when 'everything'
+		when Query::Parser::SEARCH_TYPE_EVERYTHING
 			(@item_resolution_pages || @site.pages) + all_collection_documents
 		else
 			return @item_resolution_documents_by_collection[type] if @item_resolution_documents_by_collection&.key?(type)

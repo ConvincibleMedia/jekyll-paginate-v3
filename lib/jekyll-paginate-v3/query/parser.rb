@@ -17,7 +17,16 @@ module Query
 # sources into concrete site items.
 class Parser
 
-	CANONICAL_TYPES = %w[pages all everything].freeze
+	# Internal search-source identifiers. Keeping them distinct from collection
+	# labels means changing a keyword genuinely releases its former label.
+	SEARCH_TYPE_PAGES = '__paginate_v3_search_pages__'.freeze
+	SEARCH_TYPE_ALL = '__paginate_v3_search_all__'.freeze
+	SEARCH_TYPE_EVERYTHING = '__paginate_v3_search_everything__'.freeze
+	SEARCH_TYPE_BY_KEY = {
+		'pages' => SEARCH_TYPE_PAGES,
+		'all' => SEARCH_TYPE_ALL,
+		'everything' => SEARCH_TYPE_EVERYTHING
+	}.freeze
 
 	# Parses a search definition into an array of normalised entries.
 	#
@@ -112,13 +121,13 @@ class Parser
 			end
 		end
 
-		# Maps configurable keyword aliases (`pages`, `all`, `everything`)
-		# to their canonical internal type.
+		# Maps only configured keyword aliases to internal search-source types.
+		# The former keyword remains an ordinary collection label after a rename.
 		def canonical_type(type, keywords)
 			string_type = type.to_s.strip
-			return 'pages' if string_type == 'pages' || string_type == keywords['pages']
-			return 'all' if string_type == 'all' || string_type == keywords['all']
-			return 'everything' if string_type == 'everything' || string_type == keywords['everything']
+			SEARCH_TYPE_BY_KEY.each do |key, internal_type|
+				return internal_type if string_type == keywords[key]
+			end
 
 			string_type
 		end

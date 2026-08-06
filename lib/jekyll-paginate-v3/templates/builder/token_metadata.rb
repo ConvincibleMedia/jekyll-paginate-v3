@@ -194,9 +194,9 @@ class Builder
 		labels = []
 		Query::Parser.parse(raw_items, @site_config['keywords'], split_delimiter: @split_delimiter).each do |entry|
 			case entry['type']
-			when 'all', 'everything'
+			when Query::Parser::SEARCH_TYPE_ALL, Query::Parser::SEARCH_TYPE_EVERYTHING
 				labels.concat(@site.collections.keys)
-			when 'pages'
+			when Query::Parser::SEARCH_TYPE_PAGES
 				# pages do not map to collections
 			else
 				labels << entry['type'] if @site.collections.key?(entry['type'])

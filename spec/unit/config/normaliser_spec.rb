@@ -31,7 +31,10 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
 			expect(config.dig('keywords', 'now')).to eq('now')
 			expect(config.dig('keywords', 'today')).to eq('today')
 			expect(config.dig('templates', 'location')).to eq('pages')
-			expect(config['collection']).to eq(%w[self shadow])
+			expect(config['collection']).to eq([
+				Jekyll::Plugins::PaginateV3::Config::COLLECTION_TARGET_SELF,
+				Jekyll::Plugins::PaginateV3::Config::COLLECTION_TARGET_SHADOW
+			])
 			expect(config.dig('templates', 'generate')).to be_an(Array)
 			expect(config.dig('templates', 'generate').length).to eq(1)
 		end
@@ -156,7 +159,7 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
 			)
 
 			expect(config['items']).to eq('products')
-			expect(config['collection']).to eq(['pages'])
+			expect(config['collection']).to eq([Jekyll::Plugins::PaginateV3::Config::COLLECTION_TARGET_PAGES])
 			expect(config['filters']).to include(
 				'category' => 'explicit-category',
 				'tag' => 'legacy-tag'
@@ -215,7 +218,10 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
 				}
 			)
 
-			expect(config['collection']).to eq(%w[pages clone])
+			expect(config['collection']).to eq([
+				Jekyll::Plugins::PaginateV3::Config::COLLECTION_TARGET_PAGES,
+				Jekyll::Plugins::PaginateV3::Config::COLLECTION_TARGET_CLONE
+			])
 		end
 
 		it 'promotes legacy nested template defaults to top-level defaults' do
@@ -229,7 +235,7 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
 				}
 			)
 
-			expect(config['collection']).to eq(['pages'])
+			expect(config['collection']).to eq([Jekyll::Plugins::PaginateV3::Config::COLLECTION_TARGET_PAGES])
 			expect(config['per_page']).to eq(4)
 		end
 
@@ -256,7 +262,39 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
 				}
 			)
 
-			expect(config['collection']).to eq(%w[self shadow])
+			expect(config['collection']).to eq([
+				Jekyll::Plugins::PaginateV3::Config::COLLECTION_TARGET_SELF,
+				Jekyll::Plugins::PaginateV3::Config::COLLECTION_TARGET_SHADOW
+			])
+		end
+
+		it 'uses only renamed collection-mode keywords and releases their former collection labels' do
+			keyword_aliases = {
+				'pages' => 'sitepages',
+				'self' => 'sourcecollection',
+				'shadow' => 'hiddenpage',
+				'clone' => 'copiedcollection'
+			}
+
+			keyword_aliases.each do |keyword, alternative|
+				aliased_config = described_class.normalise_site_config(
+					'pagination' => {
+						'enabled' => true,
+						'keywords' => keyword_aliases,
+						'collection' => alternative
+					}
+				)
+				released_config = described_class.normalise_site_config(
+					'pagination' => {
+						'enabled' => true,
+						'keywords' => keyword_aliases,
+						'collection' => keyword
+					}
+				)
+
+				expect(aliased_config['collection']).to eq([Jekyll::Plugins::PaginateV3::Config::COLLECTION_TARGET_BY_KEY.fetch(keyword)])
+				expect(released_config['collection']).to eq([keyword])
+			end
 		end
 
 		it 'normalises group shorthand and slugify mode shorthand' do
@@ -297,7 +335,10 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
 			)
 
 			expect(config['separator']).to eq(':')
-			expect(config['collection']).to eq(%w[clone pages])
+			expect(config['collection']).to eq([
+				Jekyll::Plugins::PaginateV3::Config::COLLECTION_TARGET_CLONE,
+				Jekyll::Plugins::PaginateV3::Config::COLLECTION_TARGET_PAGES
+			])
 			expect(config.dig('filters', 'author:name')).to eq('Alice')
 		end
 
@@ -370,7 +411,7 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
 
 			expect(config['items']).to eq('posts')
 			expect(config['per_page']).to eq(3)
-			expect(config['collection']).to eq(['pages'])
+			expect(config['collection']).to eq([Jekyll::Plugins::PaginateV3::Config::COLLECTION_TARGET_PAGES])
 			expect(config['group']).to eq([
 				{ 'on' => 'size', 'size' => 100, 'filter' => { 'min' => 10 } },
 				{ 'on' => 'tag' }

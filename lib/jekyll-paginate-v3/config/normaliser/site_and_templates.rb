@@ -58,7 +58,8 @@ class Normaliser
 			config['equivalents'] = normalise_equivalents(config['equivalents'], split_delimiter)
 			config['templates'] = normalise_templates(
 				config['templates'],
-				split_delimiter: split_delimiter
+				split_delimiter: split_delimiter,
+				keywords: config['keywords']
 			)
 
 			normalised_template_defaults = normalise_template_defaults(
@@ -188,13 +189,15 @@ class Normaliser
 		# Connects to: the surrounding pagination flow in this file.
 		# Params: `raw_templates`, `split_delimiter`.
 		# Returns: a value consumed by the next pipeline step.
-		def normalise_templates(raw_templates, split_delimiter:)
+		def normalise_templates(raw_templates, split_delimiter:, keywords:)
 			defaults = Utils.deep_copy(DEFAULTS['templates'])
 			source_hash = Utils.safe_hash(raw_templates)
 			source = defaults.merge(source_hash)
 			source.delete('defaults')
 
-			source['location'] = defaults['location'] if source['location'].nil? || source['location'].to_s.strip.empty?
+			# Default to the currently configured site-pages keyword so changing it
+			# does not make the default location collide with a collection label.
+			source['location'] = keywords['pages'] if source['location'].nil? || source['location'].to_s.strip.empty?
 			source['generate'] = if source['generate'].is_a?(Array)
 										source['generate'].map { |entry| Utils.safe_hash(entry) }
 									elsif source['generate'].is_a?(Hash)
@@ -344,7 +347,7 @@ class Normaliser
 		def normalise_collection_targets(raw_collection, split_delimiter:, keywords:)
 			default_targets = Utils.deep_copy(DEFAULTS['collection'])
 			entries = Utils.delimited_array(raw_collection, delimiter: split_delimiter)
-			entries = Utils.deep_copy(default_targets) if entries.empty?
+			return default_targets if entries.empty?
 
 			normalised = entries.map do |entry|
 				normalise_collection_target_entry(entry, keywords)
@@ -363,20 +366,11 @@ class Normaliser
 			entry = raw_entry.to_s.strip
 			return '' if entry.empty?
 
-			keyword_map = {
-				'pages' => keywords['pages'],
-				'self' => keywords['self'],
-				'shadow' => keywords['shadow'],
-				'clone' => keywords['clone']
-			}
-
-			keyword_map.each do |canonical, keyword|
+			COLLECTION_TARGET_BY_KEY.each do |key, internal_target|
+				keyword = keywords[key]
 				next if keyword.to_s.empty?
-				return canonical if entry == keyword
+				return internal_target if entry == keyword
 			end
-
-			canonical = entry.downcase
-			return canonical if %w[pages self shadow clone].include?(canonical)
 
 			entry
 		end

@@ -202,6 +202,38 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Templates::GroupedIndex do
 		expect(entries[1].dig('values', 'published_on')).to include('2028-01-01')
 	end
 
+	it 'uses only renamed datetime duration keywords' do
+		keywords = {
+			'day' => 'dayunit',
+			'month' => 'monthunit',
+			'year' => 'yearunit',
+			'hour' => 'hourunit',
+			'minute' => 'minuteunit',
+			'second' => 'secondunit'
+		}
+		items = [build_item({ 'published_at' => '2026-01-02T00:00:00+00:00' })]
+
+		keywords.each do |former_keyword, alternative|
+			expect do
+				build_entries(
+					key: 'published_at',
+					group: { 'start' => '2026-01-01T00:00:00+00:00', 'step' => alternative, 'total' => 1 },
+					items: items,
+					keywords: keywords
+				)
+			end.not_to raise_error
+
+			expect do
+				build_entries(
+					key: 'published_at',
+					group: { 'start' => '2026-01-01T00:00:00+00:00', 'step' => former_keyword, 'total' => 1 },
+					items: items,
+					keywords: keywords
+				)
+			end.to raise_error(ArgumentError)
+		end
+	end
+
 	it 'rejects invalid numeric grow factors outside supported bounds' do
 		items = [
 			build_item({ 'size' => 100 })
