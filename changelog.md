@@ -1,10 +1,13 @@
 # Changelog
 
-## 0.1.0.alpha.3
+## 0.1.0.alpha.4
 
 In progress.
 
+## 0.1.0.alpha.3
+
 * Synethetic filenames are now more meaningful to aid with debugging.
+* Bugfix: keyword changes now work.
 
 ## 0.1.0.alpha.2
 
