@@ -203,11 +203,12 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
 			expect(categories_definition).not_to be_nil
 			expect(categories_definition['layouts']).to eq(%w[category-a.html category-b.html])
 			expect(categories_definition.dig('frontmatter', 'title')).to eq('Category :cat')
+			expect(categories_definition['items']).to eq('collections')
 			expect(categories_definition).not_to have_key('silent')
 
 			expect(collections_definition).not_to be_nil
 			expect(collections_definition['layouts']).to eq(['autopage_collection.html'])
-			expect(collections_definition['items']).to eq('all')
+			expect(collections_definition['items']).to eq('collections')
 		end
 
 		it 'normalises collection targets from delimited strings' do

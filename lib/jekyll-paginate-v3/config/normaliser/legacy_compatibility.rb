@@ -72,26 +72,28 @@ class Normaliser
 			autopages = Utils.safe_hash(raw_autopages)
 			return if autopages.empty? || autopages['enabled'] == false
 
+			# Use the effective search keyword because compatibility profiles may rename `all` and release the original word for use as a collection label.
+			all_items_keyword = config.dig('keywords', 'all')
 			migrated = []
 
 			migrated.concat(migrate_v2_autopage_group(
 												raw_group: autopages['tags'],
 												index_key: 'tag',
-												items: 'all',
+												items: all_items_keyword,
 												defaults: V2_AUTOPAGE_DEFAULTS['tags'],
 												split_delimiter: config.dig('syntax', 'split')
 											))
 			migrated.concat(migrate_v2_autopage_group(
 												raw_group: autopages['categories'],
 												index_key: 'category',
-												items: 'all',
+												items: all_items_keyword,
 												defaults: V2_AUTOPAGE_DEFAULTS['categories'],
 												split_delimiter: config.dig('syntax', 'split')
 											))
 			migrated.concat(migrate_v2_autopage_group(
 												raw_group: autopages['collections'],
 												index_key: 'collection',
-												items: 'all',
+												items: all_items_keyword,
 												defaults: V2_AUTOPAGE_DEFAULTS['collections'],
 												split_delimiter: config.dig('syntax', 'split')
 											))
