@@ -2,9 +2,16 @@
 
 Jekyll Paginate V3 is a build-time pagination engine for Jekyll. It discovers pagination templates in the site's content graph, resolves the content selected by each template, and replaces those templates with navigable index pages or collection documents.
 
-The project extends the model established by earlier Jekyll pagination plugins while treating filtering, sorting, grouping, generated templates, layouts, and output destinations as parts of one coherent pipeline. Compatibility layers for V1 and V2 are kept at defined boundaries rather than shaping the core runtime.
-
-This page is an architectural orientation to the repository. For installation, configuration, Liquid data, and examples, see the [README](../readme.md).
+* Hand-authored or configuration-generated pagination templates.
+* Items sourced from pages, named collections, all collections, or path-filtered combinations.
+* Nested-frontmatter filtering with exact, array, regex, existence, range, date/time, include/exclude, and AND/OR matching.
+* Stable multi-field sorting, with configurable direction and empty-value placement.
+* Single- or multi-level grouping by unique values, alphabetic ranges, numeric ranges, or date/time periods, with group navigation.
+* Fixed or variable page sizes, plus limits, offsets, page trails, and complete first/previous/next/last navigation metadata.
+* Configurable titles, permalinks, slugification, multiple layouts, and alternate output formats.
+* Index output as pages, source-collection documents, shadow pages, named-collection documents, or cloned collections.
+* Layered site, layout, and template configuration with custom syntax, keywords, and equivalent frontmatter keys.
+* Compatibility modes for `jekyll-paginate` V1 and `jekyll-paginate-v2`.
 
 
 ## Conceptual model
@@ -16,17 +23,6 @@ The pipeline works with five main concepts:
 * A **variant** is a concrete expansion of a template for a particular group and layout combination.
 * An **index** is an emitted page or document containing one window of selected items. The first index replaces its source template; later indexes extend the set.
 * A **paginator** is the Liquid-facing object attached to each index. It exposes that index's items and its relationships to the rest of the set.
-
-At a high level, each Jekyll build follows this sequence:
-
-1. Normalise site configuration into the internal V3 form.
-2. Create any configured in-memory templates.
-3. Snapshot the site's candidate items so emitted indexes cannot feed back into later item searches.
-4. Discover templates and merge their site, layout, and local configuration.
-5. Expand each template into its grouped and layout-specific variants.
-6. Resolve, filter, sort, offset, and limit the items for each variant.
-7. Divide the result into page windows and emit the corresponding Jekyll objects.
-8. Connect paginator navigation, trails, and grouped-set relationships after the relevant indexes exist.
 
 
 ## Architecture
