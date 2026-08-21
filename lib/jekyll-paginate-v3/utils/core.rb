@@ -79,6 +79,18 @@ module Utils
 		layouts.map { |entry| entry.to_s.strip }.reject(&:empty?).uniq
 	end
 
+	# Returns a Jekyll layout key while preserving nested layout directories
+	# and accepting an optional filename extension on the final segment.
+	def self.normalise_layout_name(value)
+		layout_name = value.to_s.strip
+		return layout_name if layout_name.empty?
+
+		extension = File.extname(layout_name)
+		return layout_name if extension.empty?
+
+		layout_name[0...-extension.length]
+	end
+
 	# Merges generated-template pagination config with layout pagination.
 	#
 	# Default behaviour matches normal Jekyll precedence semantics: generated template config overrides layout defaults.

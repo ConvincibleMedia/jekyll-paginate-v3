@@ -16,7 +16,8 @@ class Model
 		item_exclusions = pagination_item_exclusions_for_template(template)
 		variants = expand_template_variants(template, config, template_pagination_source: template_pagination_source, item_exclusions: item_exclusions)
 		if variants.empty?
-			log("Template '#{Utils.relative_item_path(template)}': grouping/layout expansion produced no variants.", 'debug')
+			@remove_item_lambda.call(template)
+			log("Template '#{Utils.relative_item_path(template)}': grouping/layout expansion produced no variants; consumed template without emitting indexes.", 'debug')
 			return {
 				'paginated_items' => 0,
 				'indexes' => 0
@@ -68,17 +69,7 @@ class Model
 			resolve_items_lambda: lambda { |raw_search| resolve_items(raw_search, exclude_items: item_exclusions) },
 			log_lambda: @active_log_lambda
 		)
-		variants = expander.expand
-		return variants unless variants.empty?
-
-		template.data['pagination'] = merged_template_pagination_config(template, template_pagination_source)
-
-		[
-			{
-				'template' => template,
-				'config' => config
-			}
-		]
+		expander.expand
 	end
 
 	# Runs pagination for one already-expanded template variant.

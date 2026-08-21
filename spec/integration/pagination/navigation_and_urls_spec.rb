@@ -36,7 +36,8 @@ RSpec.describe 'Pagination integration: navigation, URLs, and trails' do
 			expect(page_one).not_to be_nil
 			expect(page_two).not_to be_nil
 
-			expect(output_files.list).to include('articles/index.html', 'articles/slice/2/feed.json')
+			expect(output_file?(output_files, 'articles/index.html')).to be(true)
+			expect(output_file?(output_files, 'articles/slice/2/feed.json')).to be(true)
 			expect(page_one.data.fetch('title')).to eq('News')
 			expect(page_two.data.fetch('title')).to eq('News [page 2/2]')
 			expect(paginator_reference_url(page_one, 'next')).to eq('/articles/slice/2/feed.json')
@@ -171,7 +172,7 @@ RSpec.describe 'Pagination integration: navigation, URLs, and trails' do
 			page_two = page_by_url(site, '/2/')
 			expect(page_two).not_to be_nil
 
-			page_two_output = output_files.list.find { |relative_path| relative_path.match?(%r{\A2(?:/index)?\.html\z}) }
+			page_two_output = %w[2.html 2/index.html].find { |relative_path| output_file?(output_files, relative_path) }
 			expect(page_two_output).not_to be_nil
 
 			rendered = output_files.read(page_two_output)

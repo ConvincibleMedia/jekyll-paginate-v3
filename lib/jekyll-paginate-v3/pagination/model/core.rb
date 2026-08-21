@@ -321,10 +321,11 @@ class Model
 	def find_layout(layout_name)
 		layout = @site.layouts[layout_name]
 		return layout unless layout.nil?
-		return nil unless layout_name.include?('.')
 
-		basename = File.basename(layout_name, File.extname(layout_name))
-		@site.layouts[basename]
+		normalised_layout_name = Utils.normalise_layout_name(layout_name)
+		return nil if normalised_layout_name == layout_name
+
+		@site.layouts[normalised_layout_name]
 	end
 
 	# Resolves template compatibility mode from local and site config.

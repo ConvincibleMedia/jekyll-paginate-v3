@@ -531,8 +531,7 @@ class VariantExpander
 	def apply_layout_override!(template, layout_name)
 		return if layout_name.nil? || layout_name.to_s.strip.empty?
 
-		layout_value = layout_name.to_s
-		layout_value = File.basename(layout_value, File.extname(layout_value))
+		layout_value = Utils.normalise_layout_name(layout_name)
 		data = Utils.safe_hash(template.data)
 		data['layout'] = layout_value
 		replace_template_data!(template, data)
