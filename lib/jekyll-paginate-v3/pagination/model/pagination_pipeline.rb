@@ -66,6 +66,7 @@ class Model
 			template_pagination_source: template_pagination_source,
 			merge_template_pagination_lambda: method(:merged_template_pagination_config),
 			normalise_template_config_lambda: lambda { |pagination| Config::Normaliser.normalise_template_config(@site_config, pagination) },
+			validate_template_config_lambda: method(:validate_required_template_config!),
 			resolve_items_lambda: lambda { |raw_search| resolve_items(raw_search, exclude_items: item_exclusions) },
 			log_lambda: @active_log_lambda
 		)
@@ -99,7 +100,8 @@ class Model
 			config['sort'],
 			nested_separator: nested_separator,
 			equivalents: @equivalents,
-			split_delimiter: split_delimiter
+			split_delimiter: split_delimiter,
+			instructions: config['_sort_instructions']
 		)
 		log("Template '#{template_path}': sorted #{sorted_items.length} item(s) by #{config['sort']} before offset.", 'debug')
 		log_item_path_sample("Template '#{template_path}': sorted item sample", sorted_items)

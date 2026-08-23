@@ -4,46 +4,85 @@ module Jekyll
 module Plugins
 module PaginateV3
 
-# Token and placeholder formatting helpers.
-#
-# Used by paginator and generated-index code to substitute placeholders
-# in URLs and page titles.
+# Placeholder formatting helpers shared by pagination and template expansion.
 module Utils
 
-	# Replaces `:num` and optionally `:max` placeholders.
-	def self.format_page_number(pattern, current_page, max_pages = nil)
-		output = pattern.to_s.sub(':num', current_page.to_i.to_s)
-		output = output.sub(':max', max_pages.to_i.to_s) unless max_pages.nil?
-		output
+	# Resolves page-number placeholders through the shared placeholder pipeline.
+	def self.format_page_number(pattern, current_page, max_pages = nil, slugifier: nil)
+		values = {
+			'num' => placeholder_value(current_page.to_i)
+		}
+		values['max'] = placeholder_value(max_pages.to_i) unless max_pages.nil?
+
+		parsed_pattern = if pattern.is_a?(Support::PlaceholderTemplate)
+							pattern
+						else
+							placeholder_template(
+								pattern,
+								allowed: %w[num max],
+								context: 'pagination permalink'
+							)
+						end
+		parsed_pattern.render(values, default_representation: :raw, slugifier: slugifier, unresolved: :error)
 	end
 
-	# Replaces `:title` and numeric placeholders in title patterns.
-	def self.format_page_title(pattern, title, current_page = nil, max_pages = nil)
-		format_page_number(pattern.to_s.sub(':title', title.to_s), current_page, max_pages)
+	# Resolves title and page-number placeholders in one non-recursive pass.
+	def self.format_page_title(pattern, title, current_page = nil, max_pages = nil, slugifier: nil)
+		values = {
+			'title' => placeholder_value(title),
+			'num' => placeholder_value(current_page.to_i)
+		}
+		values['max'] = placeholder_value(max_pages.to_i) unless max_pages.nil?
+
+		parsed_pattern = if pattern.is_a?(Support::PlaceholderTemplate)
+							pattern
+						else
+							placeholder_template(
+								pattern,
+								allowed: %w[title num max],
+								context: 'pagination title'
+							)
+						end
+		parsed_pattern.render(values, default_representation: :raw, slugifier: slugifier, unresolved: :error)
 	end
 
-	# Replaces placeholders in a string where keys are in `token_map`.
-	#
-	# Replacement is done in one pass using a longest-key-first matcher so
-	# overlapping placeholders stay deterministic, for example `:foob`
-	# always wins over `:foo` in `:foobar`.
+	# Compatibility wrapper for callers with one raw token map. Both supported
+	# syntaxes still use the central parser and opaque value binding.
 	def self.replace_tokens(template, token_map)
-		output = template.to_s
 		token_source = token_map.is_a?(Hash) ? token_map : {}
 		normalised_token_map = token_source.each_with_object({}) do |(raw_key, value), memo|
 			key = raw_key.to_s
 			next if key.empty?
 
-			memo[key] = value.to_s
+			memo[key] = placeholder_value(value)
 		end
-		return output if normalised_token_map.empty?
+		return template.to_s if normalised_token_map.empty?
 
-		sorted_keys = normalised_token_map.keys.sort_by { |key| [-key.length, key] }
-		token_pattern = /:(#{sorted_keys.map { |key| Regexp.escape(key) }.join('|')})/
+		placeholder_template(
+			template,
+			allowed: normalised_token_map.keys,
+			context: 'token replacement'
+		).render(normalised_token_map, default_representation: :raw)
+	end
 
-		output.gsub(token_pattern) do
-			normalised_token_map[Regexp.last_match(1)]
-		end
+	# Builds one parser instance for callers that need partial or structural
+	# binding rather than an immediately rendered string.
+	def self.placeholder_template(pattern, allowed:, context:, unknown: Support::PlaceholderTemplate::UNKNOWN_ERROR)
+		Support::PlaceholderTemplate.parse(
+			pattern,
+			allowed: allowed,
+			context: context,
+			unknown: unknown
+		)
+	end
+
+	# Wraps one scalar in the representation-aware placeholder value type.
+	def self.placeholder_value(raw, slugified: nil, raw_available: true)
+		Support::PlaceholderTemplate::Value.new(
+			raw: raw,
+			slugified: slugified,
+			raw_available: raw_available
+		)
 	end
 end
 

@@ -44,7 +44,7 @@ pagination:
     on: category
 ```
 
-In the expanded form this allow syou to specify additionally:
+In the expanded form this allows you to specify additionally:
 
 * `on`: frontmatter key to group on (as before)
 * `bunch`: optional Bunched Grouping (see below)
@@ -88,11 +88,12 @@ The order of groups is determined by the sorting order of the frontmatter key th
 By default, grouping is *per unique value* for the frontmatter keys specified. With Bunched Grouping, the frontmatter values are first gathered into bunches of certain ranges of values. The bunch becomes the group, and pagination occurs in each bunch.
 
 ```yaml
-group:
-  on: size # numeric frontmatter key
-  bunch: 100 # gather 'size' into bunches of 100
-  permalink: /size/:size/
-  title: 'Size up to :size'
+pagination:
+  group:
+    on: size # numeric frontmatter key
+    bunch: 100 # gather 'size' into bunches of 100
+  permalink: "/size/{{ size }}/"
+  title: "Size up to {{ size }}"
 ```
 
 The above would produce index groups where `0 <= size <= 100`, `100 < size <= 200`, etc.
@@ -165,20 +166,20 @@ bunch:
 Items that have a value that isn't alphabetical, e.g. numerical, are discarded. However if you set the `other` key they will instead be grouped into an "other" set with the name you give (in the example above, the "other" set is named "0-9").
 
 
-## Permalinks
+## Titles, Permalinks and Sorting
 
 When you `group` pagination, the `title` and `permalink` each gain additional placeholders for the values of the frontmatter keys on which you grouped.
 
 `permalink` is treated differently when Grouping is active, being defined in two parts separated by a space. Only the first part gains the additional placeholders.
 
-For instance if you group on `category, subcategory` then `title` and `permalink` both gain a `:category` and `:subcategory` placeholder.
+For instance if you group on `category, subcategory` then `title` and the grouped part of `permalink` gain `{{ category }}` and `{{ subcategory }}` placeholders.
 
 ```yaml
 pagination:
   items: products
   group: category, subcategory
-  title: :title
-  permalink: :category/:subcategory page/:num
+  title: "{{ title }}"
+  permalink: "{{ category }}/{{ subcategory }} page/{{ num }}"
 ```
 
 * The first part of `permalink` becomes the actual permalink of the templates that are generated for each group. 
@@ -192,8 +193,19 @@ pagination:
   pagination:
     items: products
     group: category, subcategory
-    title: :title
-    permalink: page/:num # only 1 part defined
+    title: "{{ title }}"
+    permalink: "page/{{ num }}" # only 1 part defined
   ```
 
-  In the above, the first part is implicitly set to `:category/:subcategory`.
+  In the above, the first part is implicitly set to `{{ category }}/{{ subcategory }}`.
+
+The same exact group keys are available in `sort` fields:
+
+```yaml
+pagination:
+  items: products
+  group: data.meta.category
+  sort: "details.{{ data.meta.category }}.name asc"
+```
+
+The placeholder is resolved once from the current group and defaults to its slugified representation. Use `{{ data.meta.category | raw }}` to address a key containing the unmodified group value.

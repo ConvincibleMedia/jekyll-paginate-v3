@@ -141,7 +141,7 @@ RSpec.describe 'Pagination integration: generated templates in pages' do
 
 			expect(cased_slug_page).not_to be_nil
 			expect(lowercase_slug_page).to be_nil
-			expect(cased_slug_page.data.fetch('title')).to eq('Topic API-Guides')
+			expect(cased_slug_page.data.fetch('title')).to eq('Topic API Guides')
 			expect(paginator_item_titles(cased_slug_page)).to eq(['Post 01'])
 		end
 	end
@@ -239,6 +239,89 @@ RSpec.describe 'Pagination integration: generated templates in pages' do
 			expect(paginator_trail_numbers(first_page)).to eq([1, 2])
 			expect(paginator_trail_numbers(second_page)).to eq([1, 2])
 			expect(output_files.read('section/guides/index.html')).to include('Generated body for guides')
+		end
+	end
+
+	it 'uses exact dotted group placeholders in canonical titles, permalinks, and slugified sort paths' do
+		files = post_files(2) do |index|
+			{
+				'meta' => { 'category' => 'Old Shoes' },
+				'details' => {
+					'old-shoes' => { 'rank' => index == 1 ? 20 : 10 }
+				}
+			}
+		end
+
+		jekyll_build(
+			default_site,
+			config: {
+				'pagination' => {
+					'enabled' => true,
+					'items' => 'posts',
+					'templates' => {
+						'generate' => [
+							{
+								'group' => 'meta.category',
+								'sort' => 'details.{{ meta.category }}.rank asc',
+								'frontmatter' => {
+									'layout' => 'listing',
+									'permalink' => '/dynamic/{{ meta.category }}/',
+									'title' => '{{ meta.category }} / {{ meta.category | slugify }}'
+								}
+							}
+						]
+					}
+				}
+			},
+			files: files
+		) do |site,|
+			page = page_by_url(site, '/dynamic/old-shoes/')
+
+			expect(page).not_to be_nil
+			expect(page.data.fetch('title')).to eq('Old Shoes / old-shoes')
+			expect(page.data.fetch('pagination')).not_to include('_placeholder_templates', '_sort_instructions')
+			expect(paginator_item_titles(page)).to eq(['Post 02', 'Post 01'])
+		end
+	end
+
+	it 'keeps raw grouped sort values containing the nested separator atomic' do
+		files = post_files(2) do |index|
+			{
+				'meta' => { 'category' => 'old.shoes' },
+				'details' => {
+					'old.shoes' => { 'rank' => index == 1 ? 20 : 10 }
+				}
+			}
+		end
+
+		jekyll_build(
+			default_site,
+			config: {
+				'pagination' => {
+					'enabled' => true,
+					'syntax' => { 'split' => '|' },
+					'items' => 'posts',
+					'templates' => {
+						'generate' => [
+							{
+								'group' => 'meta.category',
+								'sort' => 'details.{{ meta.category | raw }}.rank asc',
+								'frontmatter' => {
+									'layout' => 'listing',
+									'permalink' => '/raw-sort/{{ meta.category }}/',
+									'title' => 'Raw {{ meta.category }}'
+								}
+							}
+						]
+					}
+				}
+			},
+			files: files
+		) do |site,|
+			page = page_by_url(site, '/raw-sort/old-shoes/')
+
+			expect(page).not_to be_nil
+			expect(paginator_item_titles(page)).to eq(['Post 02', 'Post 01'])
 		end
 	end
 end

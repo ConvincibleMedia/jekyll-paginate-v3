@@ -21,6 +21,10 @@ class FrontmatterPath
 
 	# Splits one configured path into non-blank segments.
 	def self.split_path(path, separator = DEFAULT_SEPARATOR)
+		if path.is_a?(Array)
+			return path.map { |segment| segment.to_s.strip }.reject(&:empty?)
+		end
+
 		path.to_s.split(separator.to_s).map(&:strip).reject(&:empty?)
 	end
 
@@ -65,12 +69,17 @@ class FrontmatterPath
 
 	# Resolves the effective key present in one hash for the requested
 	# path-so-far.
-	def self.resolve_hash_key(hash, requested_key_path, equivalent_lookup, separator: DEFAULT_SEPARATOR)
+	def self.resolve_hash_key(hash, requested_key_path, equivalent_lookup, separator: DEFAULT_SEPARATOR, requested_segment: nil)
 		string_key_path = requested_key_path.to_s.strip
 		return nil if string_key_path.empty?
 
-		group = equivalent_lookup[string_key_path] || [string_key_path]
-		candidate_segments = group.map { |candidate_path| split_path(candidate_path, separator).last }.reject(&:empty?).uniq
+		configured_group = equivalent_lookup[string_key_path]
+		candidate_segments = if configured_group.nil?
+									[requested_segment.nil? ? split_path(string_key_path, separator).last : requested_segment.to_s]
+								else
+									configured_group.map { |candidate_path| split_path(candidate_path, separator).last }
+								end
+		candidate_segments = candidate_segments.reject(&:empty?).uniq
 
 		candidate_segments.reverse_each do |candidate|
 			return candidate if hash.key?(candidate)
@@ -139,7 +148,7 @@ class FrontmatterPath
 		return nil if segments.empty?
 
 		nodes = [data]
-		segments.each_with_index do |_, segment_index|
+		segments.each_with_index do |segment, segment_index|
 			next_nodes = []
 			requested_key_path = segments.first(segment_index + 1).join(separator.to_s)
 
@@ -150,7 +159,13 @@ class FrontmatterPath
 				end
 				next unless node.is_a?(Hash)
 
-				resolved_key = self.class.resolve_hash_key(node, requested_key_path, equivalent_lookup, separator: separator)
+				resolved_key = self.class.resolve_hash_key(
+					node,
+					requested_key_path,
+					equivalent_lookup,
+					separator: separator,
+					requested_segment: segment
+				)
 				next if resolved_key.nil?
 
 				next_nodes << self.class.read_hash(node, resolved_key)

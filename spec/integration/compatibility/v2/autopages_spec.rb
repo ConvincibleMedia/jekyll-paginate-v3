@@ -56,13 +56,13 @@ RSpec.describe 'Pagination integration: v2 autopages migration' do
 			expect(guides_collection_page).not_to be_nil
 			expect(page_by_url(site, '/legacy-collection/notes/')).to be_nil
 
-			expect(ruby_tag_page.data.fetch('title')).to eq('Legacy tag ruby-gems')
+			expect(ruby_tag_page.data.fetch('title')).to eq('Legacy tag Ruby Gems')
 			expect(ruby_tag_page.data.fetch('autogen')).to eq('jekyll-paginate-v2')
 			expect(ruby_tag_page.data.fetch('autopages')).to include('key' => 'tag', 'value' => 'ruby-gems', 'display_name' => 'Ruby Gems')
 			expect(ruby_tag_page.data.fetch('tag')).to eq('ruby-gems')
 			expect(paginator_item_titles(ruby_tag_page)).to eq(['Post 02', 'Post 01'])
 
-			expect(news_category_page.data.fetch('title')).to eq('Legacy category news')
+			expect(news_category_page.data.fetch('title')).to eq('Legacy category News')
 			expect(news_category_page.data.fetch('autopages')).to include('key' => 'category', 'value' => 'news', 'display_name' => 'News')
 			expect(news_category_page.data.fetch('category')).to eq('news')
 			expect(paginator_item_titles(news_category_page)).to eq(['Post 03', 'Post 01'])

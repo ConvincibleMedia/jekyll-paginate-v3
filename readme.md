@@ -102,8 +102,8 @@ pagination:
   offset: 0 # skip first x items (after sorting)
   trail: 5 # see Trail below
   
-  title: ':title - :num' # title set on index pages
-  permalink: :num # relative to the template's permalink
+  title: "{{ title }} - {{ num }}" # title set on index pages
+  permalink: "{{ num }}" # relative to the template's permalink
   slugify: # how strings are slugified in permalink
     mode: default
     lowercase: true
@@ -269,15 +269,21 @@ See [Grouping](/docs/group.md) for detailed readme about this feature.
 
 ### Title and Permalink
 
-The `title` and `permalink` config keys determine the title/URL of index pages produced from the template. Each can use the placeholder `:num` for the page number, while the `title` value also accepts `:title` for the original template title.
+The `title` and `permalink` config keys determine the title/URL of index pages produced from the template. Each can use `{{ num }}` for the page number and `{{ max }}` for the total number of pages, while `title` also accepts `{{ title }}` for the original template title.
 
 Page 1 always inherits the title/permalink from the template directly, i.e. it doesn't use these formats. They apply to pages 2+.
 
-The permalink is resolved relative to the permalink of the template. So `permalink: page/:num` on a template located at `/news` would produce `news` as page 1, and `news/page/2` as page 2, etc.
+The permalink is resolved relative to the permalink of the template. So `permalink: "page/{{ num }}"` on a template located at `/news` would produce `news` as page 1, and `news/page/2` as page 2, etc.
+
+### Placeholders
+
+Certain configuration values can use placeholders like `{{ title }}` and `{{ num }}`. Depending on the context, the value of the placeholder will be automatically slugified. You can force slugification, or force it not to happen, with `{{ placeholder | slugify }}` or `{{ placeholder | raw }}`.
+
+The `{{placeholder}}` syntax is different from that used in V2 (`:placeholder`). The new syntax is less ambiguous. However, the old colon syntax is in fact still supported and can still be used (though it is discouraged).
 
 #### Slugify
 
-When strings need to appear in the `permalink` URL they will be slugified. This can be controlled with the `slugify` config:
+The style of slugification can be controlled with the `slugify` config:
 
 ```yaml
 pagination:

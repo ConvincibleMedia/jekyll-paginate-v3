@@ -15,7 +15,7 @@ module Templates
 class VariantExpander
 
 	# Builds an expander for one template and its normalised pagination config.
-	def initialize(site:, site_config:, template:, template_config:, template_pagination_source:, merge_template_pagination_lambda:, normalise_template_config_lambda:, resolve_items_lambda:, log_lambda:)
+	def initialize(site:, site_config:, template:, template_config:, template_pagination_source:, merge_template_pagination_lambda:, normalise_template_config_lambda:, validate_template_config_lambda:, resolve_items_lambda:, log_lambda:)
 		@site = site
 		@site_config = site_config
 		@template = template
@@ -23,6 +23,7 @@ class VariantExpander
 		@template_pagination_source = Utils.safe_hash(template_pagination_source)
 		@merge_template_pagination_lambda = merge_template_pagination_lambda
 		@normalise_template_config_lambda = normalise_template_config_lambda
+		@validate_template_config_lambda = validate_template_config_lambda
 		@resolve_items_lambda = resolve_items_lambda
 		@log_lambda = log_lambda
 		@equivalents = site_config['equivalents']
@@ -136,6 +137,7 @@ class VariantExpander
 
 			level_info = {
 				'key' => key,
+				'raw_available' => group.key?('raw_available') ? !!group['raw_available'] : true,
 				'order' => group['order'].to_i.positive? ? group['order'].to_i : (group_index + 1),
 				'start' => group.key?('start') ? group['start'] : group['display_name'],
 				'end' => group['end'],
@@ -258,6 +260,7 @@ class VariantExpander
 			{
 				'token' => group['token'],
 				'display_name' => group['display_name'],
+				'raw_available' => group['raw_values'].length == 1,
 				'filter_value' => group['raw_values'].length == 1 ? group['raw_values'].first : group['raw_values'],
 				'items' => group['items'].uniq
 			}
@@ -288,8 +291,18 @@ class VariantExpander
 
 		layout_entries.each do |layout_name|
 			layout_state = layout_variant_state(base_template_snapshot, layout_name)
+			# Required settings must be checked after the selected layout chain has contributed its defaults.
+			@validate_template_config_lambda.call(@template, layout_state['config'])
 			with_template_config(layout_state['config']) do
 				group_entries = Utils.arrayify(layout_state['config']['group']).map { |entry| Utils.safe_hash(entry) }.reject(&:empty?)
+				group_keys = group_entries.map { |group_entry| group_entry['on'].to_s.strip }.reject(&:empty?)
+				validate_placeholder_config!(layout_state['config'], group_keys)
+				Query::Sorter.validate_placeholders!(
+					layout_state['config']['sort'],
+					group_keys: group_keys,
+					split_delimiter: @active_split_delimiter,
+					context: "sort for template '#{Utils.relative_item_path(@template)}'"
+				)
 				grouped_entries = build_group_entries(filtered_items_for_grouping, group_entries)
 				next if grouped_entries.empty?
 
@@ -304,16 +317,22 @@ class VariantExpander
 						slugify_config: Utils.safe_hash(variant_config['slugify']),
 						compatibility_mode: variant_config['compatibility']
 					)
+					group_placeholder_values = build_group_placeholder_values(entry, token_maps)
 
 					grouped_permalink = grouped_permalink_state(variant_template, variant_config, entry)
 					grouped_template_permalink = if grouped_permalink.nil?
 														nil
 													else
-														Utils.replace_tokens(grouped_permalink['template_permalink'], token_maps['permalink'])
+														resolve_group_placeholders(
+															grouped_permalink['template_permalink'],
+															group_placeholder_values,
+															default_representation: :slugify,
+															context: 'grouped template permalink'
+														)
 													end
 					apply_token_overrides_to_template!(
 						variant_template,
-						token_maps,
+						group_placeholder_values,
 						grouped_template_permalink: grouped_template_permalink
 					)
 					apply_group_metadata_to_template!(
@@ -325,22 +344,22 @@ class VariantExpander
 					)
 
 					variant_config['filters'] = Utils.deep_copy(variant_config['filters']).merge(entry['filters'])
-					variant_config['title'] = Utils.replace_tokens(variant_config['title'], token_maps['title'])
-					if grouped_permalink.nil?
-						variant_config['permalink'] = Utils.replace_tokens(variant_config['permalink'], token_maps['permalink'])
-					else
+					unless grouped_permalink.nil?
 						variant_config['permalink'] = grouped_permalink['page2_permalink'].to_s
 						variant_config['page_templates'] = apply_grouped_page2_permalink_template(
 							variant_config['page_templates'],
 							variant_config['permalink']
 						)
 					end
-					variant_config['page_templates'] = tokenised_page_templates(
-						variant_config['page_templates'],
-						token_maps,
-						fallback_title: variant_config['title'],
-						fallback_permalink: variant_config['permalink'],
-						replace_page2_permalink_tokens: grouped_permalink.nil?
+					bind_variant_config_placeholders!(variant_config, group_placeholder_values)
+					variant_config['_sort_instructions'] = Query::Sorter.parse(
+						variant_config['sort'],
+						split_delimiter: @active_split_delimiter,
+						nested_separator: @active_nested_separator,
+						group_keys: group_keys,
+						group_values: group_placeholder_values,
+						structural: true,
+						context: "sort for template '#{Utils.relative_item_path(@template)}'"
 					)
 					variant_config['group'] = []
 					variant_config['layouts'] = []
@@ -356,6 +375,60 @@ class VariantExpander
 		end
 
 		variants
+	end
+
+	# Validates every placeholder-bearing scalar before item-dependent group
+	# expansion so empty sites cannot conceal configuration errors.
+	def validate_placeholder_config!(config, group_keys)
+		presentation_group_keys = group_keys.dup
+		if config['compatibility'] == 'v2'
+			presentation_group_keys << 'cat' if (group_keys & %w[category categories]).any?
+			presentation_group_keys << 'tag' if (group_keys & %w[tag tags]).any?
+			presentation_group_keys << 'coll' if group_keys.include?('collection')
+		end
+		presentation_group_keys.uniq!
+
+		Utils.placeholder_template(
+			config['title'],
+			allowed: presentation_group_keys + %w[title num max],
+			context: 'pagination title'
+		)
+
+		permalink = config['permalink'].to_s
+		Utils.placeholder_template(
+			permalink,
+			allowed: presentation_group_keys + %w[num max],
+			context: 'pagination permalink'
+		)
+		first_part, second_part = split_grouped_permalink_definition(permalink)
+		if group_keys.empty?
+			validate_placeholder_scalar!(permalink, %w[num max], 'pagination permalink')
+		elsif first_part.nil?
+			validate_placeholder_scalar!(second_part, %w[num max], 'grouped page permalink')
+		else
+			validate_placeholder_scalar!(first_part, presentation_group_keys, 'grouped template permalink')
+			validate_placeholder_scalar!(second_part, %w[num max], 'grouped page permalink')
+		end
+
+		data = Utils.safe_hash(@template.data)
+		validate_placeholder_scalar!(data['title'], presentation_group_keys, 'grouped template title') if data['title'].is_a?(String)
+		validate_placeholder_scalar!(data['permalink'], presentation_group_keys, 'grouped template permalink') if data['permalink'].is_a?(String)
+		if @template.respond_to?(:content)
+			Utils.placeholder_template(
+				@template.content.to_s,
+				allowed: presentation_group_keys,
+				context: 'grouped template content',
+				unknown: Support::PlaceholderTemplate::UNKNOWN_PRESERVE
+			)
+		end
+	end
+
+	def validate_placeholder_scalar!(pattern, allowed, context)
+		Utils.placeholder_template(
+			pattern,
+			allowed: allowed,
+			context: context
+		)
 	end
 
 	# Resolves grouped permalink part1/part2 behaviour from docs:
@@ -418,7 +491,7 @@ class VariantExpander
 	# Two parts: `part1 part2`
 	# One part: treated as `part2` only (`part1` is nil)
 	def split_grouped_permalink_definition(raw_permalink)
-		parts = raw_permalink.to_s.strip.split(/\s+/, 2).map { |part| part.to_s.strip }
+		parts = Support::PlaceholderTemplate.split_whitespace(raw_permalink.to_s.strip, limit: 2).map { |part| part.to_s.strip }
 		if parts.length >= 2
 			[parts[0], parts[1]]
 		elsif parts.length == 1 && !parts[0].empty?
@@ -431,17 +504,21 @@ class VariantExpander
 	# Prepends grouped placeholders that are missing from permalink part1.
 	def prepend_missing_group_placeholders(first_part, group_keys, compatibility_mode:)
 		part1 = first_part.to_s.strip
-		present_keys = matched_placeholder_keys(part1, group_keys, compatibility_mode: compatibility_mode)
-		missing_placeholders = group_keys.reject { |key| present_keys.include?(key) }.map { |key| ":#{key}" }
+		placeholder_state = matched_placeholder_state(part1, group_keys, compatibility_mode: compatibility_mode)
+		missing_keys = group_keys.reject { |key| placeholder_state['keys'].include?(key) }
+		placeholder_style = placeholder_state['style'] == :legacy ? :legacy : :canonical
+		missing_placeholders = missing_keys.map do |key|
+			placeholder_style == :legacy ? ":#{key}" : "{{ #{key} }}"
+		end
 		return part1 if missing_placeholders.empty?
 
 		join_permalink_segments(missing_placeholders.join('/'), part1)
 	end
 
 	# Detects grouped placeholders already present in a permalink part.
-	def matched_placeholder_keys(permalink_part, group_keys, compatibility_mode:)
+	def matched_placeholder_state(permalink_part, group_keys, compatibility_mode:)
 		keys = group_keys.map(&:to_s).reject(&:empty?).uniq
-		return [] if keys.empty?
+		return { 'keys' => [], 'style' => nil } if keys.empty?
 
 		token_to_key = keys.each_with_object({}) { |key, map| map[key] = key }
 		if compatibility_mode == 'v2'
@@ -449,9 +526,17 @@ class VariantExpander
 			token_to_key['coll'] = 'collection' if keys.include?('collection')
 		end
 
-		sorted_tokens = token_to_key.keys.sort_by { |token| [-token.length, token] }
-		placeholder_pattern = /:(#{sorted_tokens.map { |token| Regexp.escape(token) }.join('|')})/
-		permalink_part.to_s.scan(placeholder_pattern).flatten.map { |token| token_to_key[token] }.uniq
+		allowed = token_to_key.keys + %w[num max]
+		parsed = Utils.placeholder_template(
+			permalink_part,
+			allowed: allowed,
+			context: 'grouped permalink'
+		)
+		matched_keys = parsed.placeholder_names.map { |name| token_to_key[name] }.compact.uniq
+		{
+			'keys' => matched_keys,
+			'style' => parsed.style
+		}
 	end
 
 	# Joins two permalink fragments with exactly one slash separator.
@@ -490,7 +575,10 @@ class VariantExpander
 	# emitted indexes can expose the resolved config under `page.pagination`.
 	def apply_variant_pagination_payload!(template, variant_config)
 		data = Utils.safe_hash(template.data)
-		data['pagination'] = Utils.deep_copy(variant_config)
+		public_config = Utils.deep_copy(variant_config)
+		public_config.delete('_placeholder_templates')
+		public_config.delete('_sort_instructions')
+		data['pagination'] = public_config
 		replace_template_data!(template, data)
 	end
 
@@ -508,20 +596,37 @@ class VariantExpander
 		template.content = snapshot.content.to_s if template.respond_to?(:content=)
 	end
 
-	# Applies placeholder replacement on template frontmatter values.
-	def apply_token_overrides_to_template!(template, token_maps, grouped_template_permalink: nil)
+	# Resolves group placeholders on template frontmatter and content through the
+	# shared parser. Unknown Liquid expressions in content are left for Jekyll.
+	def apply_token_overrides_to_template!(template, group_values, grouped_template_permalink: nil)
 		data = Utils.safe_hash(template.data)
 
 		if data['title'].is_a?(String)
-			data['title'] = Utils.replace_tokens(data['title'], token_maps['title'])
+			data['title'] = resolve_group_placeholders(
+				data['title'],
+				group_values,
+				default_representation: :raw,
+				context: 'grouped template title'
+			)
 		end
 		if grouped_template_permalink.is_a?(String)
 			data['permalink'] = grouped_template_permalink
 		elsif data['permalink'].is_a?(String)
-			data['permalink'] = Utils.replace_tokens(data['permalink'], token_maps['permalink'])
+			data['permalink'] = resolve_group_placeholders(
+				data['permalink'],
+				group_values,
+				default_representation: :slugify,
+				context: 'grouped template permalink'
+			)
 		end
 		if template.respond_to?(:content=)
-			template.content = Utils.replace_tokens(template.content.to_s, token_maps['title'])
+			template.content = resolve_group_placeholders(
+				template.content.to_s,
+				group_values,
+				default_representation: :raw,
+				context: 'grouped template content',
+				unknown: Support::PlaceholderTemplate::UNKNOWN_PRESERVE
+			)
 		end
 
 		replace_template_data!(template, data)
@@ -583,7 +688,7 @@ class VariantExpander
 		end
 	end
 
-	# Builds title/permalink token maps for grouped placeholders.
+	# Builds the two group-value representations used by placeholders.
 	def build_token_maps(entry, slugify_config:, compatibility_mode:)
 		levels = Utils.arrayify(entry['levels'])
 		values = Utils.safe_hash(entry['values'])
@@ -604,7 +709,7 @@ class VariantExpander
 			title_tokens[key] = if configured_token_values.key?('title')
 									configured_token_values['title'].to_s
 								else
-									slugified_value
+									value.to_s
 								end
 			permalink_tokens[key] = if configured_token_values.key?('permalink')
 										configured_token_values['permalink'].to_s
@@ -623,6 +728,33 @@ class VariantExpander
 			'permalink' => permalink_tokens,
 			'compatibility' => compatibility_tokens
 		}
+	end
+
+	# Combines raw and slugified token maps into typed placeholder values.
+	def build_group_placeholder_values(entry, token_maps)
+		raw_availability = Utils.arrayify(entry['levels']).each_with_object({}) do |level, memo|
+			level_hash = Utils.safe_hash(level)
+			memo[level_hash['key'].to_s] = level_hash.fetch('raw_available', true)
+		end
+		values = token_maps['title'].keys.each_with_object({}) do |key, memo|
+			source_key = case key
+							when 'cat'
+								raw_availability.key?('category') ? 'category' : 'categories'
+							when 'tag'
+								raw_availability.key?('tag') ? 'tag' : 'tags'
+							when 'coll'
+								'collection'
+							else
+								key
+							end
+			raw_available = raw_availability.fetch(source_key, true)
+			memo[key] = Utils.placeholder_value(
+				token_maps['title'][key],
+				slugified: token_maps['permalink'][key],
+				raw_available: raw_available
+			)
+		end
+		values
 	end
 
 	# Applies v2 legacy token aliases (`:coll`, `:cat`, `:tag`).
@@ -675,7 +807,7 @@ class VariantExpander
 	def build_page_templates(page2_title, page2_permalink)
 		{
 			'page1' => {
-				'title' => ':title',
+				'title' => '{{ title }}',
 				'permalink' => ''
 			},
 			'page2' => {
@@ -685,24 +817,87 @@ class VariantExpander
 		}
 	end
 
-	# Applies grouped placeholder tokens to configured page templates while
-	# preserving any custom v1/v2 compatibility overrides.
-	def tokenised_page_templates(raw_page_templates, token_maps, fallback_title:, fallback_permalink:, replace_page2_permalink_tokens: true)
-		page_templates = Utils.safe_hash(raw_page_templates)
+	# Parses and partially binds all pagination patterns once for the variant.
+	# Deferred page values remain as nodes for the page-emission phase.
+	def bind_variant_config_placeholders!(variant_config, group_values)
+		group_keys = group_values.keys
+		bound_templates = {}
+
+		bound_templates['title'] = bind_group_template(
+			variant_config['title'],
+			group_values,
+			allowed: group_keys + %w[title num max],
+			default_representation: :raw,
+			context: 'pagination title'
+		)
+		variant_config['title'] = bound_templates['title'].to_s
+
+		bound_templates['permalink'] = bind_group_template(
+			variant_config['permalink'],
+			group_values,
+			allowed: %w[num max],
+			default_representation: :slugify,
+			context: 'pagination permalink'
+		)
+		variant_config['permalink'] = bound_templates['permalink'].to_s
+
+		page_templates = Utils.safe_hash(variant_config['page_templates'])
 		if page_templates.empty?
-			page_templates = build_page_templates(fallback_title, fallback_permalink)
+			page_templates = build_page_templates(variant_config['title'], variant_config['permalink'])
 		end
+		bound_templates['page_templates'] = {}
 
 		%w[page1 page2].each do |key|
 			template = Utils.safe_hash(page_templates[key])
-			template['title'] = Utils.replace_tokens(template['title'], token_maps['title']) if template['title'].is_a?(String)
-			if template['permalink'].is_a?(String)
-				template['permalink'] = Utils.replace_tokens(template['permalink'], token_maps['permalink']) if key != 'page2' || replace_page2_permalink_tokens
-			end
+			bound_title = bind_group_template(
+				template['title'],
+				group_values,
+				allowed: group_keys + %w[title num max],
+				default_representation: :raw,
+				context: "pagination #{key} title"
+			)
+			bound_permalink = bind_group_template(
+				template['permalink'],
+				group_values,
+				allowed: %w[num max],
+				default_representation: :slugify,
+				context: "pagination #{key} permalink"
+			)
+			template['title'] = bound_title.to_s
+			template['permalink'] = bound_permalink.to_s
 			page_templates[key] = template
+			bound_templates['page_templates'][key] = {
+				'title' => bound_title,
+				'permalink' => bound_permalink
+			}
 		end
 
-		page_templates
+		variant_config['page_templates'] = page_templates
+		variant_config['_placeholder_templates'] = bound_templates
+	end
+
+	# Parses one group-aware scalar and binds only values available at variant
+	# expansion, retaining system placeholders for page emission.
+	def bind_group_template(pattern, group_values, allowed:, default_representation:, context:)
+		Utils.placeholder_template(
+			pattern,
+			allowed: allowed,
+			context: context
+		).bind(group_values, default_representation: default_representation)
+	end
+
+	# Resolves one scalar that has no later placeholder phase.
+	def resolve_group_placeholders(pattern, group_values, default_representation:, context:, unknown: Support::PlaceholderTemplate::UNKNOWN_ERROR)
+		Utils.placeholder_template(
+			pattern,
+			allowed: group_values.keys,
+			context: context,
+			unknown: unknown
+		).render(
+			group_values,
+			default_representation: default_representation,
+			unresolved: :error
+		)
 	end
 
 	# Replaces template data for both pages and documents.

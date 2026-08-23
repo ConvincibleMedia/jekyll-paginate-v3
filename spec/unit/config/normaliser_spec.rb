@@ -419,5 +419,23 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
 			])
 			expect(config['slugify']).to eq({ 'mode' => 'latin', 'lowercase' => true })
 		end
+
+		it 'rejects duplicate normalised group keys' do
+			site_config = described_class.normalise_site_config(
+				'pagination' => {
+					'enabled' => true,
+					'items' => 'posts'
+				}
+			)
+
+			expect do
+				described_class.normalise_template_config(
+					site_config,
+					{
+						'group' => [' meta.category ', { 'on' => 'meta.category' }]
+					}
+				)
+			end.to raise_error(ArgumentError, /Duplicate pagination group key.*meta\.category/)
+		end
 	end
 end

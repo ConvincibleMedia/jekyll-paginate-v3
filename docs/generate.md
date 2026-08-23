@@ -26,7 +26,7 @@ pagination:
 Generated template specifications can also include the keys `frontmatter` and `content`.
 
 * `frontmatter` defines arbitrary frontmatter that will be set on the generated pagination template.
-* `content` defines the Markdown content of the pagination template. Can contain the same placeholders as `title`.
+* `content` defines the Markdown content of the pagination template. When grouping is active, it can contain placeholders for the exact active `group.on` keys. See [Placeholders](/docs/placeholders.md).
 
 
 ## Grouping

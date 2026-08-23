@@ -72,8 +72,6 @@ class Model
 				end
 				next
 			end
-			validate_required_template_config!(template, template_config)
-
 			enabled_templates << [template, template_config, template_pagination_source, template_log_lambda]
 		end
 

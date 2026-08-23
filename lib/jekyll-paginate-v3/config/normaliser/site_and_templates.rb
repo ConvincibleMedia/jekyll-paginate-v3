@@ -382,7 +382,7 @@ class Normaliser
 		def build_page_templates(page2_title, page2_permalink)
 			{
 				'page1' => {
-					'title' => ':title',
+					'title' => '{{ title }}',
 					'permalink' => ''
 				},
 				'page2' => {
@@ -454,7 +454,7 @@ class Normaliser
 		# Preserves legacy `sort_field` + `sort_reverse` behaviour when the
 		# caller did not provide an explicit `sort` override.
 		def normalise_sort(raw_sort, raw_sort_field, raw_sort_reverse, split_delimiter, sort_explicitly_set: false)
-			sort_entries = Utils.arrayify(raw_sort, split_delimiter: split_delimiter).map(&:to_s).map(&:strip).reject(&:empty?)
+			sort_entries = placeholder_aware_sort_entries(raw_sort, split_delimiter)
 			sort_field = raw_sort_field.to_s.strip
 
 			if !sort_explicitly_set && !sort_field.empty?
@@ -466,11 +466,23 @@ class Normaliser
 
 			if sort_field.empty?
 				fallback_sort = DEFAULTS['sort']
-				return Utils.arrayify(fallback_sort, split_delimiter: split_delimiter).map(&:to_s).map(&:strip).reject(&:empty?)
+				return placeholder_aware_sort_entries(fallback_sort, split_delimiter)
 			end
 
 			direction = boolean_config_value(raw_sort_reverse) ? 'desc' : 'asc'
 			["#{sort_field} #{direction}"]
+		end
+
+		# Splits sort lists without treating a canonical placeholder filter pipe
+		# as the configured list separator.
+		def placeholder_aware_sort_entries(raw_sort, split_delimiter)
+			raw_entries = raw_sort.is_a?(Array) ? raw_sort.flatten : [raw_sort]
+			raw_entries.flat_map do |raw_entry|
+				Support::PlaceholderTemplate.split_source(
+					raw_entry,
+					delimiter: split_delimiter
+				)
+			end.map(&:to_s).map(&:strip).reject(&:empty?)
 		end
 
 		# Normalises `pagination.layout` / `pagination.layouts` into a
@@ -499,9 +511,17 @@ class Normaliser
 								[raw_group]
 							end
 
-			raw_entries.map do |raw_entry|
+			entries = raw_entries.map do |raw_entry|
 				normalise_group_entry(raw_entry)
 			end.compact
+
+			keys = entries.map { |entry| entry['on'].to_s }
+			duplicate_keys = keys.group_by(&:itself).select { |_, matches| matches.length > 1 }.keys
+			unless duplicate_keys.empty?
+				raise ArgumentError, "Duplicate pagination group key(s): #{duplicate_keys.sort.join(', ')}. Each `group.on` key must be unique."
+			end
+
+			entries
 		end
 
 		# Normalises legacy `index` + `group` + `filter` config into modern

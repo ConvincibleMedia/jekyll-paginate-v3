@@ -27,4 +27,14 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Utils do
 			expect(output).to eq('/page:foo')
 		end
 	end
+
+	describe 'pagination placeholders' do
+		it 'supports canonical syntax and replaces every occurrence' do
+			expect(described_class.format_page_number('{{ num }}/{{ num }}/{{ max }}', 2, 7)).to eq('2/2/7')
+		end
+
+		it 'does not recursively resolve placeholder syntax introduced by a value' do
+			expect(described_class.format_page_title('{{ title }} {{ num }}', ':num', 3, 3)).to eq(':num 3')
+		end
+	end
 end

@@ -94,9 +94,14 @@ class Model
 	def grouped_set_sort_direction(config, index_key)
 		return 'asc' if index_key.to_s.strip.empty?
 
-		split_delimiter = config.key?('split') ? config['split'] : @split_delimiter
-		sort_instructions = Query::Sorter.parse(config['sort'], split_delimiter: split_delimiter)
-		sort_entry = sort_instructions.find { |entry| entry['field'] == index_key }
+		sort_instructions = config['_sort_instructions']
+		if sort_instructions.nil?
+			split_delimiter = config.key?('split') ? config['split'] : @split_delimiter
+			sort_instructions = Query::Sorter.parse(config['sort'], split_delimiter: split_delimiter)
+		end
+		sort_entry = sort_instructions.find do |entry|
+			(entry['source_field'] || entry['field']) == index_key
+		end
 		return 'asc' if sort_entry.nil?
 
 		sort_entry['direction']
@@ -115,9 +120,15 @@ class Model
 
 	# Applies configured page title templates.
 	def assign_generated_page_title!(generated, template, config, current_page, total_pages)
-		page_template = page_template_config(config, current_page)
 		base_title = template.data['title'] || @site.config['title']
-		generated.data['title'] = Utils.format_page_title(page_template['title'], base_title, current_page, total_pages)
+		pattern = page_placeholder_template(config, current_page, 'title')
+		generated.data['title'] = Utils.format_page_title(
+			pattern,
+			base_title,
+			current_page,
+			total_pages,
+			slugifier: placeholder_slugifier(config)
+		)
 	end
 
 	# Applies configured page permalink templates.
@@ -134,8 +145,13 @@ class Model
 
 	# Resolves one page permalink from page1/page2 template settings.
 	def resolved_page_permalink(template, config, current_page, total_pages)
-		page_template = page_template_config(config, current_page)
-		template_permalink = Utils.format_page_number(page_template['permalink'], current_page, total_pages)
+		pattern = page_placeholder_template(config, current_page, 'permalink')
+		template_permalink = Utils.format_page_number(
+			pattern,
+			current_page,
+			total_pages,
+			slugifier: placeholder_slugifier(config)
+		)
 		return Utils.ensure_leading_slash(template_permalink) if v1_absolute_paginate_path?(config, current_page)
 
 		first_page_url = template_first_page_url(template)
@@ -161,7 +177,7 @@ class Model
 
 		if current_page == 1
 			{
-				'title' => ':title',
+				'title' => '{{ title }}',
 				'permalink' => ''
 			}
 		else
@@ -172,15 +188,42 @@ class Model
 		end
 	end
 
-	# Ensures multi-page pagination outputs include `:num` in page2 permalink
+	# Returns the already-parsed pattern for one page-template field, falling
+	# back to its public scalar for compatibility callers without variant state.
+	def page_placeholder_template(config, current_page, field)
+		key = current_page == 1 ? 'page1' : 'page2'
+		parsed = config.dig('_placeholder_templates', 'page_templates', key, field)
+		return parsed unless parsed.nil?
+
+		page_template_config(config, current_page)[field]
+	end
+
+	# Builds the representation filter used by system values in this template.
+	def placeholder_slugifier(config)
+		slugify = Utils.safe_hash(config['slugify'])
+		mode = slugify['mode'].to_s.strip
+		mode = 'default' if mode.empty?
+		lowercase = !!slugify['lowercase']
+		lambda do |value|
+			Jekyll::Utils.slugify(value.to_s, mode: mode, cased: !lowercase)
+		end
+	end
+
+	# Ensures multi-page pagination outputs include a page-number placeholder
 	# templates so each generated index resolves to a unique destination path.
 	def validate_numbered_permalink_template!(template, config, total_pages)
 		return unless total_pages > 1
 
 		page2_permalink = page_template_config(config, 2)['permalink'].to_s
-		return if page2_permalink.include?(':num')
+		parsed_permalink = page_placeholder_template(config, 2, 'permalink')
+		parsed_permalink = Utils.placeholder_template(
+			page2_permalink,
+			allowed: %w[num max],
+			context: 'pagination page2 permalink'
+		) unless parsed_permalink.is_a?(Support::PlaceholderTemplate)
+		return if parsed_permalink.include_placeholder?('num')
 
-		raise ArgumentError, "Template '#{Utils.relative_item_path(template)}' paginates to #{total_pages} pages but page2 permalink template '#{page2_permalink}' (from `pagination.page_templates.page2.permalink` or fallback `pagination.permalink`) does not include ':num'. Add ':num' so generated indexes have unique permalinks."
+		raise ArgumentError, "Template '#{Utils.relative_item_path(template)}' paginates to #{total_pages} pages but page2 permalink template '#{page2_permalink}' (from `pagination.page_templates.page2.permalink` or fallback `pagination.permalink`) does not include '{{ num }}' or ':num'. Add a page-number placeholder so generated indexes have unique permalinks."
 	end
 
 	# Determines the canonical URL for the first pagination page of a template.
