@@ -140,7 +140,9 @@ class Model
 			return
 		end
 
-		generated.data['permalink'] = resolved_permalink
+		context = "pagination page #{current_page} for template '#{Utils.relative_item_path(template)}'"
+		generated.data['permalink'] = Utils.validate_resolved_permalink!(resolved_permalink, context: context)
+		Utils.validate_output_destination!(generated, site: @site, context: context)
 	end
 
 	# Resolves one page permalink from page1/page2 template settings.

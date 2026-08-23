@@ -163,7 +163,7 @@ RSpec.describe 'Pagination integration: generated templates in pages' do
 								'group' => 'category',
 								'frontmatter' => {
 									'layout' => 'autopage_category',
-									'permalink' => '/languages/{{ category }}/',
+				'permalink' => '/languages/{{ category | slugify }}/',
 									'title' => 'Language {{ category | slugify }}'
 								}
 							}

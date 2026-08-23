@@ -1,17 +1,15 @@
 # Changelog
 
 
-## 0.1.1.alpha.1
+## 0.1.1.alpha
 
 In progress.
-
-
-## 0.1.1.alpha
 
 * Placeholder format updated to `{{ placeholder }}`.
 * Original `:placeholder` format still supported.
 * Placeholder pipeline overhauled and made more robust.
 * Placeholders can control whether they will be slugified or not.
+* **Breaking change**: `slugify` modes refined, and dangerous modes retired
 
 
 ## 0.1.0.alpha.3

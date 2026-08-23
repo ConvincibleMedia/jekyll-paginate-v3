@@ -67,11 +67,12 @@ module Utils
 
 	# Builds one parser instance for callers that need partial or structural
 	# binding rather than an immediately rendered string.
-	def self.placeholder_template(pattern, allowed:, context:, unknown: Support::PlaceholderTemplate::UNKNOWN_ERROR)
+	def self.placeholder_template(pattern, allowed:, context:, allowed_filters: nil, unknown: Support::PlaceholderTemplate::UNKNOWN_ERROR)
 		Support::PlaceholderTemplate.parse(
 			pattern,
 			allowed: allowed,
 			context: context,
+			allowed_filters: allowed_filters,
 			unknown: unknown
 		)
 	end

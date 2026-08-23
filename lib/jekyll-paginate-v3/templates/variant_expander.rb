@@ -325,10 +325,11 @@ class VariantExpander
 													else
 														resolve_group_placeholders(
 															grouped_permalink['template_permalink'],
-															group_placeholder_values,
-															default_representation: :slugify,
-															context: 'grouped template permalink'
-														)
+												group_placeholder_values,
+												default_representation: :slugify,
+												context: 'grouped template permalink',
+												allowed_filters: permalink_placeholder_filters(group_placeholder_values.keys)
+											)
 													end
 					apply_token_overrides_to_template!(
 						variant_template,
@@ -387,6 +388,7 @@ class VariantExpander
 			presentation_group_keys << 'coll' if group_keys.include?('collection')
 		end
 		presentation_group_keys.uniq!
+		permalink_filters = permalink_placeholder_filters(presentation_group_keys)
 
 		Utils.placeholder_template(
 			config['title'],
@@ -398,7 +400,8 @@ class VariantExpander
 		Utils.placeholder_template(
 			permalink,
 			allowed: presentation_group_keys + %w[num max],
-			context: 'pagination permalink'
+			context: 'pagination permalink',
+			allowed_filters: permalink_filters
 		)
 		first_part, second_part = split_grouped_permalink_definition(permalink)
 		if group_keys.empty?
@@ -406,13 +409,13 @@ class VariantExpander
 		elsif first_part.nil?
 			validate_placeholder_scalar!(second_part, %w[num max], 'grouped page permalink')
 		else
-			validate_placeholder_scalar!(first_part, presentation_group_keys, 'grouped template permalink')
+			validate_placeholder_scalar!(first_part, presentation_group_keys, 'grouped template permalink', allowed_filters: permalink_filters)
 			validate_placeholder_scalar!(second_part, %w[num max], 'grouped page permalink')
 		end
 
 		data = Utils.safe_hash(@template.data)
 		validate_placeholder_scalar!(data['title'], presentation_group_keys, 'grouped template title') if data['title'].is_a?(String)
-		validate_placeholder_scalar!(data['permalink'], presentation_group_keys, 'grouped template permalink') if data['permalink'].is_a?(String)
+		validate_placeholder_scalar!(data['permalink'], presentation_group_keys, 'grouped template permalink', allowed_filters: permalink_filters) if data['permalink'].is_a?(String)
 		if @template.respond_to?(:content)
 			Utils.placeholder_template(
 				@template.content.to_s,
@@ -423,11 +426,12 @@ class VariantExpander
 		end
 	end
 
-	def validate_placeholder_scalar!(pattern, allowed, context)
+	def validate_placeholder_scalar!(pattern, allowed, context, allowed_filters: nil)
 		Utils.placeholder_template(
 			pattern,
 			allowed: allowed,
-			context: context
+			context: context,
+			allowed_filters: allowed_filters
 		)
 	end
 
@@ -530,7 +534,8 @@ class VariantExpander
 		parsed = Utils.placeholder_template(
 			permalink_part,
 			allowed: allowed,
-			context: 'grouped permalink'
+			context: 'grouped permalink',
+			allowed_filters: permalink_placeholder_filters(token_to_key.keys)
 		)
 		matched_keys = parsed.placeholder_names.map { |name| token_to_key[name] }.compact.uniq
 		{
@@ -616,7 +621,8 @@ class VariantExpander
 				data['permalink'],
 				group_values,
 				default_representation: :slugify,
-				context: 'grouped template permalink'
+				context: 'grouped template permalink',
+				allowed_filters: permalink_placeholder_filters(group_values.keys)
 			)
 		end
 		if template.respond_to?(:content=)
@@ -878,26 +884,36 @@ class VariantExpander
 
 	# Parses one group-aware scalar and binds only values available at variant
 	# expansion, retaining system placeholders for page emission.
-	def bind_group_template(pattern, group_values, allowed:, default_representation:, context:)
+	def bind_group_template(pattern, group_values, allowed:, default_representation:, context:, allowed_filters: nil)
 		Utils.placeholder_template(
 			pattern,
 			allowed: allowed,
-			context: context
+			context: context,
+			allowed_filters: allowed_filters
 		).bind(group_values, default_representation: default_representation)
 	end
 
 	# Resolves one scalar that has no later placeholder phase.
-	def resolve_group_placeholders(pattern, group_values, default_representation:, context:, unknown: Support::PlaceholderTemplate::UNKNOWN_ERROR)
+	def resolve_group_placeholders(pattern, group_values, default_representation:, context:, allowed_filters: nil, unknown: Support::PlaceholderTemplate::UNKNOWN_ERROR)
 		Utils.placeholder_template(
 			pattern,
 			allowed: group_values.keys,
 			context: context,
+			allowed_filters: allowed_filters,
 			unknown: unknown
 		).render(
 			group_values,
 			default_representation: default_representation,
 			unresolved: :error
 		)
+	end
+
+	# Permalink metadata may explicitly request only its canonical slugified
+	# representation; raw values cannot bypass route-key construction.
+	def permalink_placeholder_filters(placeholder_names)
+		placeholder_names.each_with_object({}) do |name, filters|
+			filters[name.to_s] = ['slugify']
+		end
 	end
 
 	# Replaces template data for both pages and documents.

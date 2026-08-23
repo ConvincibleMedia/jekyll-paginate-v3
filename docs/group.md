@@ -21,7 +21,7 @@ Note that items could end up in multiple groups, for instance if `category` has 
 
 Every group is identified by the [slugified](/readme.md#slugify) form of its value because it corresponds to a generated URL. Values with the same slug intentionally belong to the same group: for example, `C#` and `C++` both produce `c` and therefore share `/languages/c/`. To keep them separate, group on a field containing unique route keys such as `c-sharp` and `c-plus-plus`.
 
-When one slug represents several raw values, placeholders can use the slug but cannot use the `raw` filter because there is no single raw value for the group.
+Group metadata may use the `raw` filter in titles, content and structural sort fields, but never in permalinks. When one slug represents several raw values, the filter is unavailable in every context because there is no single raw value for the group.
 
 
 ### Multi-Level Grouping

@@ -286,6 +286,59 @@ RSpec.describe 'Pagination integration: layout inheritance validation' do
 		end.to raise_error(JekyllTestHarness::SiteBuildError, /Cannot mix canonical/)
 	end
 
+	it 'rejects filters on numeric system placeholders' do
+		files = jekyll_merge(
+			post_files(1),
+			jekyll_files do
+				file 'filtered-number.md' do
+					frontmatter(
+						'title' => 'Filtered number',
+						'pagination' => {
+							'enabled' => true,
+							'items' => 'posts',
+							'title' => 'Page {{ num | slugify }}'
+						}
+					)
+					contents('Filtered number template')
+				end
+			end
+		)
+
+		expect do
+			jekyll_build(default_site, files: files) do |_site,|
+			end
+		end.to raise_error(JekyllTestHarness::SiteBuildError, /Placeholder 'num' does not accept filters in pagination title/)
+	end
+
+	it 'rejects raw group placeholders in permalinks' do
+		files = post_files(1) { { 'category' => 'C#' } }
+
+		expect do
+			jekyll_build(
+				default_site,
+				config: {
+					'pagination' => {
+						'enabled' => true,
+						'items' => 'posts',
+						'templates' => {
+							'generate' => [
+								{
+									'group' => 'category',
+									'frontmatter' => {
+										'permalink' => '/languages/{{ category | raw }}/',
+										'title' => 'Language {{ category }}'
+									}
+								}
+							]
+						}
+					}
+				},
+				files: files
+			) do |_site,|
+			end
+		end.to raise_error(JekyllTestHarness::SiteBuildError, /Placeholder 'category' cannot use the 'raw' filter in grouped template permalink/)
+	end
+
 	it 'rejects raw sort interpolation when several group values share one slug' do
 		files = post_files(2) do |index|
 			{ 'category' => index == 1 ? 'Old Shoes' : 'Old--Shoes' }

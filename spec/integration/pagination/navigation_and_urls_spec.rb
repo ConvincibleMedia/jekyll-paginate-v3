@@ -210,4 +210,33 @@ RSpec.describe 'Pagination integration: navigation, URLs, and trails' do
 			)
 		end
 	end
+
+	it 'rejects unsafe fully resolved pagination permalinks' do
+		files = jekyll_merge(
+			post_files(2),
+			jekyll_files do
+				file 'unsafe-permalink.md' do
+					frontmatter(
+						pagination_template_frontmatter(
+							{
+								'permalink' => '/articles/',
+								'pagination' => {
+									'enabled' => true,
+									'items' => 'posts',
+									'per_page' => 1,
+									'permalink' => 'page/{{ num }}#fragment'
+								}
+							}
+						)
+					)
+					contents('Unsafe permalink template')
+				end
+			end
+		)
+
+		expect do
+			jekyll_build(default_site, files: files) do |_site,|
+			end
+		end.to raise_error(JekyllTestHarness::SiteBuildError, /Invalid resolved permalink.*fragment marker/)
+	end
 end

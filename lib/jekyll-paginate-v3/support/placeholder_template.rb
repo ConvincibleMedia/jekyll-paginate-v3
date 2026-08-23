@@ -13,6 +13,7 @@ module Support
 class PlaceholderTemplate
 
 	FILTERS = %w[raw slugify].freeze
+	FILTERLESS_PLACEHOLDERS = %w[num max].freeze
 	UNKNOWN_ERROR = :error
 	UNKNOWN_PRESERVE = :preserve
 
@@ -71,8 +72,8 @@ class PlaceholderTemplate
 	attr_reader :context, :style
 
 	# Parses one scalar against the placeholders explicitly available there.
-	def self.parse(source, allowed:, context:, unknown: UNKNOWN_ERROR)
-		new(source: source, allowed: allowed, context: context, unknown: unknown)
+	def self.parse(source, allowed:, context:, allowed_filters: nil, unknown: UNKNOWN_ERROR)
+		new(source: source, allowed: allowed, context: context, allowed_filters: allowed_filters, unknown: unknown)
 	end
 
 	# Splits a scalar on one delimiter while protecting canonical expressions.
@@ -154,9 +155,10 @@ class PlaceholderTemplate
 		parts
 	end
 
-	def initialize(source:, allowed:, context:, unknown: UNKNOWN_ERROR, nodes: nil, style: nil)
+	def initialize(source:, allowed:, context:, allowed_filters: nil, unknown: UNKNOWN_ERROR, nodes: nil, style: nil)
 		@source = source.to_s
 		@allowed = allowed.map(&:to_s).reject(&:empty?).uniq
+		@allowed_filters = normalise_allowed_filters(allowed_filters)
 		@context = context.to_s.empty? ? 'placeholder value' : context.to_s
 		@unknown = unknown
 
@@ -205,6 +207,7 @@ class PlaceholderTemplate
 			source: @source,
 			allowed: @allowed,
 			context: @context,
+			allowed_filters: @allowed_filters,
 			unknown: @unknown,
 			nodes: bound_nodes,
 			style: @style
@@ -254,6 +257,7 @@ class PlaceholderTemplate
 				source: '',
 				allowed: @allowed,
 				context: @context,
+				allowed_filters: @allowed_filters,
 				unknown: @unknown,
 				nodes: part_nodes,
 				style: @style
@@ -435,6 +439,37 @@ class PlaceholderTemplate
 		unless FILTERS.include?(filter)
 			raise ArgumentError, "Unsupported placeholder filter '#{filter}' in #{@context}; expected 'raw' or 'slugify'."
 		end
+
+		name = parts.first.to_s
+		permitted_filters = permitted_filters_for(name)
+		return if permitted_filters.include?(filter)
+
+		if permitted_filters.empty?
+			raise ArgumentError, "Placeholder '#{name}' does not accept filters in #{@context}."
+		end
+
+		raise ArgumentError, "Placeholder '#{name}' cannot use the '#{filter}' filter in #{@context}; permitted filters: #{permitted_filters.join(', ')}."
+	end
+
+	# Normalises optional per-placeholder filter capabilities. Numeric system
+	# placeholders remain filterless regardless of caller configuration.
+	def normalise_allowed_filters(raw_allowed_filters)
+		return {} unless raw_allowed_filters.is_a?(Hash)
+
+		raw_allowed_filters.each_with_object({}) do |(raw_name, raw_filters), filters|
+			name = raw_name.to_s
+			next if name.empty?
+
+			filters[name] = Array(raw_filters).map(&:to_s).select { |filter| FILTERS.include?(filter) }.uniq
+		end
+	end
+
+	# Returns filters permitted for one placeholder in this parser context.
+	def permitted_filters_for(name)
+		return [] if FILTERLESS_PLACEHOLDERS.include?(name)
+		return @allowed_filters[name] if @allowed_filters.key?(name)
+
+		FILTERS
 	end
 
 	def append_literal(nodes, text)

@@ -3,11 +3,12 @@
 RSpec.describe Jekyll::Plugins::PaginateV3::Support::PlaceholderTemplate do
 	Value = described_class::Value
 
-	def parse(source, allowed: %w[category num], unknown: described_class::UNKNOWN_ERROR)
+	def parse(source, allowed: %w[category num], allowed_filters: nil, unknown: described_class::UNKNOWN_ERROR)
 		described_class.parse(
 			source,
 			allowed: allowed,
 			context: 'spec pattern',
+			allowed_filters: allowed_filters,
 			unknown: unknown
 		)
 	end
@@ -68,6 +69,27 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Support::PlaceholderTemplate do
 		expect do
 			parse('{{ category | raw | slugify }}')
 		end.to raise_error(ArgumentError, /at most one filter/)
+	end
+
+	it 'rejects every filter on numeric system placeholders' do
+		%w[num max].product(described_class::FILTERS).each do |name, filter|
+			expect do
+				parse("{{ #{name} | #{filter} }}", allowed: %w[num max])
+			end.to raise_error(ArgumentError, /Placeholder '#{name}' does not accept filters/)
+		end
+	end
+
+	it 'enforces context-specific filters for metadata placeholders' do
+		allowed_filters = { 'category' => ['slugify'] }
+		pattern = parse('{{ category | slugify }}', allowed_filters: allowed_filters)
+
+		expect(
+			pattern.render({ 'category' => Value.new(raw: 'Old Shoes') }, default_representation: :slugify)
+		).to eq('old-shoes')
+
+		expect do
+			parse('{{ category | raw }}', allowed_filters: allowed_filters)
+		end.to raise_error(ArgumentError, /Placeholder 'category' cannot use the 'raw' filter/)
 	end
 
 	it 'preserves unknown Liquid output expressions in permissive content' do

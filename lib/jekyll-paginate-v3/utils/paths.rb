@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'digest'
+require 'uri'
 
 module Jekyll
 module Plugins
@@ -10,6 +11,8 @@ module PaginateV3
 #
 # Used by paginator/page generation code to keep output paths stable.
 module Utils
+
+	INVALID_RESOLVED_PERMALINK_CHARACTERS = /[\x00-\x20\x7f\\?#]/.freeze
 	
 	# Removes one leading slash from a path-like string.
 	def self.remove_leading_slash(path)
@@ -50,6 +53,47 @@ module Utils
 		return "#{url}#{extension}" if File.extname(url).empty?
 
 		url
+	end
+
+	# Validates a fully interpolated permalink before Jekyll converts it into an
+	# output destination. Encoded input is decoded repeatedly for structural
+	# checks so nested escaping cannot conceal separators or traversal segments.
+	def self.validate_resolved_permalink!(permalink, context:)
+		value = permalink.to_s
+		description = context.to_s.empty? ? 'pagination output' : context.to_s
+		raise_invalid_permalink!(value, description, 'it is empty') if value.empty?
+		raise_invalid_permalink!(value, description, 'it must be a site-local path beginning with /') unless value.start_with?('/')
+		raise_invalid_permalink!(value, description, 'network-path references beginning with // are not allowed') if value.start_with?('//')
+		raise_invalid_permalink!(value, description, 'URI schemes are not allowed') if value.include?('://')
+		raise_invalid_permalink!(value, description, 'it contains whitespace, a control character, a backslash, a query marker, or a fragment marker') if value.match?(INVALID_RESOLVED_PERMALINK_CHARACTERS)
+
+		value.split('/', -1).each do |segment|
+			decoded_segment = fully_decode_permalink_segment(segment, permalink: value, context: description)
+			if %w[. ..].include?(decoded_segment)
+				raise_invalid_permalink!(value, description, "it contains the traversal segment #{decoded_segment.inspect}")
+			end
+			if decoded_segment.include?('/') || decoded_segment.include?('\\')
+				raise_invalid_permalink!(value, description, 'an encoded path separator is not allowed')
+			end
+			if decoded_segment.match?(INVALID_RESOLVED_PERMALINK_CHARACTERS)
+				raise_invalid_permalink!(value, description, 'an encoded unsafe character is not allowed')
+			end
+		end
+
+		value
+	end
+
+	# Ensures the destination calculated by the generated Jekyll item stays
+	# beneath the configured site destination directory.
+	def self.validate_output_destination!(item, site:, context:)
+		destination_root = File.expand_path(site.dest.to_s)
+		output_path = File.expand_path(item.destination(destination_root).to_s)
+		comparison_root = Gem.win_platform? ? destination_root.downcase : destination_root
+		comparison_output = Gem.win_platform? ? output_path.downcase : output_path
+		root_prefix = comparison_root.end_with?(File::SEPARATOR) ? comparison_root : "#{comparison_root}#{File::SEPARATOR}"
+		return output_path if comparison_output == comparison_root || comparison_output.start_with?(root_prefix)
+
+		raise ArgumentError, "Generated destination #{output_path.inspect} for #{context} falls outside site destination #{destination_root.inspect}."
 	end
 
 	# Builds one deterministic synthetic source path for in-memory pages
@@ -144,6 +188,29 @@ module Utils
 			value
 		end
 	end
+
+	# Decodes one URL segment until stable and rejects malformed percent escapes
+	# exposed at any layer.
+	def self.fully_decode_permalink_segment(segment, permalink:, context:)
+		decoded = segment.to_s
+		loop do
+			if decoded.match?(/%(?![0-9A-Fa-f]{2})/)
+				raise_invalid_permalink!(permalink, context, 'it contains an invalid percent escape')
+			end
+
+			next_decoded = URI::DEFAULT_PARSER.unescape(decoded)
+			return decoded if next_decoded == decoded
+
+			decoded = next_decoded
+		end
+	end
+	private_class_method :fully_decode_permalink_segment
+
+	# Raises one consistent resolved-permalink validation error.
+	def self.raise_invalid_permalink!(permalink, context, reason)
+		raise ArgumentError, "Invalid resolved permalink #{permalink.inspect} for #{context}: #{reason}."
+	end
+	private_class_method :raise_invalid_permalink!
 end
 
 end

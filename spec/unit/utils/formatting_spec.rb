@@ -33,6 +33,17 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Utils do
 			expect(described_class.format_page_number('{{ num }}/{{ num }}/{{ max }}', 2, 7)).to eq('2/2/7')
 		end
 
+		it 'supports representation filters on title placeholders' do
+			output = described_class.format_page_title(
+				'{{ title | raw }} / {{ title | slugify }}',
+				'Old Shoes',
+				1,
+				1
+			)
+
+			expect(output).to eq('Old Shoes / old-shoes')
+		end
+
 		it 'does not recursively resolve placeholder syntax introduced by a value' do
 			expect(described_class.format_page_title('{{ title }} {{ num }}', ':num', 3, 3)).to eq(':num 3')
 		end
