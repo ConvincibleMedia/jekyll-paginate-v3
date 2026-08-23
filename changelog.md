@@ -1,17 +1,29 @@
 # Changelog
 
-## 0.1.0.alpha.4
+
+## 0.1.1.alpha.1
 
 In progress.
 
+
+## 0.1.1.alpha
+
+* Placeholder format updated to `{{ placeholder }}`.
+* Original `:placeholder` format still supported.
+* Placeholder pipeline overhauled and made more robust.
+* Placeholders can control whether they will be slugified or not.
+
+
 ## 0.1.0.alpha.3
 
-* Synethetic filenames are now more meaningful to aid with debugging.
+* Synthetic filenames are now more meaningful, to aid with debugging.
 * Bugfix: keyword changes now work.
+
 
 ## 0.1.0.alpha.2
 
 * Ensure collection document order is preserved when operating on templates in collections.
+
 
 ## 0.1.0.alpha.1
 

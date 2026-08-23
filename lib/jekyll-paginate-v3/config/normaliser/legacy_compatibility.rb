@@ -118,11 +118,9 @@ class Normaliser
 			permalink = group['permalink']
 			permalink = defaults['permalink'] unless present_config_value?(permalink)
 
-			slugify = if group.key?('slugify')
-									Utils.safe_hash(group['slugify'])
-								else
-									Utils.deep_copy(defaults['slugify'])
-								end
+			slugify = normalise_slugify_config(
+				group.key?('slugify') ? group['slugify'] : Utils.deep_copy(defaults['slugify'])
+			)
 
 			[
 				{

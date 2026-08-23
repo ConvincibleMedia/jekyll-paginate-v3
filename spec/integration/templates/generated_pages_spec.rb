@@ -146,6 +146,41 @@ RSpec.describe 'Pagination integration: generated templates in pages' do
 		end
 	end
 
+	it 'uses slugified route keys as group identities' do
+		files = post_files(2) do |index|
+			{ 'category' => index == 1 ? 'C#' : 'C++' }
+		end
+
+		jekyll_build(
+			default_site,
+			config: {
+				'pagination' => {
+					'enabled' => true,
+					'items' => 'posts',
+					'templates' => {
+						'generate' => [
+							{
+								'group' => 'category',
+								'frontmatter' => {
+									'layout' => 'autopage_category',
+									'permalink' => '/languages/{{ category }}/',
+									'title' => 'Language {{ category | slugify }}'
+								}
+							}
+						]
+					}
+				}
+			},
+			files: files
+		) do |site,|
+			language_page = page_by_url(site, '/languages/c/')
+
+			expect(language_page).not_to be_nil
+			expect(paginator_item_titles(language_page)).to contain_exactly('Post 01', 'Post 02')
+			expect(site.pages.count { |page| page.url == '/languages/c/' }).to eq(1)
+		end
+	end
+
 	it 'supports multi-level groups and per-entry group filters' do
 		files = post_files(4) do |index|
 			case index

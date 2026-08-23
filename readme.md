@@ -104,7 +104,7 @@ pagination:
   
   title: "{{ title }} - {{ num }}" # title set on index pages
   permalink: "{{ num }}" # relative to the template's permalink
-  slugify: # how strings are slugified in permalink
+  slugify: # how slugified placeholders are formed
     mode: default
     lowercase: true
   
@@ -277,13 +277,13 @@ The permalink is resolved relative to the permalink of the template. So `permali
 
 ### Placeholders
 
-Certain configuration values can use placeholders like `{{ title }}` and `{{ num }}`. Depending on the context, the value of the placeholder will be automatically slugified. You can force slugification, or force it not to happen, with `{{ placeholder | slugify }}` or `{{ placeholder | raw }}`.
+Certain configuration values can use placeholders like `{{ title }}` and `{{ num }}`. Depending on the context, a placeholder uses either its raw or slugified representation by default. You can select the representation explicitly with `{{ placeholder | slugify }}` or `{{ placeholder | raw }}`.
 
 The `{{placeholder}}` syntax is different from that used in V2 (`:placeholder`). The new syntax is less ambiguous. However, the old colon syntax is in fact still supported and can still be used (though it is discouraged).
 
 #### Slugify
 
-The style of slugification can be controlled with the `slugify` config:
+The `slugify` config controls how canonical group route keys and slugified placeholder representations are formed:
 
 ```yaml
 pagination:
@@ -295,12 +295,12 @@ pagination:
 `slugify` can also be set to a string, to set only the `mode`, e.g. `slugify: default`.
 
 * `mode` can be:
-  * `default`: 
-  * `raw`: 
-  * `pretty`: 
-  * `ascii`: non-ASCII characters are replaced by a hyphen
-  * `latin`: accented characters are transliterated back to plain a-z
+  * `default`: sequences of non-alphanumeric characters are replaced by a hyphen.
+  * `ascii`: as `default`, but only ASCII letters and numbers are retained.
+  * `latin`: accented Latin characters are transliterated before applying `default`.
 * `lowercase`: set to `false` to allow uppercase characters.
+
+Slugification cannot be disabled with `mode`. Use the explicit `raw` placeholder filter when an unmodified value is appropriate for that context.
 
 ### Layouts
 

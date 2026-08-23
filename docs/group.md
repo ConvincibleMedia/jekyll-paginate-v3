@@ -19,6 +19,10 @@ pagination:
 
 Note that items could end up in multiple groups, for instance if `category` has multiple values.
 
+Every group is identified by the [slugified](/readme.md#slugify) form of its value because it corresponds to a generated URL. Values with the same slug intentionally belong to the same group: for example, `C#` and `C++` both produce `c` and therefore share `/languages/c/`. To keep them separate, group on a field containing unique route keys such as `c-sharp` and `c-plus-plus`.
+
+When one slug represents several raw values, placeholders can use the slug but cannot use the `raw` filter because there is no single raw value for the group.
+
 
 ### Multi-Level Grouping
 
@@ -85,7 +89,7 @@ The order of groups is determined by the sorting order of the frontmatter key th
 
 ## Bunched Grouping
 
-By default, grouping is *per unique value* for the frontmatter keys specified. With Bunched Grouping, the frontmatter values are first gathered into bunches of certain ranges of values. The bunch becomes the group, and pagination occurs in each bunch.
+By default, grouping is *per unique slugified value* for the frontmatter keys specified. With Bunched Grouping, the frontmatter values are first gathered into bunches of certain ranges of values. The bunch becomes the group, and pagination occurs in each bunch.
 
 ```yaml
 pagination:
@@ -209,3 +213,8 @@ pagination:
 ```
 
 The placeholder is resolved once from the current group and defaults to its slugified representation. Use `{{ data.meta.category | raw }}` to address a key containing the unmodified group value.
+
+
+## Note
+
+Groups are identified by the slugified form of their values because every group corresponds to a generated URL. Values that produce the same slug belong to the same group. If those values need separate groups, group on a field containing unique route keys that slugify uniquely.

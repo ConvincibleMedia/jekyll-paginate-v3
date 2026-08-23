@@ -199,9 +199,9 @@ class Normaliser
 			# does not make the default location collide with a collection label.
 			source['location'] = keywords['pages'] if source['location'].nil? || source['location'].to_s.strip.empty?
 			source['generate'] = if source['generate'].is_a?(Array)
-										source['generate'].map { |entry| Utils.safe_hash(entry) }
+										source['generate'].map { |entry| normalise_generated_template_definition(entry) }
 									elsif source['generate'].is_a?(Hash)
-										[Utils.safe_hash(source['generate'])]
+										[normalise_generated_template_definition(source['generate'])]
 									else
 										[]
 									end
@@ -210,6 +210,17 @@ class Normaliser
 			legacy_template_alias_keys.each { |key| source.delete(key) }
 
 			source
+		end
+
+		# Validates settings that generated templates otherwise would not
+		# normalise until their in-memory template objects are processed.
+		def normalise_generated_template_definition(raw_definition)
+			definition = Utils.safe_hash(raw_definition)
+			if definition.key?('slugify')
+				definition['slugify'] = normalise_slugify_config(definition['slugify'])
+			end
+
+			definition
 		end
 
 		# Returns site-level defaults that are inherited by explicit and
@@ -591,26 +602,25 @@ class Normaliser
 			{ 'on' => on_key }
 		end
 
-		# Normalises slugify config accepted on template pagination config.
-		# This supports `slugify.lowercase` semantics while also allowing
-		# string shorthand where the value maps directly to `mode`.
+		# Normalises slugify config into the route-key policy shared by grouping
+		# and slugified placeholder representations.
 		def normalise_slugify_config(raw_slugify)
-			if raw_slugify.is_a?(String)
-				mode = raw_slugify.to_s.strip
-				mode = 'default' if mode.empty?
-				return {
-					'mode' => mode,
-					'lowercase' => true
-				}
-			end
-
-			slugify = Utils.safe_hash(raw_slugify)
+			slugify = raw_slugify.is_a?(String) ? { 'mode' => raw_slugify } : Utils.safe_hash(raw_slugify)
 			mode = slugify['mode'].to_s.strip
 			mode = 'default' if mode.empty?
+			unless SLUGIFY_MODES.include?(mode)
+				raise ArgumentError, "`slugify.mode` must be one of #{SLUGIFY_MODES.join(', ')}; received '#{mode}'."
+			end
+
+			lowercase = if slugify.key?('lowercase')
+								boolean_config_value(slugify['lowercase'])
+							else
+								true
+							end
 
 			{
 				'mode' => mode,
-				'lowercase' => boolean_config_value(slugify['lowercase'])
+				'lowercase' => lowercase
 			}
 		end
 
