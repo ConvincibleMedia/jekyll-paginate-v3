@@ -96,7 +96,7 @@ pagination:
   group:
     on: size # numeric frontmatter key
     bunch: 100 # gather 'size' into bunches of 100
-  permalink: "/size/{{ size }}/"
+  permalink: "size/{{ size }} page/{{ num }}"
   title: "Size up to {{ size }}"
 ```
 

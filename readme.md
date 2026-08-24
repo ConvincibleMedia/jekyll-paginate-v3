@@ -399,7 +399,10 @@ The default `self, shadow` means that page 1 remains a true member of the origin
   * `current`: `true` if this trail item is the current page.
   * `distance`: Relative page number. 0 for current page, positive for pages after, negative for pages before.
 
-`page.pagination` also remains available, being a copy of the pagination settings from the template that generated this index (minus `enabled`). This allows you to read back settings like `per_page`, `limit`, etc., if needed.
+`page.pagination` also remains available, being a copy of the pagination settings from the template that generated this index (minus `enabled`). This allows you to read back settings like `per_page`, `limit`, etc., if needed. Indexes also expose:
+
+* `base`: resolved route of the original template before pagination group/layout paths are added, for example `/articles`.
+* `path`: final resolved route fragment added by grouping and numbered pagination, without leading or trailing slashes, e.g. `page/2`.
 
 `paginator` gains additional properties if [Grouping](/docs/group.md#group-navigation) is active.
 

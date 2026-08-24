@@ -133,33 +133,48 @@ class Model
 
 	# Applies configured page permalink templates.
 	def assign_generated_page_permalink!(generated, template, config, current_page, total_pages)
-		resolved_permalink = resolved_page_permalink(template, config, current_page, total_pages)
+		page_route_fragment = resolved_page_route_fragment(config, current_page, total_pages)
+		page_route_path = Utils.join_route_fragments(page_route_fragment)
+		resolved_permalink = resolved_page_permalink(template, config, current_page, page_route_fragment)
+		reset_cached_item_url!(generated)
 
 		if resolved_permalink.nil?
 			generated.data.delete('permalink') if current_page > 1
-			return
+			return page_route_path
 		end
 
 		context = "pagination page #{current_page} for template '#{Utils.relative_item_path(template)}'"
 		generated.data['permalink'] = Utils.validate_resolved_permalink!(resolved_permalink, context: context)
 		Utils.validate_output_destination!(generated, site: @site, context: context)
+		page_route_path
 	end
 
-	# Resolves one page permalink from page1/page2 template settings.
-	def resolved_page_permalink(template, config, current_page, total_pages)
+	# Resolves the relative route fragment contributed by the current index.
+	def resolved_page_route_fragment(config, current_page, total_pages)
 		pattern = page_placeholder_template(config, current_page, 'permalink')
-		template_permalink = Utils.format_page_number(
+		Utils.format_page_number(
 			pattern,
 			current_page,
 			total_pages,
 			slugifier: placeholder_slugifier(config)
 		)
-		return Utils.ensure_leading_slash(template_permalink) if v1_absolute_paginate_path?(config, current_page)
+	end
+
+	# Resolves one complete page permalink from the template route and already
+	# interpolated page fragment.
+	def resolved_page_permalink(template, config, current_page, page_route_fragment)
+		return Utils.ensure_leading_slash(page_route_fragment) if v1_absolute_paginate_path?(config, current_page)
 
 		first_page_url = template_first_page_url(template)
-		return first_page_url if template_permalink.to_s.strip.empty?
+		return first_page_url if page_route_fragment.to_s.strip.empty?
 
-		join_url(first_page_url, template_permalink)
+		join_url(first_page_url, page_route_fragment)
+	end
+
+	# Clears Jekyll's memoised URL before a retained source object receives its
+	# final permalink. Generated adapters already start with an empty cache.
+	def reset_cached_item_url!(item)
+		item.instance_variable_set(:@url, nil) if item.instance_variable_defined?(:@url)
 	end
 
 	# Determines whether this page should use v1-style absolute paginate_path.

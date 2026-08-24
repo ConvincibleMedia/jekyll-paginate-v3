@@ -12,7 +12,7 @@ module Pages
 # Used by Pagination::Model when paginating collection documents.
 class Document < Jekyll::Document
 
-	attr_accessor :pager
+	include PagerSupport
 	
 	alias_method :ext, :extname
 

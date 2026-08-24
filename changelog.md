@@ -1,15 +1,18 @@
 # Changelog
 
 
-## 0.1.1.alpha
+## 0.2.0.alpha
 
 In progress.
 
-* Placeholder format updated to `{{ placeholder }}`.
-* Original `:placeholder` format still supported.
 * Placeholder pipeline overhauled and made more robust.
-* Placeholders can control whether they will be slugified or not.
-* **Breaking change**: `slugify` modes refined, and dangerous modes retired
+  * Format updated to `{{ placeholder }}`.
+  * Can exert some control over whether the placeholder will be slugified or not.
+  * Original `:placeholder` format still supported.
+* **Breaking change**: `slugify` modes refined, and dangerous modes retired.
+* Page 1 now remains the exact original object when under `self` mode.
+* Indexes now include `pagination.base` (the URL fragment of the originating template) and `pagination.path`.
+* **Breaking change**: permalinks must be relative to the pagination template and cannot begin with `/`. Root-relative `paginate_path` remains supported only in V1 compatibility mode.
 
 
 ## 0.1.0.alpha.3

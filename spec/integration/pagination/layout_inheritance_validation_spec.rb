@@ -106,7 +106,7 @@ RSpec.describe 'Pagination integration: layout inheritance validation' do
 							'layout' => 'default',
 							'pagination' => {
 								'items' => 'posts',
-								'permalink' => '/variants/posts/:category/ page/:num'
+								'permalink' => 'posts/:category/ page/:num'
 							}
 						)
 						contents('{{ content }}')
@@ -117,7 +117,7 @@ RSpec.describe 'Pagination integration: layout inheritance validation' do
 							'layout' => 'default',
 							'pagination' => {
 								'items' => 'products',
-								'permalink' => '/variants/products/:category/ page/:num'
+								'permalink' => 'products/:category/ page/:num'
 							}
 						)
 						contents('{{ content }}')
@@ -127,6 +127,7 @@ RSpec.describe 'Pagination integration: layout inheritance validation' do
 				file 'variants.md' do
 					frontmatter(
 						'title' => 'Variants',
+						'permalink' => '/variants/',
 						'pagination' => {
 							'enabled' => true,
 							'group' => 'category',

@@ -51,4 +51,34 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Utils do
 			end.to raise_error(ArgumentError, /falls outside site destination/)
 		end
 	end
+
+	describe '.descendant_route_path' do
+		it 'returns a slash-free path beneath a normalised source route' do
+			expect(
+				described_class.descendant_route_path('/articles/', '/articles/category/news/page/2/', context: 'spec variant')
+			).to eq('category/news/page/2')
+			expect(
+				described_class.descendant_route_path('/articles', '/articles/', context: 'spec variant')
+			).to eq('')
+		end
+
+		it 'rejects routes outside the source template' do
+			expect do
+				described_class.descendant_route_path('/articles/', '/topics/news/', context: 'spec variant')
+			end.to raise_error(ArgumentError, /must remain beneath source template route/)
+		end
+	end
+
+	describe '.validate_relative_permalink_template!' do
+		it 'accepts relative and empty templates' do
+			expect(described_class.validate_relative_permalink_template!('page/{{ num }}', context: 'spec permalink')).to eq('page/{{ num }}')
+			expect(described_class.validate_relative_permalink_template!('', context: 'spec permalink')).to eq('')
+		end
+
+		it 'rejects root-relative templates' do
+			expect do
+				described_class.validate_relative_permalink_template!('/page/{{ num }}', context: 'spec permalink')
+			end.to raise_error(ArgumentError, /root-relative paths are supported only in v1 compatibility mode/)
+		end
+	end
 end

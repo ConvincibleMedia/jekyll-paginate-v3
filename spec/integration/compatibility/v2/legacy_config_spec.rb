@@ -209,7 +209,7 @@ RSpec.describe 'Pagination integration: v2 legacy configuration' do
 									},
 									'indexpage' => 'feed',
 									'extension' => 'json',
-									'permalink' => '/slice/:num/',
+									'permalink' => 'slice/:num/',
 									'title' => ':title [page :num/:max]'
 								}
 							}

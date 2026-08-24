@@ -15,10 +15,11 @@ module Templates
 class VariantExpander
 
 	# Builds an expander for one template and its normalised pagination config.
-	def initialize(site:, site_config:, template:, template_config:, template_pagination_source:, merge_template_pagination_lambda:, normalise_template_config_lambda:, validate_template_config_lambda:, resolve_items_lambda:, log_lambda:)
+	def initialize(site:, site_config:, template:, template_route:, template_config:, template_pagination_source:, merge_template_pagination_lambda:, normalise_template_config_lambda:, validate_template_config_lambda:, resolve_items_lambda:, log_lambda:)
 		@site = site
 		@site_config = site_config
 		@template = template
+		@template_route = template_route.to_s
 		@template_config = template_config
 		@template_pagination_source = Utils.safe_hash(template_pagination_source)
 		@merge_template_pagination_lambda = merge_template_pagination_lambda
@@ -318,6 +319,7 @@ class VariantExpander
 						compatibility_mode: variant_config['compatibility']
 					)
 					group_placeholder_values = build_group_placeholder_values(entry, token_maps)
+					route_base = resolved_source_template_route(group_placeholder_values)
 
 					grouped_permalink = grouped_permalink_state(variant_template, variant_config, entry)
 					grouped_template_permalink = if grouped_permalink.nil?
@@ -366,10 +368,17 @@ class VariantExpander
 					variant_config['layouts'] = []
 
 					apply_variant_pagination_payload!(variant_template, variant_config)
+					route_path = variant_route_path(
+						route_base,
+						base_template_permalink(variant_template),
+						compatibility_mode: variant_config['compatibility']
+					)
 
 					variants << {
 						'template' => variant_template,
-						'config' => variant_config
+						'config' => variant_config,
+						'route_base' => route_base,
+						'route_path' => route_path
 					}
 				end
 			end
@@ -406,12 +415,17 @@ class VariantExpander
 		first_part, second_part = split_grouped_permalink_definition(permalink)
 		if group_keys.empty?
 			validate_placeholder_scalar!(permalink, %w[num max], 'pagination permalink')
+			validate_relative_permalink_fragment!(permalink, 'pagination permalink', config)
 		elsif first_part.nil?
 			validate_placeholder_scalar!(second_part, %w[num max], 'grouped page permalink')
+			validate_relative_permalink_fragment!(second_part, 'grouped page permalink', config)
 		else
 			validate_placeholder_scalar!(first_part, presentation_group_keys, 'grouped template permalink', allowed_filters: permalink_filters)
 			validate_placeholder_scalar!(second_part, %w[num max], 'grouped page permalink')
+			validate_relative_permalink_fragment!(first_part, 'grouped template permalink', config)
+			validate_relative_permalink_fragment!(second_part, 'grouped page permalink', config)
 		end
+		validate_page_template_permalink_fragments!(config)
 
 		data = Utils.safe_hash(@template.data)
 		validate_placeholder_scalar!(data['title'], presentation_group_keys, 'grouped template title') if data['title'].is_a?(String)
@@ -424,6 +438,23 @@ class VariantExpander
 				unknown: Support::PlaceholderTemplate::UNKNOWN_PRESERVE
 			)
 		end
+	end
+
+	# Validates public page-template permalink overrides through the same native
+	# V3 relative-route contract as the shorthand permalink field.
+	def validate_page_template_permalink_fragments!(config)
+		Utils.safe_hash(config['page_templates']).each do |key, page_template|
+			permalink = Utils.safe_hash(page_template)['permalink']
+			validate_relative_permalink_fragment!(permalink, "pagination #{key} permalink", config)
+		end
+	end
+
+	# Leaves legacy V1 root-relative paginate paths untouched while rejecting
+	# them consistently in every native V3 permalink context.
+	def validate_relative_permalink_fragment!(permalink, context, config)
+		return if config['compatibility'] == 'v1'
+
+		Utils.validate_relative_permalink_template!(permalink, context: context)
 	end
 
 	def validate_placeholder_scalar!(pattern, allowed, context, allowed_filters: nil)
@@ -462,8 +493,9 @@ class VariantExpander
 
 	# Resolves grouped template permalink part1 relative to template route.
 	#
-	# Absolute part1 values (starting with `/`) remain absolute. Relative
-	# part1 values are resolved against the source template permalink/URL.
+	# Relative part1 values are resolved against the source template URL. The
+	# absolute branch remains only for a source frontmatter permalink or V1
+	# compatibility; native V3 configuration is validated before this point.
 	def resolve_grouped_template_permalink(template, raw_part1)
 		part1 = raw_part1.to_s.strip
 		return part1 if part1.start_with?('/')
@@ -481,6 +513,33 @@ class VariantExpander
 		permalink = '/' if permalink.empty?
 
 		Utils.ensure_leading_slash(permalink)
+	end
+
+	# Resolves group placeholders intrinsic to the source template route without
+	# including route fragments contributed by pagination expansion.
+	def resolved_source_template_route(group_values)
+		return Utils.normalise_route(@template_route) if group_values.empty?
+
+		resolved = resolve_group_placeholders(
+			@template_route,
+			group_values,
+			default_representation: :slugify,
+			context: 'source pagination template permalink',
+			allowed_filters: permalink_placeholder_filters(group_values.keys)
+		)
+		Utils.normalise_route(resolved)
+	end
+
+	# Derives the group/layout fragment added beneath the source template. V1
+	# remains exempt because its compatibility permalink may be root-relative.
+	def variant_route_path(route_base, variant_route, compatibility_mode:)
+		return '' if compatibility_mode == 'v1'
+
+		Utils.descendant_route_path(
+			route_base,
+			variant_route,
+			context: "pagination variant for template '#{Utils.relative_item_path(@template)}'"
+		)
 	end
 
 	# Returns grouped keys in declaration order for one grouped entry.

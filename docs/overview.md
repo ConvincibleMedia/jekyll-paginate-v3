@@ -21,7 +21,7 @@ The pipeline works with five main concepts:
 * An **item** is a Jekyll page or collection document that may be selected for pagination.
 * A **template** is a page or document whose content and frontmatter define a set of indexes. Templates may exist in the source site or be created in memory from configuration.
 * A **variant** is a concrete expansion of a template for a particular group and layout combination.
-* An **index** is an emitted page or document containing one window of selected items. The first index replaces its source template; later indexes extend the set.
+* An **index** is an emitted page or document containing one window of selected items. In `self` mode, the template becomes page 1. Otherwise, and for pages 2+, these indexes are generated.
 * A **paginator** is the Liquid-facing object attached to each index. It exposes that index's items and its relationships to the rest of the set.
 
 

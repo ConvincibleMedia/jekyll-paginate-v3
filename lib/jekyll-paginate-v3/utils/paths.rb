@@ -32,6 +32,48 @@ module Utils
 		string_path.end_with?('/') ? string_path : "#{string_path}/"
 	end
 
+	# Normalises one site-local route for comparison and public metadata.
+	def self.normalise_route(route)
+		value = ensure_leading_slash(route.to_s.strip)
+		return '/' if value == '/'
+
+		value.sub(%r{/+\z}, '')
+	end
+
+	# Returns the route fragment added beneath a base route.
+	#
+	# Native V3 pagination outputs must remain descendants of their source
+	# template so consumers can compose `pagination.base` and `.path`.
+	def self.descendant_route_path(base_route, destination_route, context:)
+		base = normalise_route(base_route)
+		destination = normalise_route(destination_route)
+		return '' if destination == base
+
+		base_prefix = base == '/' ? '/' : "#{base}/"
+		if destination.start_with?(base_prefix)
+			return destination[base_prefix.length..-1].to_s.sub(%r{/+\z}, '')
+		end
+
+		description = context.to_s.empty? ? 'pagination variant' : context.to_s
+		raise ArgumentError, "Resolved route #{destination.inspect} for #{description} must remain beneath source template route #{base.inspect}."
+	end
+
+	# Joins already-resolved relative route fragments for public metadata.
+	def self.join_route_fragments(*fragments)
+		fragments.map do |fragment|
+			fragment.to_s.strip.sub(%r{\A/+}, '').sub(%r{/+\z}, '')
+		end.reject(&:empty?).join('/')
+	end
+
+	# Rejects root-relative permalink templates in native V3 configuration.
+	def self.validate_relative_permalink_template!(permalink, context:)
+		value = permalink.to_s.strip
+		return value if value.empty? || !value.start_with?('/')
+
+		description = context.to_s.empty? ? 'pagination permalink' : context.to_s
+		raise ArgumentError, "Invalid #{description} #{value.inspect}: native V3 pagination permalinks must be relative to the source template; root-relative paths are supported only in v1 compatibility mode."
+	end
+
 	# Ensures a filename extension has a leading dot.
 	def self.ensure_leading_dot(extension)
 		string_extension = extension.to_s

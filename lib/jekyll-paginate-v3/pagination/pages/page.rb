@@ -12,7 +12,7 @@ module Pages
 # Used by Pagination::Model to emit page-based pagination output.
 class Page < Jekyll::Page
 
-	attr_accessor :pager
+	include PagerSupport
 
 	# Clones template content/data and annotates it with pagination metadata.
 	def initialize(template_item, current_page, total_pages, index_filename)

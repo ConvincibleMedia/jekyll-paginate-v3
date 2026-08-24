@@ -175,6 +175,22 @@ class Model
 		)
 	end
 
+	# Keeps the captured item-resolution view immutable when a source
+	# template itself is retained and mutated into pagination page one.
+	# Later templates should still see the source template metadata rather
+	# than the emitted index metadata attached to the retained object.
+	def replace_item_resolution_source!(source_item, source_snapshot)
+		@item_resolution_pages&.map! do |item|
+			item.equal?(source_item) ? source_snapshot : item
+		end
+
+		@item_resolution_documents_by_collection&.each_value do |documents|
+			documents.map! do |item|
+				item.equal?(source_item) ? source_snapshot : item
+			end
+		end
+	end
+
 	# Discovers all pages/documents configured as pagination templates.
 	def discover_templates
 		search_entries = Query::Parser.parse(@site_config.dig('templates', 'location'), @site_config['keywords'], split_delimiter: @split_delimiter)

@@ -17,7 +17,7 @@ RSpec.describe 'Pagination integration: navigation, URLs, and trails' do
 										'items' => 'posts',
 										'sort' => 'title asc',
 										'per_page' => 1,
-										'permalink' => '/slice/:num/feed.json',
+										'permalink' => 'slice/:num/feed.json',
 										'title' => ':title [page :num/:max]'
 									}
 								}
@@ -238,5 +238,34 @@ RSpec.describe 'Pagination integration: navigation, URLs, and trails' do
 			jekyll_build(default_site, files: files) do |_site,|
 			end
 		end.to raise_error(JekyllTestHarness::SiteBuildError, /Invalid resolved permalink.*fragment marker/)
+	end
+
+	it 'rejects root-relative native V3 pagination permalinks' do
+		files = jekyll_merge(
+			post_files(2),
+			jekyll_files do
+				file 'articles.md' do
+					frontmatter(
+						pagination_template_frontmatter(
+							{
+								'permalink' => '/articles/',
+								'pagination' => {
+									'enabled' => true,
+									'items' => 'posts',
+									'per_page' => 1,
+									'permalink' => '/page/{{ num }}'
+								}
+							}
+						)
+					)
+					contents('Articles')
+				end
+			end
+		)
+
+		expect do
+			jekyll_build(default_site, files: files) do |_site,|
+			end
+		end.to raise_error(JekyllTestHarness::SiteBuildError, /native V3 pagination permalinks must be relative/)
 	end
 end

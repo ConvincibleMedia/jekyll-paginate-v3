@@ -43,7 +43,7 @@ class Normaliser
 			extension = override_hash.key?('extension') ? override_hash['extension'].to_s : 'html'
 
 			template_config['page_templates'] ||= build_page_templates(template_config['title'], template_config['permalink'])
-			template_config['page_templates']['page1']['permalink'] = Utils.ensure_full_path('/', index_name, extension)
+			template_config['page_templates']['page1']['permalink'] = Utils.ensure_full_path(index_name, index_name, extension)
 			template_config['page_templates']['page2']['permalink'] = Utils.ensure_full_path(template_config['permalink'], index_name, extension)
 		end
 

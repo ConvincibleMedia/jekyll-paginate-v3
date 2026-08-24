@@ -14,7 +14,14 @@ class Model
 	
 	def paginate_template(template, config, template_pagination_source)
 		item_exclusions = pagination_item_exclusions_for_template(template)
-		variants = expand_template_variants(template, config, template_pagination_source: template_pagination_source, item_exclusions: item_exclusions)
+		template_route = template_first_page_url(template)
+		variants = expand_template_variants(
+			template,
+			config,
+			template_route: template_route,
+			template_pagination_source: template_pagination_source,
+			item_exclusions: item_exclusions
+		)
 		if variants.empty?
 			@remove_item_lambda.call(template)
 			log("Template '#{Utils.relative_item_path(template)}': grouping/layout expansion produced no variants; consumed template without emitting indexes.", 'debug')
@@ -27,6 +34,7 @@ class Model
 		total_paginated_items = 0
 		total_indexes = 0
 		collection_replacement_state = nil
+		retain_page_one = variants.one? && retain_source_template_as_page_one?(template, variants.first['config'])
 
 		variants.each_with_index do |variant, variant_index|
 			variant_template = variant['template']
@@ -34,7 +42,10 @@ class Model
 			variant_report = paginate_template_variant(
 				variant_template,
 				variant_config,
-				remove_source_template: variant_index.zero?,
+				remove_source_template: variant_index.zero? && !retain_page_one,
+				retain_page_one: retain_page_one,
+				route_base: variant['route_base'],
+				route_path: variant['route_path'],
 				item_exclusions: item_exclusions,
 				collection_replacement_state: collection_replacement_state
 			)
@@ -57,11 +68,12 @@ class Model
 	end
 
 	# Expands one template into grouped/layout variants before pagination.
-	def expand_template_variants(template, config, template_pagination_source:, item_exclusions:)
+	def expand_template_variants(template, config, template_route:, template_pagination_source:, item_exclusions:)
 		expander = Templates::VariantExpander.new(
 			site: @site,
 			site_config: @site_config,
 			template: template,
+			template_route: template_route,
 			template_config: config,
 			template_pagination_source: template_pagination_source,
 			merge_template_pagination_lambda: method(:merged_template_pagination_config),
@@ -74,8 +86,10 @@ class Model
 	end
 
 	# Runs pagination for one already-expanded template variant.
-	def paginate_template_variant(template, config, remove_source_template:, item_exclusions:, collection_replacement_state:)
+	def paginate_template_variant(template, config, remove_source_template:, retain_page_one:, route_base:, route_path:, item_exclusions:, collection_replacement_state:)
 		template_path = Utils.relative_item_path(template)
+		emission_template = retain_page_one ? clone_template_for_emission(template) : template
+		replace_item_resolution_source!(template, emission_template) if retain_page_one
 		split_delimiter = config.key?('split') ? config['split'] : @split_delimiter
 		nested_separator = config['separator'] || @nested_separator
 		all_items = resolve_items(config['items'], exclude_items: item_exclusions)
@@ -120,20 +134,23 @@ class Model
 
 		page_windows = Utils.build_pagination_windows(sorted_items.length, config['per_page'])
 		total_pages = page_windows.length
-		validate_numbered_permalink_template!(template, config, total_pages)
+		validate_numbered_permalink_template!(emission_template, config, total_pages)
 
 		log("Template '#{template_path}': generating #{total_pages} page(s) with per_page=#{config['per_page']} limit=#{config['limit']}.", 'debug')
 		page_emission = emit_paginated_pages(
-			template,
+			emission_template,
 			config,
 			sorted_items,
 			page_windows,
 			remove_template: remove_source_template,
+			retained_page_one: retain_page_one ? template : nil,
+			route_base: route_base,
+			route_path: route_path,
 			collection_replacement_state: collection_replacement_state
 		)
 		generated_pages = page_emission['pages']
 		collection_replacement_state = page_emission['collection_replacement_state']
-		register_grouped_set_if_applicable(template, config, generated_pages)
+		register_grouped_set_if_applicable(emission_template, config, generated_pages)
 		{
 			'paginated_items' => sorted_items.length,
 			'indexes' => generated_pages.length,
@@ -142,10 +159,12 @@ class Model
 	end
 
 	# Replaces a template with one synthetic page/document per page number.
-	def emit_paginated_pages(template, config, items, page_windows, remove_template: true, collection_replacement_state: nil)
+	def emit_paginated_pages(template, config, items, page_windows, remove_template: true, retained_page_one: nil, route_base:, route_path:, collection_replacement_state: nil)
 		if remove_template
 			removed_item_state = @remove_item_lambda.call(template)
 			collection_replacement_state = build_collection_replacement_state(template, removed_item_state)
+		elsif !retained_page_one.nil?
+			collection_replacement_state = build_retained_collection_insertion_state(retained_page_one)
 		end
 
 		new_pages = []
@@ -157,13 +176,18 @@ class Model
 
 		page_windows.each do |page_window|
 			current_page = page_window['num']
-			generated = build_generated_item(
-				template: template,
-				config: config,
-				current_page: current_page,
-				total_pages: total_pages,
-				index_file: index_file
-			)
+			retaining_current_page = current_page == 1 && !retained_page_one.nil?
+			generated = if retaining_current_page
+							prepare_retained_page_one(retained_page_one, current_page: current_page, total_pages: total_pages)
+						else
+							build_generated_item(
+								template: template,
+								config: config,
+								current_page: current_page,
+								total_pages: total_pages,
+								index_file: index_file
+							)
+						end
 
 			generated.pager = Paginator.new(
 				per_page: config['per_page'],
@@ -192,13 +216,18 @@ class Model
 			generated.data['autogen'] = 'jekyll-paginate-v2' if config['compatibility'] == 'v2'
 
 			assign_generated_page_title!(generated, template, config, current_page, total_pages)
-			assign_generated_page_permalink!(generated, template, config, current_page, total_pages)
+			page_route_path = assign_generated_page_permalink!(generated, template, config, current_page, total_pages)
+			generated.data['pagination']['base'] = Utils.normalise_route(route_base)
+			generated.data['pagination']['path'] = Utils.join_route_fragments(route_path, page_route_path)
 
-			@add_item_lambda.call(
-				generated,
-				collection_index: collection_insertion_index_for_generated_item(generated, collection_replacement_state)
-			)
-			log("Emitted pagination page #{current_page}/#{total_pages} at '#{generated.url}' for template '#{Utils.relative_item_path(template)}'.", 'debug')
+			unless retaining_current_page
+				@add_item_lambda.call(
+					generated,
+					collection_index: collection_insertion_index_for_generated_item(generated, collection_replacement_state)
+				)
+			end
+			action = retaining_current_page ? 'Retained' : 'Emitted'
+			log("#{action} pagination page #{current_page}/#{total_pages} at '#{generated.url}' for template '#{Utils.relative_item_path(template)}'.", 'debug')
 			new_pages << generated
 		end
 
@@ -208,6 +237,31 @@ class Model
 			'pages' => new_pages,
 			'collection_replacement_state' => collection_replacement_state
 		}
+	end
+
+	# Reuses an eligible source page/document while adding the small runtime
+	# interface and metadata normally supplied by generated subclasses.
+	def prepare_retained_page_one(item, current_page:, total_pages:)
+		item.extend(Pages::PagerSupport) unless item.respond_to?(:pager=)
+		item.data['pagination_info'] = {
+			'curr_page' => current_page,
+			'total_pages' => total_pages
+		}
+		item
+	end
+
+	# Clones mutable template presentation state before page one is updated in
+	# place, keeping all later page emission based on the original variant.
+	def clone_template_for_emission(template)
+		cloned_template = template.dup
+		cloned_data = Jekyll::Utils.deep_merge_hashes(Utils.safe_hash(template.data), {})
+		if cloned_template.respond_to?(:data=)
+			cloned_template.data = cloned_data
+		else
+			cloned_template.instance_variable_set(:@data, cloned_data)
+		end
+		cloned_template.content = template.content.to_s if cloned_template.respond_to?(:content=)
+		cloned_template
 	end
 
 	# Builds insertion state for collection-template replacement.
@@ -225,6 +279,21 @@ class Model
 		{
 			'source_collection_label' => template.collection.label.to_s,
 			'next_index' => removed_item_state['index'].to_i
+		}
+	end
+
+	# Starts insertion immediately after a retained source document so later
+	# self-targeted indexes preserve collection ordering without remove/re-add.
+	def build_retained_collection_insertion_state(template)
+		return nil unless collection_template?(template)
+
+		collection_documents = template.collection.docs
+		template_index = collection_documents.index { |document| document.equal?(template) }
+		return nil if template_index.nil?
+
+		{
+			'source_collection_label' => template.collection.label.to_s,
+			'next_index' => template_index + 1
 		}
 	end
 
@@ -304,6 +373,16 @@ class Model
 		return value if value == Config::COLLECTION_TARGET_CLONE
 
 		Config::COLLECTION_TARGET_SHADOW
+	end
+
+	# Determines whether page one can keep the source object's exact identity
+	# while honouring the effective output target.
+	def retain_source_template_as_page_one?(template, config)
+		target_mode = collection_target_mode_for_page(template, config, 1)
+		return target_mode == Config::COLLECTION_TARGET_SELF if template.is_a?(Jekyll::Document)
+		return target_mode == Config::COLLECTION_TARGET_PAGES if template.is_a?(Jekyll::Page)
+
+		false
 	end
 
 	# Returns true when a template is a collection document.

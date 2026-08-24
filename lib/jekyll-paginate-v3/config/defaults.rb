@@ -100,7 +100,7 @@ module Config
 			},
 			'items' => 'posts',
 			'title' => ':title - page :num',
-			'permalink' => '/page/:num/',
+			'permalink' => 'page/:num/',
 			'trail' => {
 				'before' => 2,
 				'after' => 2

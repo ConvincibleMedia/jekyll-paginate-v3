@@ -135,7 +135,7 @@ RSpec.describe 'Pagination integration: grouped permalink behaviour' do
 								'group' => 'category',
 								'items' => 'posts',
 								'per_page' => 1,
-								'permalink' => '/topics/:category slice/:num',
+								'permalink' => 'topics/:category slice/:num',
 								'frontmatter' => {
 									'layout' => 'autopage_category',
 									'permalink' => '/legacy/:category/',
@@ -148,13 +148,42 @@ RSpec.describe 'Pagination integration: grouped permalink behaviour' do
 			},
 			files: files
 		) do |site,|
-			first_page = page_by_url(site, '/topics/news/')
-			second_page = page_by_url(site, '/topics/news/slice/2/')
+			first_page = page_by_url(site, '/legacy/news/topics/news/')
+			second_page = page_by_url(site, '/legacy/news/topics/news/slice/2/')
 
 			expect(first_page).not_to be_nil
 			expect(second_page).not_to be_nil
-			expect(page_by_url(site, '/legacy/news/')).to be_nil
+			expect(page_by_url(site, '/topics/news/')).to be_nil
 		end
+	end
+
+	it 'rejects root-relative grouped permalink fragments in native V3 mode' do
+		files = jekyll_merge(
+			post_files(1) { { 'category' => 'news' } },
+			jekyll_files do
+				file 'articles.md' do
+					frontmatter(
+						pagination_template_frontmatter(
+							{
+								'permalink' => '/articles/',
+								'pagination' => {
+									'enabled' => true,
+									'items' => 'posts',
+									'group' => 'category',
+									'permalink' => '/category/{{ category }} page/{{ num }}'
+								}
+							}
+						)
+					)
+					contents('Articles')
+				end
+			end
+		)
+
+		expect do
+			jekyll_build(default_site, files: files) do |_site,|
+			end
+		end.to raise_error(JekyllTestHarness::SiteBuildError, /native V3 pagination permalinks must be relative/)
 	end
 
 	it 'resolves grouped part1 relative to template route when part1 is not absolute' do
