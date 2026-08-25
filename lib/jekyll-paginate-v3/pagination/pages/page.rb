@@ -24,7 +24,8 @@ class Page < Jekyll::Page
 
 		process(@name)
 
-		self.data = Jekyll::Utils.deep_merge_hashes(template_item.data, {})
+		# Each emitted page owns its mutable frontmatter containers so later hooks cannot alter sibling pages or their template.
+		self.data = Utils.deep_copy(Utils.safe_hash(template_item.data))
 		self.content = template_item.content
 		self.data['pagination_info'] = {
 			'curr_page' => current_page,

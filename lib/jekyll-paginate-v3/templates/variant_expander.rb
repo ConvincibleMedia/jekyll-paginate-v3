@@ -977,7 +977,8 @@ class VariantExpander
 
 	# Replaces template data for both pages and documents.
 	def replace_template_data!(template, data)
-		replacement = Jekyll::Utils.deep_merge_hashes(Utils.safe_hash(data), {})
+		# Variants must not share mutable frontmatter containers with their source or sibling variants.
+		replacement = Utils.deep_copy(Utils.safe_hash(data))
 		if template.respond_to?(:data=)
 			template.data = replacement
 		elsif template.instance_variable_defined?(:@data)

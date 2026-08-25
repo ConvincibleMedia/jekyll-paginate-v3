@@ -254,7 +254,8 @@ class Model
 	# place, keeping all later page emission based on the original variant.
 	def clone_template_for_emission(template)
 		cloned_template = template.dup
-		cloned_data = Jekyll::Utils.deep_merge_hashes(Utils.safe_hash(template.data), {})
+		# Keep the retained source independent from the snapshot used to emit its later pages.
+		cloned_data = Utils.deep_copy(Utils.safe_hash(template.data))
 		if cloned_template.respond_to?(:data=)
 			cloned_template.data = cloned_data
 		else

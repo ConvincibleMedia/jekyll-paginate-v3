@@ -9,7 +9,7 @@ module PaginateV3
 # Used broadly by normalisers, builders, and parsers.
 module Utils
 
-	# Deep copy helper for plain Ruby hashes/arrays used in config merging.
+	# Deep copy helper for plain Ruby hashes/arrays used in config and frontmatter isolation.
 	def self.deep_copy(value)
 		if value.is_a?(Hash)
 			value.each_with_object({}) { |(key, child), copy| copy[key] = deep_copy(child) }

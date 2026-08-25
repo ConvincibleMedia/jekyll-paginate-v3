@@ -31,6 +31,60 @@ unless defined?(PaginateV3IdentityProbeGenerator)
 end
 
 RSpec.describe 'Pagination integration: object identity and route metadata' do
+	it 'isolates mutable frontmatter containers between a template and its generated pages' do
+		files = jekyll_merge(
+			post_files(3),
+			jekyll_files do
+				file 'index.md' do
+					frontmatter(
+						pagination_template_frontmatter(
+							{
+								'meta' => { 'id' => 'source' },
+								'seo' => { 'description' => 'Source description' },
+								'tags' => ['source'],
+								'content_configuration' => [{ 'enabled' => true }],
+								'pagination' => {
+									'enabled' => true,
+									'items' => 'posts',
+									'per_page' => 1,
+									'permalink' => 'page/{{ num }}'
+								}
+							}
+						)
+					)
+					contents('Home')
+				end
+			end
+		)
+
+		jekyll_build(default_site, files: files) do |site,|
+			template = page_by_url(site, '/')
+			page_two = page_by_url(site, '/page/2/')
+			page_three = page_by_url(site, '/page/3/')
+
+			page_two.data.fetch('meta')['id'] = 'page-two'
+			page_two.data.fetch('seo')['description'] = 'Page two description'
+			page_two.data.fetch('pagination')['custom'] = true
+			page_two.data.fetch('tags') << 'page-two'
+			page_two.data.fetch('content_configuration').first['enabled'] = false
+
+			[template, page_three].each do |other_page|
+				expect(other_page.data.dig('meta', 'id')).to eq('source')
+				expect(other_page.data.dig('seo', 'description')).to eq('Source description')
+				expect(other_page.data.fetch('pagination')).not_to have_key('custom')
+				expect(other_page.data.fetch('tags')).not_to include('page-two')
+				expect(other_page.data.fetch('content_configuration').first['enabled']).to be(true)
+
+				expect(page_two.data).not_to equal(other_page.data)
+				expect(page_two.data.fetch('meta')).not_to equal(other_page.data.fetch('meta'))
+				expect(page_two.data.fetch('pagination')).not_to equal(other_page.data.fetch('pagination'))
+				expect(page_two.data.fetch('tags')).not_to equal(other_page.data.fetch('tags'))
+				expect(page_two.data.fetch('content_configuration')).not_to equal(other_page.data.fetch('content_configuration'))
+				expect(page_two.data.fetch('content_configuration').first).not_to equal(other_page.data.fetch('content_configuration').first)
+			end
+		end
+	end
+
 	it 'retains a single page variant and exposes its base and resolved paths' do
 		files = jekyll_merge(
 			post_files(2),
