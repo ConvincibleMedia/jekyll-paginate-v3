@@ -194,6 +194,9 @@ class Model
 	# Discovers all pages/documents configured as pagination templates.
 	def discover_templates
 		search_entries = Query::Parser.parse(@site_config.dig('templates', 'location'), @site_config['keywords'], split_delimiter: @split_delimiter)
+		# Report site pages before collection sources regardless of configuration order.
+		page_search_entries, collection_search_entries = search_entries.partition { |entry| entry['type'] == Query::Parser::SEARCH_TYPE_PAGES }
+		search_entries = page_search_entries + collection_search_entries
 		reset_template_search_reporting_state
 
 		combined_candidates = []
