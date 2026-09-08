@@ -303,7 +303,7 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
 				'pagination' => {
 					'enabled' => true,
 					'group' => 'category,author.name',
-					'slugify' => 'pretty'
+					'slugify' => 'ascii'
 				}
 			)
 
@@ -311,7 +311,50 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
 				{ 'on' => 'category' },
 				{ 'on' => 'author.name' }
 			])
-			expect(config['slugify']).to eq({ 'mode' => 'pretty', 'lowercase' => true })
+			expect(config['slugify']).to eq({ 'mode' => 'ascii', 'lowercase' => true })
+		end
+
+		it 'rejects slugify modes that do not produce supported route keys' do
+			%w[none raw pretty misspelt].each do |mode|
+				expect do
+					described_class.normalise_site_config(
+						'pagination' => {
+							'enabled' => true,
+							'slugify' => mode
+						}
+					)
+				end.to raise_error(ArgumentError, /`slugify\.mode` must be one of default, ascii, latin; received '#{mode}'/)
+			end
+		end
+
+		it 'normalises and validates generated-template slugify config immediately' do
+			config = described_class.normalise_site_config(
+				'pagination' => {
+					'enabled' => true,
+					'templates' => {
+						'generate' => {
+							'group' => 'category',
+							'slugify' => { 'mode' => 'latin' }
+						}
+					}
+				}
+			)
+
+			expect(config.dig('templates', 'generate', 0, 'slugify')).to eq({ 'mode' => 'latin', 'lowercase' => true })
+
+			expect do
+				described_class.normalise_site_config(
+					'pagination' => {
+						'enabled' => true,
+						'templates' => {
+							'generate' => {
+								'group' => 'category',
+								'slugify' => 'pretty'
+							}
+						}
+					}
+				)
+			end.to raise_error(ArgumentError, /received 'pretty'/)
 		end
 	end
 
@@ -391,7 +434,7 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
 					'per_page' => 3,
 					'collection' => 'pages',
 					'slugify' => {
-						'mode' => 'pretty',
+						'mode' => 'ascii',
 						'case' => true
 					}
 				}
@@ -418,6 +461,24 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Config::Normaliser do
 				{ 'on' => 'tag' }
 			])
 			expect(config['slugify']).to eq({ 'mode' => 'latin', 'lowercase' => true })
+		end
+
+		it 'rejects duplicate normalised group keys' do
+			site_config = described_class.normalise_site_config(
+				'pagination' => {
+					'enabled' => true,
+					'items' => 'posts'
+				}
+			)
+
+			expect do
+				described_class.normalise_template_config(
+					site_config,
+					{
+						'group' => [' meta.category ', { 'on' => 'meta.category' }]
+					}
+				)
+			end.to raise_error(ArgumentError, /Duplicate pagination group key.*meta\.category/)
 		end
 	end
 end

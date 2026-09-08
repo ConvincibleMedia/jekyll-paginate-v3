@@ -184,6 +184,11 @@ module IntegrationHelpers
 		site.collections.fetch(collection_label).docs.find { |document| normalise_url_for_match(document.url) == target }
 	end
 
+	# Checks one generated output path directly without relying on directory enumeration, which is unreliable for absolute paths below hidden folders on Windows.
+	def output_file?(output_files, relative_path)
+		File.file?(output_files.path(relative_path))
+	end
+
 	# Returns paginator payload as a Liquid-style hash.
 	def paginator_payload(item)
 		payload = item.data.fetch('paginator')

@@ -22,8 +22,7 @@ Gem::Specification.new do |spec|
 	spec.add_dependency 'jekyll', '>= 3.8.5', '< 5.0'
 
 	spec.add_development_dependency 'jekyll-test-harness', '= 0.1.0.alpha'
-	# Jekyll's default Markdown configuration uses this converter during the
-	# integration suite, so declare it rather than relying on a global gem.
+	# Jekyll's default Markdown configuration uses this converter during the integration suite, so declare it rather than relying on a global gem.
 	spec.add_development_dependency 'kramdown-parser-gfm', '~> 1.1'
 	spec.add_development_dependency 'pry', '~> 0.13', '>= 0.13.1'
 	spec.add_development_dependency 'pry-byebug', '~> 3.9', '>= 3.9.0'

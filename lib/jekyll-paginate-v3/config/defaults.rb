@@ -41,6 +41,10 @@ module Config
 		'clone' => COLLECTION_TARGET_CLONE
 	}.freeze
 
+	# Slugification modes exposed by pagination config. Every supported mode
+	# must produce a route key rather than bypassing character filtering.
+	SLUGIFY_MODES = %w[default ascii latin].freeze
+
 	DEFAULTS = {
 		'enabled' => true,
 		'compatibility' => nil,
@@ -62,8 +66,8 @@ module Config
 		'limit' => 0,
 		'offset' => 0,
 		'trail' => 5,
-		'title' => ':title - :num',
-		'permalink' => ':num',
+		'title' => '{{ title }} - {{ num }}',
+		'permalink' => '{{ num }}',
 		'layout' => nil,
 		'layouts' => [],
 		'group' => nil,
@@ -96,7 +100,7 @@ module Config
 			},
 			'items' => 'posts',
 			'title' => ':title - page :num',
-			'permalink' => '/page/:num/',
+			'permalink' => 'page/:num/',
 			'trail' => {
 				'before' => 2,
 				'after' => 2

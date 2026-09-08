@@ -102,9 +102,9 @@ pagination:
   offset: 0 # skip first x items (after sorting)
   trail: 5 # see Trail below
   
-  title: ':title - :num' # title set on index pages
-  permalink: :num # relative to the template's permalink
-  slugify: # how strings are slugified in permalink
+  title: "{{ title }} - {{ num }}" # title set on index pages
+  permalink: "{{ num }}" # relative to the template's permalink
+  slugify: # how slugified placeholders are formed
     mode: default
     lowercase: true
   
@@ -269,15 +269,21 @@ See [Grouping](/docs/group.md) for detailed readme about this feature.
 
 ### Title and Permalink
 
-The `title` and `permalink` config keys determine the title/URL of index pages produced from the template. Each can use the placeholder `:num` for the page number, while the `title` value also accepts `:title` for the original template title.
+The `title` and `permalink` config keys determine the title/URL of index pages produced from the template. Each can use `{{ num }}` for the page number and `{{ max }}` for the total number of pages, while `title` also accepts `{{ title }}` for the original template title.
 
 Page 1 always inherits the title/permalink from the template directly, i.e. it doesn't use these formats. They apply to pages 2+.
 
-The permalink is resolved relative to the permalink of the template. So `permalink: page/:num` on a template located at `/news` would produce `news` as page 1, and `news/page/2` as page 2, etc.
+The permalink is resolved relative to the permalink of the template. So `permalink: "page/{{ num }}"` on a template located at `/news` would produce `news` as page 1, and `news/page/2` as page 2, etc.
+
+### Placeholders
+
+Certain configuration values can use placeholders like `{{ title }}` and `{{ num }}`. Depending on the context, a placeholder uses either its raw or slugified representation by default. You can select the representation explicitly with `{{ placeholder | slugify }}` or `{{ placeholder | raw }}`.
+
+The `{{placeholder}}` syntax is different from that used in V2 (`:placeholder`). The new syntax is less ambiguous. However, the old colon syntax is in fact still supported and can still be used (though it is discouraged).
 
 #### Slugify
 
-When strings need to appear in the `permalink` URL they will be slugified. This can be controlled with the `slugify` config:
+The `slugify` config controls how canonical group route keys and slugified placeholder representations are formed:
 
 ```yaml
 pagination:
@@ -289,12 +295,12 @@ pagination:
 `slugify` can also be set to a string, to set only the `mode`, e.g. `slugify: default`.
 
 * `mode` can be:
-  * `default`: 
-  * `raw`: 
-  * `pretty`: 
-  * `ascii`: non-ASCII characters are replaced by a hyphen
-  * `latin`: accented characters are transliterated back to plain a-z
+  * `default`: sequences of non-alphanumeric characters are replaced by a hyphen.
+  * `ascii`: as `default`, but only ASCII letters and numbers are retained.
+  * `latin`: accented Latin characters are transliterated before applying `default`.
 * `lowercase`: set to `false` to allow uppercase characters.
+
+Slugification cannot be disabled with `mode`. Use the explicit `raw` placeholder filter when an unmodified value is appropriate for that context.
 
 ### Layouts
 
@@ -393,7 +399,10 @@ The default `self, shadow` means that page 1 remains a true member of the origin
   * `current`: `true` if this trail item is the current page.
   * `distance`: Relative page number. 0 for current page, positive for pages after, negative for pages before.
 
-`page.pagination` also remains available, being a copy of the pagination settings from the template that generated this index (minus `enabled`). This allows you to read back settings like `per_page`, `limit`, etc., if needed.
+`page.pagination` also remains available, being a copy of the pagination settings from the template that generated this index (minus `enabled`). This allows you to read back settings like `per_page`, `limit`, etc., if needed. Indexes also expose:
+
+* `base`: resolved route of the original template before pagination group/layout paths are added, for example `/articles`.
+* `path`: final resolved route fragment added by grouping and numbered pagination, without leading or trailing slashes, e.g. `page/2`.
 
 `paginator` gains additional properties if [Grouping](/docs/group.md#group-navigation) is active.
 

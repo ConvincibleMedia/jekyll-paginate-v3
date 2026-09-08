@@ -1,6 +1,84 @@
 # frozen_string_literal: true
 
 RSpec.describe 'Pagination integration: template grouping and layouts' do
+	it 'renders generated grouped and ungrouped templates through nested layout overrides' do
+		files = jekyll_merge(
+			post_files(2) { { 'category' => 'news' } },
+			jekyll_files do
+				folder '_layouts' do
+					folder 'html' do
+						folder 'product' do
+							file 'catalogue.html' do
+								frontmatter(
+									'layout' => 'default',
+									'pagination' => {
+										'per_page' => 1
+									}
+								)
+								contents('<section id="nested-product-layout">{{ content }}</section>')
+							end
+						end
+					end
+				end
+			end
+		)
+
+		logger = Jekyll.logger
+		allow(Jekyll).to receive(:logger).and_return(logger)
+		allow(logger).to receive(:info)
+		allow(logger).to receive(:warn)
+		allow(logger).to receive(:error)
+
+		jekyll_build(
+			default_site,
+			config: {
+				'pagination' => {
+					'enabled' => true,
+					'templates' => {
+						'generate' => [
+							{
+								'items' => 'posts',
+								'layouts' => 'html/product/catalogue.html',
+								'frontmatter' => {
+									'permalink' => '/nested/all/',
+									'title' => 'All products'
+								},
+								'content' => 'Ungrouped products'
+							},
+							{
+								'items' => 'posts',
+								'group' => 'category',
+								'layouts' => 'html/product/catalogue.html',
+								'frontmatter' => {
+									'permalink' => '/nested/:category/',
+									'title' => 'Products in :category'
+								},
+								'content' => 'Grouped products'
+							}
+						]
+					}
+				}
+			},
+			files: files
+		) do |site, built_files|
+			ungrouped_first_page = page_by_url(site, '/nested/all/')
+			ungrouped_second_page = page_by_url(site, '/nested/all/2/')
+			grouped_first_page = page_by_url(site, '/nested/news/')
+			grouped_second_page = page_by_url(site, '/nested/news/2/')
+
+			expect(ungrouped_first_page).not_to be_nil
+			expect(ungrouped_second_page).not_to be_nil
+			expect(grouped_first_page).not_to be_nil
+			expect(grouped_second_page).not_to be_nil
+			expect(ungrouped_first_page.data.fetch('layout')).to eq('html/product/catalogue')
+			expect(grouped_first_page.data.fetch('layout')).to eq('html/product/catalogue')
+			expect(built_files.read('nested/all/index.html')).to include('id="nested-product-layout"')
+			expect(built_files.read('nested/news/index.html')).to include('id="nested-product-layout"')
+		end
+
+		expect(logger).not_to have_received(:warn).with(anything, a_string_including("Layout 'catalogue' does not exist"))
+	end
+
 	it 'duplicates grouped templates across layouts and keeps pagination chains layout-local' do
 		files = jekyll_merge(
 			post_files(4) { { 'category' => 'news' } },

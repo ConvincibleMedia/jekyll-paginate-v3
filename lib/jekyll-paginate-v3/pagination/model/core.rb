@@ -72,8 +72,6 @@ class Model
 				end
 				next
 			end
-			validate_required_template_config!(template, template_config)
-
 			enabled_templates << [template, template_config, template_pagination_source, template_log_lambda]
 		end
 
@@ -177,9 +175,28 @@ class Model
 		)
 	end
 
+	# Keeps the captured item-resolution view immutable when a source
+	# template itself is retained and mutated into pagination page one.
+	# Later templates should still see the source template metadata rather
+	# than the emitted index metadata attached to the retained object.
+	def replace_item_resolution_source!(source_item, source_snapshot)
+		@item_resolution_pages&.map! do |item|
+			item.equal?(source_item) ? source_snapshot : item
+		end
+
+		@item_resolution_documents_by_collection&.each_value do |documents|
+			documents.map! do |item|
+				item.equal?(source_item) ? source_snapshot : item
+			end
+		end
+	end
+
 	# Discovers all pages/documents configured as pagination templates.
 	def discover_templates
 		search_entries = Query::Parser.parse(@site_config.dig('templates', 'location'), @site_config['keywords'], split_delimiter: @split_delimiter)
+		# Report site pages before collection sources regardless of configuration order.
+		page_search_entries, collection_search_entries = search_entries.partition { |entry| entry['type'] == Query::Parser::SEARCH_TYPE_PAGES }
+		search_entries = page_search_entries + collection_search_entries
 		reset_template_search_reporting_state
 
 		combined_candidates = []
@@ -321,10 +338,11 @@ class Model
 	def find_layout(layout_name)
 		layout = @site.layouts[layout_name]
 		return layout unless layout.nil?
-		return nil unless layout_name.include?('.')
 
-		basename = File.basename(layout_name, File.extname(layout_name))
-		@site.layouts[basename]
+		normalised_layout_name = Utils.normalise_layout_name(layout_name)
+		return nil if normalised_layout_name == layout_name
+
+		@site.layouts[normalised_layout_name]
 	end
 
 	# Resolves template compatibility mode from local and site config.

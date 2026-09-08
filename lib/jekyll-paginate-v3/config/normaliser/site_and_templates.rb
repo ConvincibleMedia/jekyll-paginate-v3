@@ -199,9 +199,9 @@ class Normaliser
 			# does not make the default location collide with a collection label.
 			source['location'] = keywords['pages'] if source['location'].nil? || source['location'].to_s.strip.empty?
 			source['generate'] = if source['generate'].is_a?(Array)
-										source['generate'].map { |entry| Utils.safe_hash(entry) }
+										source['generate'].map { |entry| normalise_generated_template_definition(entry) }
 									elsif source['generate'].is_a?(Hash)
-										[Utils.safe_hash(source['generate'])]
+										[normalise_generated_template_definition(source['generate'])]
 									else
 										[]
 									end
@@ -210,6 +210,17 @@ class Normaliser
 			legacy_template_alias_keys.each { |key| source.delete(key) }
 
 			source
+		end
+
+		# Validates settings that generated templates otherwise would not
+		# normalise until their in-memory template objects are processed.
+		def normalise_generated_template_definition(raw_definition)
+			definition = Utils.safe_hash(raw_definition)
+			if definition.key?('slugify')
+				definition['slugify'] = normalise_slugify_config(definition['slugify'])
+			end
+
+			definition
 		end
 
 		# Returns site-level defaults that are inherited by explicit and
@@ -382,7 +393,7 @@ class Normaliser
 		def build_page_templates(page2_title, page2_permalink)
 			{
 				'page1' => {
-					'title' => ':title',
+					'title' => '{{ title }}',
 					'permalink' => ''
 				},
 				'page2' => {
@@ -454,7 +465,7 @@ class Normaliser
 		# Preserves legacy `sort_field` + `sort_reverse` behaviour when the
 		# caller did not provide an explicit `sort` override.
 		def normalise_sort(raw_sort, raw_sort_field, raw_sort_reverse, split_delimiter, sort_explicitly_set: false)
-			sort_entries = Utils.arrayify(raw_sort, split_delimiter: split_delimiter).map(&:to_s).map(&:strip).reject(&:empty?)
+			sort_entries = placeholder_aware_sort_entries(raw_sort, split_delimiter)
 			sort_field = raw_sort_field.to_s.strip
 
 			if !sort_explicitly_set && !sort_field.empty?
@@ -466,11 +477,23 @@ class Normaliser
 
 			if sort_field.empty?
 				fallback_sort = DEFAULTS['sort']
-				return Utils.arrayify(fallback_sort, split_delimiter: split_delimiter).map(&:to_s).map(&:strip).reject(&:empty?)
+				return placeholder_aware_sort_entries(fallback_sort, split_delimiter)
 			end
 
 			direction = boolean_config_value(raw_sort_reverse) ? 'desc' : 'asc'
 			["#{sort_field} #{direction}"]
+		end
+
+		# Splits sort lists without treating a canonical placeholder filter pipe
+		# as the configured list separator.
+		def placeholder_aware_sort_entries(raw_sort, split_delimiter)
+			raw_entries = raw_sort.is_a?(Array) ? raw_sort.flatten : [raw_sort]
+			raw_entries.flat_map do |raw_entry|
+				Support::PlaceholderTemplate.split_source(
+					raw_entry,
+					delimiter: split_delimiter
+				)
+			end.map(&:to_s).map(&:strip).reject(&:empty?)
 		end
 
 		# Normalises `pagination.layout` / `pagination.layouts` into a
@@ -499,9 +522,17 @@ class Normaliser
 								[raw_group]
 							end
 
-			raw_entries.map do |raw_entry|
+			entries = raw_entries.map do |raw_entry|
 				normalise_group_entry(raw_entry)
 			end.compact
+
+			keys = entries.map { |entry| entry['on'].to_s }
+			duplicate_keys = keys.group_by(&:itself).select { |_, matches| matches.length > 1 }.keys
+			unless duplicate_keys.empty?
+				raise ArgumentError, "Duplicate pagination group key(s): #{duplicate_keys.sort.join(', ')}. Each `group.on` key must be unique."
+			end
+
+			entries
 		end
 
 		# Normalises legacy `index` + `group` + `filter` config into modern
@@ -571,26 +602,25 @@ class Normaliser
 			{ 'on' => on_key }
 		end
 
-		# Normalises slugify config accepted on template pagination config.
-		# This supports `slugify.lowercase` semantics while also allowing
-		# string shorthand where the value maps directly to `mode`.
+		# Normalises slugify config into the route-key policy shared by grouping
+		# and slugified placeholder representations.
 		def normalise_slugify_config(raw_slugify)
-			if raw_slugify.is_a?(String)
-				mode = raw_slugify.to_s.strip
-				mode = 'default' if mode.empty?
-				return {
-					'mode' => mode,
-					'lowercase' => true
-				}
-			end
-
-			slugify = Utils.safe_hash(raw_slugify)
+			slugify = raw_slugify.is_a?(String) ? { 'mode' => raw_slugify } : Utils.safe_hash(raw_slugify)
 			mode = slugify['mode'].to_s.strip
 			mode = 'default' if mode.empty?
+			unless SLUGIFY_MODES.include?(mode)
+				raise ArgumentError, "`slugify.mode` must be one of #{SLUGIFY_MODES.join(', ')}; received '#{mode}'."
+			end
+
+			lowercase = if slugify.key?('lowercase')
+								boolean_config_value(slugify['lowercase'])
+							else
+								true
+							end
 
 			{
 				'mode' => mode,
-				'lowercase' => boolean_config_value(slugify['lowercase'])
+				'lowercase' => lowercase
 			}
 		end
 

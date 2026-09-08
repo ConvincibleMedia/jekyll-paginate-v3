@@ -279,7 +279,7 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Query::Filter do
 		start_of_today = DateTime.new(current_time.year, current_time.month, current_time.day, 0, 0, 0, current_time.offset)
 		items = [
 			build_item({ 'title' => 'Today', 'published_at' => (start_of_today + Rational(43_200, 86_400)).iso8601 }),
-			build_item({ 'title' => 'Tomorrow', 'published_at' => (start_of_today + 1 + Rational(43_200, 86_400)).iso8601 })
+			build_item({ 'title' => 'Future', 'published_at' => (current_time + 2).iso8601 })
 		]
 
 		aliased_today = apply_filters(items, { 'published_at' => { 'max' => 'daystart' } }, today_keyword: 'daystart')

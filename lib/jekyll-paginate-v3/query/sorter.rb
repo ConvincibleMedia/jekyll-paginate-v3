@@ -17,8 +17,13 @@ class Sorter
 
 	# Applies parsed sort instructions while preserving input order as a
 	# final deterministic tiebreak.
-	def self.apply(items, raw_sort, nested_separator:, equivalents:, split_delimiter: ',')
-		instructions = parse(raw_sort, split_delimiter: split_delimiter)
+	def self.apply(items, raw_sort, nested_separator:, equivalents:, split_delimiter: ',', instructions: nil)
+		instructions ||= parse(
+			raw_sort,
+			split_delimiter: split_delimiter,
+			nested_separator: nested_separator,
+			structural: true
+		)
 		return items if instructions.empty?
 
 		frontmatter_path = Jekyll::Plugins::PaginateV3::Support::FrontmatterPath.new(
@@ -38,13 +43,23 @@ class Sorter
 	end
 
 	# Parses `sort` config entries into normalised field instructions.
-	def self.parse(raw_sort, split_delimiter: ',')
-		entries = Utils.arrayify(raw_sort, split_delimiter: split_delimiter).map { |entry| entry.to_s.strip }.reject(&:empty?)
+	#
+	# Group values are bound before path splitting and emitted as structural
+	# segments when `structural` is enabled. This keeps separators contained in
+	# raw group values from becoming new frontmatter path boundaries.
+	def self.parse(raw_sort, split_delimiter: ',', nested_separator: '.', group_keys: [], group_values: nil, structural: false, context: 'sort instruction')
+		entries = sort_entries(raw_sort, split_delimiter)
 
 		entries.map do |entry|
-			fragments = entry.split(/\s+/)
-			field = fragments.shift.to_s.strip
-			next nil if field.empty?
+			fragments = Support::PlaceholderTemplate.split_whitespace(entry)
+			field_source = fragments.shift.to_s.strip
+			next nil if field_source.empty?
+
+			field_template = Utils.placeholder_template(
+				field_source,
+				allowed: group_keys,
+				context: context
+			)
 
 			direction = 'asc'
 			empty = 'last'
@@ -64,16 +79,55 @@ class Sorter
 				end
 			end
 
-			{
-				'field' => field,
+			instruction = {
+				'field' => field_source,
 				'direction' => direction,
 				'empty' => empty
 			}
+
+			if structural
+				bound_field = field_template.bind(
+					group_values || {},
+					default_representation: :slugify
+				)
+				segments = bound_field.split(nested_separator).map do |segment|
+					segment.render({}, default_representation: :slugify, unresolved: :error).strip
+				end.reject(&:empty?)
+				instruction['source_field'] = field_source
+				instruction['field_segments'] = segments
+				instruction['field'] = segments.join(nested_separator.to_s)
+			end
+
+			instruction
 		end.compact
+	end
+
+	# Validates grouped sort placeholders before item-dependent variants are
+	# created, ensuring configuration errors also fail on empty sites.
+	def self.validate_placeholders!(raw_sort, group_keys:, split_delimiter: ',', context: 'sort instruction')
+		parse(
+			raw_sort,
+			split_delimiter: split_delimiter,
+			group_keys: group_keys,
+			context: context
+		)
+		true
 	end
 
 	class << self
 		private
+
+		# Expands array or delimited scalar sort definitions without splitting
+		# canonical filter pipes or other text inside placeholder expressions.
+		def sort_entries(raw_sort, split_delimiter)
+			raw_entries = raw_sort.is_a?(Array) ? raw_sort.flatten : [raw_sort]
+			raw_entries.flat_map do |raw_entry|
+				Support::PlaceholderTemplate.split_source(
+					raw_entry,
+					delimiter: split_delimiter
+				)
+			end.map { |entry| entry.to_s.strip }.reject(&:empty?)
+		end
 
 		# Purpose: Compares items for ordering decisions.
 		# Connects to: the surrounding pagination flow in this file.
@@ -93,8 +147,9 @@ class Sorter
 		# Params: `left_item`, `right_item`, `instruction`, `nested_separator`, `equivalent_lookup`.
 		# Returns: a value consumed by the next pipeline step.
 		def compare_field(left_item, right_item, instruction, frontmatter_path)
-			left_value = first_field_value(left_item, instruction['field'], frontmatter_path)
-			right_value = first_field_value(right_item, instruction['field'], frontmatter_path)
+			field = instruction['field_segments'] || instruction['field']
+			left_value = first_field_value(left_item, field, frontmatter_path)
+			right_value = first_field_value(right_item, field, frontmatter_path)
 
 			left_empty = empty_value?(left_value)
 			right_empty = empty_value?(right_value)

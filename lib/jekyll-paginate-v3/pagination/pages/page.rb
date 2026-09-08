@@ -12,7 +12,7 @@ module Pages
 # Used by Pagination::Model to emit page-based pagination output.
 class Page < Jekyll::Page
 
-	attr_accessor :pager
+	include PagerSupport
 
 	# Clones template content/data and annotates it with pagination metadata.
 	def initialize(template_item, current_page, total_pages, index_filename)
@@ -24,7 +24,8 @@ class Page < Jekyll::Page
 
 		process(@name)
 
-		self.data = Jekyll::Utils.deep_merge_hashes(template_item.data, {})
+		# Each emitted page owns its mutable frontmatter containers so later hooks cannot alter sibling pages or their template.
+		self.data = Utils.deep_copy(Utils.safe_hash(template_item.data))
 		self.content = template_item.content
 		self.data['pagination_info'] = {
 			'curr_page' => current_page,

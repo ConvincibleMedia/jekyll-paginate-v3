@@ -17,7 +17,7 @@ RSpec.describe 'Pagination integration: navigation, URLs, and trails' do
 										'items' => 'posts',
 										'sort' => 'title asc',
 										'per_page' => 1,
-										'permalink' => '/slice/:num/feed.json',
+										'permalink' => 'slice/:num/feed.json',
 										'title' => ':title [page :num/:max]'
 									}
 								}
@@ -36,7 +36,8 @@ RSpec.describe 'Pagination integration: navigation, URLs, and trails' do
 			expect(page_one).not_to be_nil
 			expect(page_two).not_to be_nil
 
-			expect(output_files.list).to include('articles/index.html', 'articles/slice/2/feed.json')
+			expect(output_file?(output_files, 'articles/index.html')).to be(true)
+			expect(output_file?(output_files, 'articles/slice/2/feed.json')).to be(true)
 			expect(page_one.data.fetch('title')).to eq('News')
 			expect(page_two.data.fetch('title')).to eq('News [page 2/2]')
 			expect(paginator_reference_url(page_one, 'next')).to eq('/articles/slice/2/feed.json')
@@ -171,7 +172,7 @@ RSpec.describe 'Pagination integration: navigation, URLs, and trails' do
 			page_two = page_by_url(site, '/2/')
 			expect(page_two).not_to be_nil
 
-			page_two_output = output_files.list.find { |relative_path| relative_path.match?(%r{\A2(?:/index)?\.html\z}) }
+			page_two_output = %w[2.html 2/index.html].find { |relative_path| output_file?(output_files, relative_path) }
 			expect(page_two_output).not_to be_nil
 
 			rendered = output_files.read(page_two_output)
@@ -208,5 +209,63 @@ RSpec.describe 'Pagination integration: navigation, URLs, and trails' do
 				]
 			)
 		end
+	end
+
+	it 'rejects unsafe fully resolved pagination permalinks' do
+		files = jekyll_merge(
+			post_files(2),
+			jekyll_files do
+				file 'unsafe-permalink.md' do
+					frontmatter(
+						pagination_template_frontmatter(
+							{
+								'permalink' => '/articles/',
+								'pagination' => {
+									'enabled' => true,
+									'items' => 'posts',
+									'per_page' => 1,
+									'permalink' => 'page/{{ num }}#fragment'
+								}
+							}
+						)
+					)
+					contents('Unsafe permalink template')
+				end
+			end
+		)
+
+		expect do
+			jekyll_build(default_site, files: files) do |_site,|
+			end
+		end.to raise_error(JekyllTestHarness::SiteBuildError, /Invalid resolved permalink.*fragment marker/)
+	end
+
+	it 'rejects root-relative native V3 pagination permalinks' do
+		files = jekyll_merge(
+			post_files(2),
+			jekyll_files do
+				file 'articles.md' do
+					frontmatter(
+						pagination_template_frontmatter(
+							{
+								'permalink' => '/articles/',
+								'pagination' => {
+									'enabled' => true,
+									'items' => 'posts',
+									'per_page' => 1,
+									'permalink' => '/page/{{ num }}'
+								}
+							}
+						)
+					)
+					contents('Articles')
+				end
+			end
+		)
+
+		expect do
+			jekyll_build(default_site, files: files) do |_site,|
+			end
+		end.to raise_error(JekyllTestHarness::SiteBuildError, /native V3 pagination permalinks must be relative/)
 	end
 end

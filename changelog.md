@@ -1,17 +1,28 @@
 # Changelog
 
-## 0.1.0.alpha.4
 
-In progress.
+## 0.2.0.alpha
+
+* Placeholder pipeline overhauled and made more robust.
+  * Format updated to `{{ placeholder }}`.
+  * Can exert some control over whether the placeholder will be slugified or not.
+  * Original `:placeholder` format still supported.
+* **Breaking change**: `slugify` modes refined, and dangerous modes retired.
+* Page 1 now remains the exact original object when under `self` mode.
+* Indexes now include `pagination.base` (the URL fragment of the originating template) and `pagination.path`.
+* **Breaking change**: permalinks must be relative to the pagination template and cannot begin with `/`. Root-relative `paginate_path` remains supported only in V1 compatibility mode.
+
 
 ## 0.1.0.alpha.3
 
-* Synethetic filenames are now more meaningful to aid with debugging.
+* Synthetic filenames are now more meaningful, to aid with debugging.
 * Bugfix: keyword changes now work.
+
 
 ## 0.1.0.alpha.2
 
 * Ensure collection document order is preserved when operating on templates in collections.
+
 
 ## 0.1.0.alpha.1
 

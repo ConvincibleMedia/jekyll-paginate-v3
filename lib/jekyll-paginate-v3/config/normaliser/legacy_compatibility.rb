@@ -43,7 +43,7 @@ class Normaliser
 			extension = override_hash.key?('extension') ? override_hash['extension'].to_s : 'html'
 
 			template_config['page_templates'] ||= build_page_templates(template_config['title'], template_config['permalink'])
-			template_config['page_templates']['page1']['permalink'] = Utils.ensure_full_path('/', index_name, extension)
+			template_config['page_templates']['page1']['permalink'] = Utils.ensure_full_path(index_name, index_name, extension)
 			template_config['page_templates']['page2']['permalink'] = Utils.ensure_full_path(template_config['permalink'], index_name, extension)
 		end
 
@@ -118,11 +118,9 @@ class Normaliser
 			permalink = group['permalink']
 			permalink = defaults['permalink'] unless present_config_value?(permalink)
 
-			slugify = if group.key?('slugify')
-									Utils.safe_hash(group['slugify'])
-								else
-									Utils.deep_copy(defaults['slugify'])
-								end
+			slugify = normalise_slugify_config(
+				group.key?('slugify') ? group['slugify'] : Utils.deep_copy(defaults['slugify'])
+			)
 
 			[
 				{

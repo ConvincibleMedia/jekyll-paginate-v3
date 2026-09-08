@@ -209,7 +209,7 @@ RSpec.describe 'Pagination integration: v2 legacy configuration' do
 									},
 									'indexpage' => 'feed',
 									'extension' => 'json',
-									'permalink' => '/slice/:num/',
+									'permalink' => 'slice/:num/',
 									'title' => ':title [page :num/:max]'
 								}
 							}
@@ -235,8 +235,8 @@ RSpec.describe 'Pagination integration: v2 legacy configuration' do
 			expect(shop_page_one).not_to be_nil
 			expect(shop_page_two).to be_nil
 
-			expect(output_files.list).to include('shop/feed.json')
-			expect(output_files.list).not_to include('shop/slice/2/feed.json')
+			expect(output_file?(output_files, 'shop/feed.json')).to be(true)
+			expect(output_file?(output_files, 'shop/slice/2/feed.json')).to be(false)
 
 			expect(shop_page_one.data.fetch('title')).to eq('Featured Shop')
 			expect(shop_page_one.data.fetch('autogen')).to eq('jekyll-paginate-v2')

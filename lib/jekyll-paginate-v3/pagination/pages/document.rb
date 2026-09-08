@@ -12,7 +12,7 @@ module Pages
 # Used by Pagination::Model when paginating collection documents.
 class Document < Jekyll::Document
 
-	attr_accessor :pager
+	include PagerSupport
 	
 	alias_method :ext, :extname
 
@@ -25,7 +25,8 @@ class Document < Jekyll::Document
 
 		initialise_document(template_item.site, target_collection, virtual_path)
 
-		merge_data!(template_item.data)
+		# Each emitted document owns its mutable frontmatter containers so later hooks cannot alter sibling indexes or their template.
+		merge_data!(Utils.deep_copy(Utils.safe_hash(template_item.data)))
 		self.content = template_item.content
 		self.data['pagination_info'] = {
 			'curr_page' => current_page,

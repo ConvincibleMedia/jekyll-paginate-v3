@@ -1,6 +1,73 @@
 # frozen_string_literal: true
 
 RSpec.describe 'Pagination integration: generated template edge cases' do
+	it 'consumes generated grouped templates with no represented values without affecting other templates' do
+		files = post_files(2) { { 'category' => 'news' } }
+		logger = Jekyll.logger
+		allow(Jekyll).to receive(:logger).and_return(logger)
+		allow(logger).to receive(:info)
+		allow(logger).to receive(:warn)
+		allow(logger).to receive(:error)
+
+		jekyll_build(
+			default_site,
+			config: {
+				'pagination' => {
+					'enabled' => true,
+					'templates' => {
+						'location' => ['products', 'pages'],
+						'generate' => [
+							{
+								'collection' => 'products',
+								'items' => 'posts',
+								'group' => 'metadata.environment',
+								'per_page' => 1,
+								'frontmatter' => {
+									'layout' => 'listing',
+									'permalink' => '/products/environment/:metadata.environment/',
+									'title' => 'Environment :metadata.environment'
+								}
+							},
+							{
+								'items' => 'posts',
+								'group' => 'category',
+								'frontmatter' => {
+									'layout' => 'listing',
+									'permalink' => '/products/category/:category/',
+									'title' => 'Category :category'
+								}
+							},
+							{
+								'items' => 'posts',
+								'frontmatter' => {
+									'layout' => 'listing',
+									'permalink' => '/products/all/',
+									'title' => 'All products'
+								}
+							}
+						]
+					}
+				}
+			},
+			files: files
+		) do |site, built_files|
+			product_documents = site.collections.fetch('products').docs
+			product_output_files = built_files.list('products')
+
+			expect(product_documents.none? { |document| document.url.to_s.include?(':metadata.environment') }).to be(true)
+			expect(product_documents.none? { |document| normalise_url_for_match(document.url).start_with?('/products/environment') }).to be(true)
+			expect(product_output_files.none? { |path| path.include?(':metadata.environment') }).to be(true)
+			expect(product_output_files.none? { |path| path.start_with?('products/environment/') }).to be(true)
+			expect(page_by_url(site, '/products/category/news/')).not_to be_nil
+			expect(page_by_url(site, '/products/all/')).not_to be_nil
+		end
+
+		expect(logger).to have_received(:info).with(
+			'Pagination:',
+			a_string_matching(/products:.*1 template.*0 indexes.*0 total items/)
+		)
+	end
+
 	it 'skips generated templates targeting unknown collection destinations' do
 		files = post_files(1) { { 'category' => 'news' } }
 

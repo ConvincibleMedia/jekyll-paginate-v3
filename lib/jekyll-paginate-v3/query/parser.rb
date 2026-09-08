@@ -62,9 +62,10 @@ class Parser
 		normalised_entry = Utils.safe_hash(entry)
 		type = normalised_entry['type'].to_s.strip
 		paths = Utils.arrayify(normalised_entry['paths']).map { |path| path.to_s.strip }.reject(&:empty?)
-		return type if paths.empty?
+		source_label = type == SEARCH_TYPE_PAGES ? 'site.pages' : type
+		return source_label if paths.empty?
 
-		"#{type} (#{paths.join(', ')})"
+		"#{source_label} (#{paths.join(', ')})"
 	end
 
 	# Normalises keyword mapping so callers can safely pass partial config.

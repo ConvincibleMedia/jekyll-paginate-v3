@@ -76,4 +76,87 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Query::Sorter do
 			]
 		)
 	end
+
+	it 'resolves canonical group placeholders to slugified structural paths' do
+		items = [
+			build_item({ 'title' => 'Second', 'details' => { 'old-shoes' => { 'name' => 'Zulu' } } }),
+			build_item({ 'title' => 'First', 'details' => { 'old-shoes' => { 'name' => 'Alpha' } } })
+		]
+		group_value = Jekyll::Plugins::PaginateV3::Support::PlaceholderTemplate::Value.new(
+			raw: 'Old Shoes',
+			slugified: 'old-shoes'
+		)
+		instructions = described_class.parse(
+			'details.{{ category }}.name asc',
+			nested_separator: '.',
+			group_keys: ['category'],
+			group_values: { 'category' => group_value },
+			structural: true
+		)
+
+		sorted = described_class.apply(
+			items,
+			nil,
+			nested_separator: '.',
+			equivalents: [],
+			instructions: instructions
+		)
+
+		expect(instructions.first['field_segments']).to eq(%w[details old-shoes name])
+		expect(sorted.map { |item| item.data['title'] }).to eq(%w[First Second])
+	end
+
+	it 'keeps a raw group value containing the path separator atomic' do
+		items = [
+			build_item({ 'title' => 'Second', 'details' => { 'old.shoes' => { 'name' => 'Zulu' } } }),
+			build_item({ 'title' => 'First', 'details' => { 'old.shoes' => { 'name' => 'Alpha' } } })
+		]
+		group_value = Jekyll::Plugins::PaginateV3::Support::PlaceholderTemplate::Value.new(
+			raw: 'old.shoes',
+			slugified: 'old-shoes'
+		)
+		instructions = described_class.parse(
+			'details.{{ category | raw }}.name asc',
+			nested_separator: '.',
+			group_keys: ['category'],
+			group_values: { 'category' => group_value },
+			structural: true
+		)
+
+		sorted = described_class.apply(
+			items,
+			nil,
+			nested_separator: '.',
+			equivalents: [],
+			instructions: instructions
+		)
+
+		expect(instructions.first['field_segments']).to eq(['details', 'old.shoes', 'name'])
+		expect(sorted.map { |item| item.data['title'] }).to eq(%w[First Second])
+	end
+
+	it 'allows only exact active group keys as sort placeholders' do
+		expect do
+			described_class.validate_placeholders!(
+				'details.{{ category }}.name',
+				group_keys: ['data.meta.category']
+			)
+		end.to raise_error(ArgumentError, /Unknown placeholder 'category'/)
+	end
+
+	it 'accepts greedy legacy group placeholders through the structural pipeline' do
+		group_value = Jekyll::Plugins::PaginateV3::Support::PlaceholderTemplate::Value.new(
+			raw: 'Old Shoes',
+			slugified: 'old-shoes'
+		)
+		instructions = described_class.parse(
+			'details.:category.name asc',
+			nested_separator: '.',
+			group_keys: ['category'],
+			group_values: { 'category' => group_value },
+			structural: true
+		)
+
+		expect(instructions.first['field_segments']).to eq(%w[details old-shoes name])
+	end
 end
