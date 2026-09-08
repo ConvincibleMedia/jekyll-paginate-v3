@@ -3,8 +3,6 @@
 
 ## 0.2.0.alpha
 
-In progress.
-
 * Placeholder pipeline overhauled and made more robust.
   * Format updated to `{{ placeholder }}`.
   * Can exert some control over whether the placeholder will be slugified or not.
