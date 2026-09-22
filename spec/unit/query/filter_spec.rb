@@ -593,4 +593,23 @@ RSpec.describe Jekyll::Plugins::PaginateV3::Query::Filter do
 
 		expect(filtered).to eq(items)
 	end
+
+	it 'treats malformed regex literals as invalid filters' do
+		logger = double('logger', call: nil)
+		items = [
+			build_item({ 'title' => 'One', 'category' => 'news' })
+		]
+
+		filtered = apply_filters(
+			items,
+			{ 'category' => '/[unclosed/' },
+			log_lambda: logger.method(:call)
+		)
+
+		expect(filtered).to eq(items)
+		expect(logger).to have_received(:call).with(
+			a_string_including("Ignoring invalid filter for key='category'"),
+			'warn'
+		)
+	end
 end
